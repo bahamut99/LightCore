@@ -63,13 +63,13 @@
         document.getElementById('results').style.display = 'none';
 
         try {
-          const response = await fetch('/.netlify/functions/analyze-log', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({ log: entry })
-});
+          const response = await fetch('/analyze-log', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ log: entry })
+          });
 
           if (!response.ok) throw new Error("Failed to analyze");
 
@@ -127,7 +127,7 @@
 
       async function loadRecentLogs() {
         try {
-          const response = await fetch('/.netlify/functions/recent-logs');
+          const response = await fetch('/recent-logs');
           if (!response.ok) throw new Error("Failed to load logs");
           const data = await response.json();
           renderLogTable(data);
@@ -140,4 +140,5 @@
     </script>
   </body>
 </html>
+
 <!-- Trigger rebuild -->
