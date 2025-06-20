@@ -1,9 +1,23 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-
 const SUPABASE_URL = 'https://bcoottemxdthoopmaict.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjb290dGVteGR0aG9vcG1haWN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxOTEzMjksImV4cCI6MjA2NTc2NzMyOX0.CVYIdU0AHBDd00IlF5jh0HP264txAGh28LBJxDAA9Ng';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let supabase;
+
+window.onload = async () => {
+  // Load Supabase via CDN if not already loaded
+  if (!window.supabase) {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js';
+    script.onload = () => {
+      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      loadRecentLogs();
+    };
+    document.head.appendChild(script);
+  } else {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    loadRecentLogs();
+  }
+};
 
 // Submit a log entry
 async function submitLog() {
@@ -23,45 +37,29 @@ async function submitLog() {
   document.getElementById('results').style.display = 'none';
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('/.netlify/functions/analyze-log', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ${process.env.OPENAI_API_KEY}'
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'user',
-            content: `Analyze this health log and return 3 scores (mental clarity, immune risk, physical output) and a short note:\n\n"${entry}"`
-          }
-        ]
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ log: entry })
     });
 
-    const result = await response.json();
-    const text = result.choices?.[0]?.message?.content ?? 'Analysis failed';
+    if (!response.ok) throw new Error("Failed to analyze");
 
-    // Parse values (assuming simple response format)
-    const scores = text.match(/clarity:\s*(\w+)/i)?.[1] ?? 'unknown';
-    const immune = text.match(/immune:\s*(\w+)/i)?.[1] ?? 'unknown';
-    const physical = text.match(/physical:\s*(\w+)/i)?.[1] ?? 'unknown';
-    const note = text.split('\n').slice(-1)[0];
+    const data = await response.json();
+    const result = data.result;
 
-    // Store in Supabase
     await supabase.from('daily_logs').insert([
       {
         date: new Date().toISOString(),
         log: entry,
-        clarity: scores,
-        immune: immune,
-        physical: physical,
-        notes: note
+        clarity: result[0],
+        immune: result[1],
+        physical: result[2],
+        notes: result[3]
       }
     ]);
 
-    displayResults([scores, immune, physical, note]);
+    displayResults(result);
     await loadRecentLogs();
     document.getElementById('log').value = '';
   } catch (e) {
@@ -72,7 +70,6 @@ async function submitLog() {
   }
 }
 
-// Reset UI state
 function resetUI() {
   const button = document.getElementById('analyzeBtn');
   const spinner = document.getElementById('spinner');
@@ -82,7 +79,6 @@ function resetUI() {
   spinner.style.display = 'none';
 }
 
-// Display AI results
 function displayResults(result) {
   document.getElementById('clarity').innerText = result[0];
   document.getElementById('immune').innerText = result[1];
@@ -91,8 +87,9 @@ function displayResults(result) {
   document.getElementById('results').style.display = 'block';
 }
 
-// Load last 7 logs from Supabase
 async function loadRecentLogs() {
+  if (!supabase) return;
+
   const { data, error } = await supabase
     .from('daily_logs')
     .select('date, log, clarity, immune, physical, notes')
@@ -114,7 +111,6 @@ async function loadRecentLogs() {
   ]));
 }
 
-// Render logs to the table
 function renderLogTable(rows) {
   const tbody = document.querySelector('#logTable tbody');
   tbody.innerHTML = '';
@@ -124,19 +120,14 @@ function renderLogTable(rows) {
       const td = document.createElement('td');
       td.textContent = cell;
       td.title = cell;
-
-      // Add color tags
-      if (index === 2 || index === 3 || index === 4) {
-        const val = cell.toLowerCase();
-        if (["high", "medium", "low"].includes(val)) {
-          td.classList.add(val);
+      if ([2, 3, 4].includes(index)) {
+        const norm = cell.toLowerCase();
+        if (["high", "medium", "low"].includes(norm)) {
+          td.classList.add(norm);
         }
       }
-
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
   });
 }
-
-window.onload = loadRecentLogs;
