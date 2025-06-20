@@ -38,6 +38,7 @@ export async function handler(event, context) {
     const message = json.choices?.[0]?.message?.content || '';
     const parts = message.split('\n').map((p) => p.split(':')[1]?.trim() || '');
 
+    // Store to Supabase
     await supabase.from('daily_logs').insert([
       {
         Log: log,
@@ -48,9 +49,27 @@ export async function handler(event, context) {
       },
     ]);
 
+    // Fetch recent logs
+    const { data: recentLogsData, error } = await supabase
+      .from('daily_logs')
+      .select('created_at, Log, Clarity, Immune, "Physical Readiness", Notes')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (error) throw new Error(error.message);
+
+    const recentLogs = recentLogsData.map(row => [
+      new Date(row.created_at).toLocaleDateString(),
+      row.Log,
+      row.Clarity,
+      row.Immune,
+      row['Physical Readiness'],
+      row.Notes,
+    ]);
+
     return {
       statusCode: 200,
-      body: JSON.stringify({ result: parts }),
+      body: JSON.stringify({ result: parts, recentLogs }),
     };
   } catch (e) {
     return {
