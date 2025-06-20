@@ -92,8 +92,8 @@ async function loadRecentLogs() {
 
   const { data, error } = await supabase
     .from('daily_logs')
-    .select('date, log, clarity, immune, physical, notes')
-    .order('date', { ascending: false })
+    .select('Date, log, clarity, immune, physical, notes')
+    .order('Date', { ascending: false })
     .limit(7);
 
   if (error) {
