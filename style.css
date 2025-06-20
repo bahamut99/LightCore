@@ -1,0 +1,104 @@
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: #F8FAFC;
+  color: #111;
+  padding: 2rem;
+  max-width: 800px;
+  margin: auto;
+}
+
+h1 {
+  color: #3B82F6;
+  text-align: center;
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #E5E7EB;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+}
+
+textarea, button {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid #D1D5DB;
+  margin-top: 0.5rem;
+  font-size: 1rem;
+}
+
+button {
+  background-color: #3B82F6;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #2563EB;
+}
+
+.score {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+}
+
+.label {
+  font-weight: bold;
+  color: #374151;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+th, td {
+  text-align: left;
+  padding: 0.75rem;
+  border-bottom: 1px solid #E5E7EB;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+td:hover {
+  white-space: normal;
+  overflow: visible;
+  background: #f0f9ff;
+  z-index: 1;
+  position: relative;
+}
+
+th {
+  background-color: #EFF6FF;
+  color: #1E3A8A;
+}
+
+.loader {
+  width: 18px;
+  height: 18px;
+  border: 3px solid #93C5FD;
+  border-top: 3px solid #3B82F6;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Health score colors */
+.high { color: #16a34a; font-weight: bold; }
+.medium { color: #ca8a04; font-weight: bold; }
+.low { color: #dc2626; font-weight: bold; }

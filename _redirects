@@ -1,0 +1,2 @@
+/analyze-log /.netlify/functions/analyze-log 200
+/recent-logs /.netlify/functions/recent-logs 200
