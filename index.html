@@ -63,7 +63,7 @@
         document.getElementById('results').style.display = 'none';
 
         try {
-          const response = await fetch('/analyze-log', {
+          const response = await fetch('/.netlify/functions/analyze-log', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -127,7 +127,7 @@
 
       async function loadRecentLogs() {
         try {
-          const response = await fetch('/recent-logs');
+          const response = await fetch('/.netlify/functions/recent-logs');
           if (!response.ok) throw new Error("Failed to load logs");
           const data = await response.json();
           renderLogTable(data);
