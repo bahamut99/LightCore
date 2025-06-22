@@ -1,16 +1,18 @@
-// netlify/functions/analyze-log.js
-import { config } from 'dotenv';
-config();
-
-export default async (req, res) => {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+export async function handler(req) {
+  if (req.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      body: JSON.stringify({ error: 'Method not allowed' }),
+    };
   }
 
-  const { entry } = req.body;
+  const { entry } = JSON.parse(req.body);
 
   if (!entry) {
-    return res.status(400).json({ error: 'Missing log entry' });
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: 'Missing log entry' }),
+    };
   }
 
   try {
@@ -34,10 +36,16 @@ export default async (req, res) => {
     const data = await openaiResponse.json();
     const message = data.choices?.[0]?.message?.content ?? 'Analysis failed';
 
-    res.status(200).json({ message });
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message })
+    };
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to analyze log' });
+    console.error("GPT request error:", err);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'Failed to analyze log' })
+    };
   }
-};
 }
