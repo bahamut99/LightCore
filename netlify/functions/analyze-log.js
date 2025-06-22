@@ -1,33 +1,31 @@
 const fetch = require('node-fetch');
 
-exports.handler = async function (event, context) {
-  console.log("Function hit:", event.httpMethod);
+exports.handler = async function (req) {
+  console.log("Function hit:", req.httpMethod);
 
-  if (event.httpMethod !== 'POST') {
+  if (req.httpMethod !== 'POST') {
     return {
       statusCode: 405,
       body: JSON.stringify({ error: 'Method not allowed' }),
     };
   }
 
-  // Log the raw body for debugging
-  console.log("Raw event.body:", event.body);
-
   let body;
   try {
-    body = JSON.parse(event.body);
+    console.log("Raw event.body:", req.body);
+    body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
   } catch (err) {
-    console.error("Failed to parse JSON body:", err);
+    console.error("Error parsing body:", err);
     return {
       statusCode: 400,
       body: JSON.stringify({ error: 'Invalid JSON body' }),
     };
   }
 
-  const { entry } = body;
-  console.log("Parsed entry:", entry);
+  const { log } = body;
+  console.log("Parsed entry:", log);
 
-  if (!entry) {
+  if (!log) {
     return {
       statusCode: 400,
       body: JSON.stringify({ error: 'Missing log entry' }),
@@ -46,7 +44,7 @@ exports.handler = async function (event, context) {
         messages: [
           {
             role: 'user',
-            content: `Analyze this health log and return 3 scores (mental clarity, immune risk, physical output) and a short note:\n\n"${entry}"`
+            content: `Analyze this health log and return 3 scores (mental clarity, immune risk, physical output) and a short note:\n\n"${log}"`
           }
         ]
       })
@@ -61,6 +59,7 @@ exports.handler = async function (event, context) {
       statusCode: 200,
       body: JSON.stringify({ message })
     };
+
   } catch (err) {
     console.error("GPT request error:", err);
     return {
