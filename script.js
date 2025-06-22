@@ -104,14 +104,16 @@ async function loadRecentLogs() {
 
   console.log("Fetched logs:", data);
 
-  const rows = data?.map(row => [
-    new Date(row.Date).toLocaleDateString(),
-    row.Log,
-    row.Clarity,
-    row.Immune,
-    row.PhysicalReadiness,
-    row.Notes
-  ]) ?? [];
+  const rows = Array.isArray(data)
+    ? data.map(row => [
+        new Date(row.Date).toLocaleDateString(),
+        row.Log,
+        row.Clarity,
+        row.Immune,
+        row.PhysicalReadiness,
+        row.Notes
+      ])
+    : [];
 
   renderLogTable(rows);
 }
@@ -120,7 +122,7 @@ function renderLogTable(rows) {
   const tbody = document.querySelector('#logTable tbody');
   tbody.innerHTML = '';
 
-  if (!rows || rows.length === 0) {
+  if (!Array.isArray(rows) || rows.length === 0) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
     td.colSpan = 6;
@@ -132,14 +134,20 @@ function renderLogTable(rows) {
   }
 
   rows.forEach(row => {
+    if (!Array.isArray(row) || row.length !== 6) {
+      console.warn("Skipping malformed row:", row);
+      return;
+    }
+
     const tr = document.createElement('tr');
+
     row.forEach((cell, index) => {
       const td = document.createElement('td');
-      td.textContent = cell;
-      td.title = cell;
+      td.textContent = cell ?? '';
+      td.title = cell ?? '';
 
       if ([2, 3, 4].includes(index)) {
-        const val = cell.toLowerCase();
+        const val = String(cell ?? '').toLowerCase();
         if (["high", "medium", "low"].includes(val)) {
           td.classList.add(val);
         }
@@ -147,6 +155,7 @@ function renderLogTable(rows) {
 
       tr.appendChild(td);
     });
+
     tbody.appendChild(tr);
   });
 }
