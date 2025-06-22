@@ -1,9 +1,9 @@
 const fetch = require('node-fetch');
 
-exports.handler = async function (req) {
-  console.log("Function hit:", req.httpMethod);
+exports.handler = async function(event) {
+  console.log("Function hit:", event.httpMethod);
 
-  if (req.httpMethod !== 'POST') {
+  if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
       body: JSON.stringify({ error: 'Method not allowed' }),
@@ -12,7 +12,7 @@ exports.handler = async function (req) {
 
   let body;
   try {
-    body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    body = JSON.parse(event.body);
   } catch (err) {
     console.error("Error parsing body:", err);
     return {
@@ -32,7 +32,7 @@ exports.handler = async function (req) {
   }
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -49,7 +49,7 @@ exports.handler = async function (req) {
       })
     });
 
-    const data = await response.json();
+    const data = await openaiResponse.json();
     const message = data.choices?.[0]?.message?.content ?? 'Analysis failed';
 
     console.log("OpenAI message:", message);
