@@ -1,4 +1,6 @@
 export async function handler(req) {
+  console.log("Function hit:", req.httpMethod);
+
   if (req.httpMethod !== 'POST') {
     return {
       statusCode: 405,
@@ -6,7 +8,17 @@ export async function handler(req) {
     };
   }
 
-  const { entry } = JSON.parse(req.body);
+  let entry;
+  try {
+    entry = JSON.parse(req.body)?.entry;
+    console.log("Parsed entry:", entry);
+  } catch (e) {
+    console.error("JSON parse error:", e);
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: 'Invalid JSON' }),
+    };
+  }
 
   if (!entry) {
     return {
@@ -34,6 +46,8 @@ export async function handler(req) {
     });
 
     const data = await openaiResponse.json();
+    console.log("OpenAI raw response:", data);
+
     const message = data.choices?.[0]?.message?.content ?? 'Analysis failed';
 
     return {
