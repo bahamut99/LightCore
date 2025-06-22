@@ -5,7 +5,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Submit a log entry
 async function submitLog() {
   const entry = document.getElementById('log').value.trim();
   const button = document.getElementById('analyzeBtn');
@@ -43,20 +42,22 @@ async function submitLog() {
     const result = await response.json();
     const text = result.choices?.[0]?.message?.content ?? 'Analysis failed';
 
-    // Parse values
     const scores = text.match(/clarity:\s*(\w+)/i)?.[1] ?? 'unknown';
     const immune = text.match(/immune:\s*(\w+)/i)?.[1] ?? 'unknown';
     const physical = text.match(/physical:\s*(\w+)/i)?.[1] ?? 'unknown';
     const note = text.split('\n').slice(-1)[0];
 
-    // Store in Supabase
+    if ([scores, immune, physical].includes('unknown')) {
+      throw new Error("GPT failed to extract one or more scores.");
+    }
+
     await supabase.from('daily_logs').insert([
       {
         Date: new Date().toISOString(),
         Log: entry,
         Clarity: scores,
         Immune: immune,
-        'Physical Readiness': physical,
+        PhysicalReadiness: physical,
         Notes: note
       }
     ]);
@@ -72,7 +73,6 @@ async function submitLog() {
   }
 }
 
-// Reset UI state
 function resetUI() {
   const button = document.getElementById('analyzeBtn');
   const spinner = document.getElementById('spinner');
@@ -82,7 +82,6 @@ function resetUI() {
   spinner.style.display = 'none';
 }
 
-// Display AI results
 function displayResults(result) {
   document.getElementById('clarity').innerText = result[0];
   document.getElementById('immune').innerText = result[1];
@@ -91,11 +90,10 @@ function displayResults(result) {
   document.getElementById('results').style.display = 'block';
 }
 
-// Load last 7 logs from Supabase
 async function loadRecentLogs() {
   const { data, error } = await supabase
     .from('daily_logs')
-    .select('Date, Log, Clarity, Immune, Physical Readiness, Notes')
+    .select('Date, Log, Clarity, Immune, PhysicalReadiness, Notes')
     .order('Date', { ascending: false })
     .limit(7);
 
@@ -104,20 +102,35 @@ async function loadRecentLogs() {
     return;
   }
 
-  renderLogTable(data.map(row => [
+  console.log("Fetched logs:", data);
+
+  const rows = data?.map(row => [
     new Date(row.Date).toLocaleDateString(),
     row.Log,
     row.Clarity,
     row.Immune,
-    row['Physical Readiness'],
+    row.PhysicalReadiness,
     row.Notes
-  ]));
+  ]) ?? [];
+
+  renderLogTable(rows);
 }
 
-// Render logs to the table
 function renderLogTable(rows) {
   const tbody = document.querySelector('#logTable tbody');
   tbody.innerHTML = '';
+
+  if (!rows || rows.length === 0) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 6;
+    td.textContent = "No entries found.";
+    td.style.textAlign = 'center';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
   rows.forEach(row => {
     const tr = document.createElement('tr');
     row.forEach((cell, index) => {
