@@ -1,9 +1,9 @@
 const fetch = require('node-fetch');
 
-exports.handler = async function (req) {
-  console.log("Function hit:", req.httpMethod);
+exports.handler = async function (event) {
+  console.log("Function hit:", event.httpMethod);
 
-  if (req.httpMethod !== 'POST') {
+  if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
       body: JSON.stringify({ error: 'Method not allowed' }),
@@ -12,20 +12,19 @@ exports.handler = async function (req) {
 
   let body;
   try {
-    console.log("Raw event.body:", req.body);
-    body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    body = JSON.parse(event.body);
   } catch (err) {
-    console.error("Error parsing body:", err);
+    console.error("JSON parse error:", err);
     return {
       statusCode: 400,
-      body: JSON.stringify({ error: 'Invalid JSON body' }),
+      body: JSON.stringify({ error: 'Invalid JSON format' }),
     };
   }
 
-  const { log } = body;
-  console.log("Parsed entry:", log);
+  const entry = body.log;
+  console.log("Parsed entry:", entry);
 
-  if (!log) {
+  if (!entry) {
     return {
       statusCode: 400,
       body: JSON.stringify({ error: 'Missing log entry' }),
@@ -44,16 +43,21 @@ exports.handler = async function (req) {
         messages: [
           {
             role: 'user',
-            content: `Analyze this health log and return 3 scores (mental clarity, immune risk, physical output) and a short note:\n\n"${log}"`
+            content: `Analyze the following daily health log. Return 3 labeled scores and a brief note in this format:\nClarity: [value]\nImmune: [value]\nPhysical: [value]\nNote: [summary]\n\nLog: "${entry}"`
           }
         ]
       })
     });
 
     const data = await openaiResponse.json();
-    const message = data.choices?.[0]?.message?.content ?? 'Analysis failed';
 
-    console.log("OpenAI message:", message);
+    console.log("Full OpenAI response:", JSON.stringify(data, null, 2));
+
+    if (!data.choices || !data.choices[0]?.message?.content) {
+      throw new Error("Missing expected message content from OpenAI");
+    }
+
+    const message = data.choices[0].message.content.trim();
 
     return {
       statusCode: 200,
