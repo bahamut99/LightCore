@@ -22,30 +22,27 @@ async function submitLog() {
   document.getElementById('results').style.display = 'none';
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('/.netlify/functions/analyze-log', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ${process.env.OPENAI_API_KEY}'
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'user',
-            content: `Analyze this health log and return 3 scores (mental clarity, immune risk, physical output) and a short note:\n\n"${entry}"`
-          }
-        ]
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entry })
     });
 
     const result = await response.json();
-    const text = result.choices?.[0]?.message?.content ?? 'Analysis failed';
+    const text = result.message?.trim() ?? '';
+
+    if (
+      !text.toLowerCase().includes('clarity:') ||
+      !text.toLowerCase().includes('immune:') ||
+      !text.toLowerCase().includes('physical:')
+    ) {
+      throw new Error("GPT response did not contain expected scoring keywords.");
+    }
 
     const scores = text.match(/clarity:\s*(\w+)/i)?.[1] ?? 'unknown';
     const immune = text.match(/immune:\s*(\w+)/i)?.[1] ?? 'unknown';
     const physical = text.match(/physical:\s*(\w+)/i)?.[1] ?? 'unknown';
-    const note = text.split('\n').slice(-1)[0];
+    const note = text.split('\n').slice(-1)[0] ?? 'No note provided.';
 
     if ([scores, immune, physical].includes('unknown')) {
       throw new Error("GPT failed to extract one or more scores.");
@@ -83,6 +80,11 @@ function resetUI() {
 }
 
 function displayResults(result) {
+  if (!Array.isArray(result) || result.includes(undefined)) {
+    console.warn("Invalid result structure:", result);
+    return;
+  }
+
   document.getElementById('clarity').innerText = result[0];
   document.getElementById('immune').innerText = result[1];
   document.getElementById('physical').innerText = result[2];
