@@ -1,6 +1,6 @@
 const fetch = require('node-fetch');
 
-exports.handler = async function(event) {
+exports.handler = async function (event, context) {
   console.log("Function hit:", event.httpMethod);
 
   if (event.httpMethod !== 'POST') {
@@ -10,11 +10,14 @@ exports.handler = async function(event) {
     };
   }
 
+  // Log the raw body for debugging
+  console.log("Raw event.body:", event.body);
+
   let body;
   try {
     body = JSON.parse(event.body);
   } catch (err) {
-    console.error("Error parsing body:", err);
+    console.error("Failed to parse JSON body:", err);
     return {
       statusCode: 400,
       body: JSON.stringify({ error: 'Invalid JSON body' }),
@@ -58,7 +61,6 @@ exports.handler = async function(event) {
       statusCode: 200,
       body: JSON.stringify({ message })
     };
-
   } catch (err) {
     console.error("GPT request error:", err);
     return {
