@@ -28,7 +28,7 @@ async function submitLog() {
         'Accept': 'application/json',
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ entry: entry }) // Explicit for safety
+      body: JSON.stringify({ log: entry }) // Explicit for safety
     });
 
     let result;
