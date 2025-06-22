@@ -8,17 +8,8 @@ export async function handler(req) {
     };
   }
 
-  let entry;
-  try {
-    entry = JSON.parse(req.body)?.entry;
-    console.log("Parsed entry:", entry);
-  } catch (e) {
-    console.error("JSON parse error:", e);
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: 'Invalid JSON' }),
-    };
-  }
+  const { entry } = req.body;
+  console.log("Parsed entry:", entry);
 
   if (!entry) {
     return {
@@ -46,9 +37,9 @@ export async function handler(req) {
     });
 
     const data = await openaiResponse.json();
-    console.log("OpenAI raw response:", data);
-
     const message = data.choices?.[0]?.message?.content ?? 'Analysis failed';
+
+    console.log("OpenAI message:", message);
 
     return {
       statusCode: 200,
