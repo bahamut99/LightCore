@@ -1,4 +1,6 @@
-export async function handler(req) {
+const fetch = require('node-fetch');
+
+exports.handler = async function (req) {
   console.log("Function hit:", req.httpMethod);
 
   if (req.httpMethod !== 'POST') {
@@ -30,7 +32,7 @@ export async function handler(req) {
   }
 
   try {
-    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -47,7 +49,7 @@ export async function handler(req) {
       })
     });
 
-    const data = await openaiResponse.json();
+    const data = await response.json();
     const message = data.choices?.[0]?.message?.content ?? 'Analysis failed';
 
     console.log("OpenAI message:", message);
@@ -64,4 +66,4 @@ export async function handler(req) {
       body: JSON.stringify({ error: 'Failed to analyze log' })
     };
   }
-}
+};
