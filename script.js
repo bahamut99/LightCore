@@ -24,11 +24,22 @@ async function submitLog() {
   try {
     const response = await fetch('/.netlify/functions/analyze-log', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entry })
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ entry: entry }) // Explicit for safety
     });
 
-    const result = await response.json();
+    let result;
+    try {
+      result = await response.json();
+    } catch (err) {
+      console.error("Failed to parse JSON response", err);
+      alert("Something went wrong: Invalid response format");
+      return;
+    }
+
     const text = result.message?.trim() ?? '';
 
     if (
