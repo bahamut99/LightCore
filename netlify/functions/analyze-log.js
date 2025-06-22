@@ -8,7 +8,18 @@ export async function handler(req) {
     };
   }
 
-  const { entry } = req.body;
+  let body;
+  try {
+    body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+  } catch (err) {
+    console.error("Error parsing body:", err);
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: 'Invalid JSON body' }),
+    };
+  }
+
+  const { entry } = body;
   console.log("Parsed entry:", entry);
 
   if (!entry) {
