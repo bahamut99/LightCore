@@ -50,9 +50,21 @@ async function submitLog() {
       throw new Error("GPT response did not contain expected scoring keywords.");
     }
 
-    const scores = text.match(/clarity:\s*(\w+)/i)?.[1] ?? 'unknown';
-    const immune = text.match(/immune:\s*(\w+)/i)?.[1] ?? 'unknown';
-    const physical = text.match(/physical:\s*(\w+)/i)?.[1] ?? 'unknown';
+    function convertScore(num) {
+  const n = parseInt(num, 10);
+  if (isNaN(n)) return 'unknown';
+  if (n >= 8) return 'high';
+  if (n >= 5) return 'medium';
+  return 'low';
+}
+
+const clarityRaw = text.match(/clarity:\s*(\d+)/i)?.[1];
+const immuneRaw = text.match(/immune:\s*(\d+)/i)?.[1];
+const physicalRaw = text.match(/physical:\s*(\d+)/i)?.[1];
+
+const scores = convertScore(clarityRaw);
+const immune = convertScore(immuneRaw);
+const physical = convertScore(physicalRaw);
     const note = text.split('\n').slice(-1)[0] ?? 'No note provided.';
 
     if ([scores, immune, physical].includes('unknown')) {
