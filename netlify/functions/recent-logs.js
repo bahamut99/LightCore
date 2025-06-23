@@ -9,7 +9,6 @@ export async function handler(event, context) {
 
   try {
     // 1. === Query the Database ===
-    // We only select the columns needed for the table display
     const { data, error } = await supabase
       .from('daily_logs')
       .select('created_at, Log, Clarity, Immune, PhysicalReadiness, Notes')
@@ -17,26 +16,15 @@ export async function handler(event, context) {
       .limit(7);
 
     if (error) {
-      // If Supabase returns an error, we throw it to be caught by the catch block
       throw error;
     }
 
-    // 2. === Format the Data for the Frontend ===
-    // The frontend's renderLogTable function expects an array of arrays.
-    // We will format the data here to ensure the frontend doesn't need to change.
-    const formattedRows = data.map(row => [
-      row.created_at,
-      row.Log,
-      row.Clarity,
-      row.Immune,
-      row.PhysicalReadiness,
-      row.Notes,
-    ]);
-
-    // 3. === Return Success Response to Frontend ===
+    // 2. === Return the raw data directly ===
+    // The frontend now expects the full array of objects, so we no longer
+    // need to format it into an array of arrays. This is the fix.
     return {
       statusCode: 200,
-      body: JSON.stringify(formattedRows),
+      body: JSON.stringify(data),
     };
 
   } catch (error) {
