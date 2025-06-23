@@ -16,10 +16,8 @@ export async function handler(event) {
 
   try {
     // 1. === Get Date Range from URL ===
-    // We'll look for a query like "?range=30". Default to 7 days if not provided.
     const rangeInDays = parseInt(event.queryStringParameters?.range, 10) || 7;
     
-    // Calculate the start date for the query
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - rangeInDays);
 
@@ -27,9 +25,7 @@ export async function handler(event) {
     const { data, error } = await supabase
       .from('daily_logs')
       .select('created_at, Clarity, Immune, PhysicalReadiness')
-      // .gte() means "greater than or equal to"
       .gte('created_at', startDate.toISOString())
-      // We must order by date ascending for the chart to draw correctly
       .order('created_at', { ascending: true });
 
     if (error) {
@@ -37,7 +33,6 @@ export async function handler(event) {
     }
 
     // 3. === Transform Data for Chart.js ===
-    // We need to convert our database rows into an object with arrays for labels and data.
     const chartData = {
       labels: [],
       clarityData: [],
@@ -46,14 +41,16 @@ export async function handler(event) {
     };
 
     data.forEach(row => {
-      // Format the date label as "MM/DD"
       const dateLabel = new Date(row.created_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
       chartData.labels.push(dateLabel);
 
-      // Convert text scores to numbers using our scoreMap, defaulting to 0 if null/unknown
-      chartData.clarityData.push(scoreMap[row.Clarity.toLowerCase()] || 0);
-      chartData.immuneData.push(scoreMap[row.Immune.toLowerCase()] || 0);
-      chartData.physicalData.push(scoreMap[row.PhysicalReadiness.toLowerCase()] || 0);
+      // === THE FIX IS HERE ===
+      // We add a '?' (optional chaining) to safely handle cases where the value might be null.
+      // If row.Clarity is null, row.Clarity?.toLowerCase() will result in 'undefined' instead of crashing.
+      // The '|| 0' then correctly turns that 'undefined' into a 0 for the chart.
+      chartData.clarityData.push(scoreMap[row.Clarity?.toLowerCase()] || 0);
+      chartData.immuneData.push(scoreMap[row.Immune?.toLowerCase()] || 0);
+      chartData.physicalData.push(scoreMap[row.PhysicalReadiness?.toLowerCase()] || 0);
     });
 
     // 4. === Return the Formatted Data ===
