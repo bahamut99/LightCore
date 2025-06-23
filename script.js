@@ -1,12 +1,7 @@
-// This file is now the single source of truth for all frontend JavaScript.
-// It does NOT contain any secret keys or direct database logic.
+// This file is the single source of truth for all frontend JavaScript.
 
 /**
  * Handles the log submission process.
- * 1. Disables the button and shows a spinner.
- * 2. Sends the user's log entry to our secure Netlify function.
- * 3. Displays the results returned by the function.
- * 4. Refreshes the recent logs table.
  */
 async function submitLog() {
   const entryText = document.getElementById('log').value.trim();
@@ -21,7 +16,6 @@ async function submitLog() {
   // --- Update UI to show loading state ---
   button.disabled = true;
   button.innerText = "Analyzing...";
-  button.style.opacity = 0.7;
   spinner.style.display = 'inline-block';
   document.getElementById('results').style.display = 'none';
 
@@ -34,7 +28,6 @@ async function submitLog() {
     });
 
     if (!response.ok) {
-      // Try to get a specific error message from the backend, or use a generic one
       const errorData = await response.json().catch(() => ({ error: 'An unknown error occurred.' }));
       throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
     }
@@ -43,7 +36,7 @@ async function submitLog() {
     
     // --- Display new data and refresh the logs table ---
     displayResults(newLog); 
-    await loadRecentLogs(); // Refresh the table to include the new log
+    await loadRecentLogs();
 
   } catch (e) {
     alert("Something went wrong:\n" + e.message);
@@ -67,7 +60,6 @@ async function loadRecentLogs() {
     renderLogTable(recentLogs);
   } catch (e) {
     console.error("Failed to load logs:", e.message);
-    // You could also display an error message in the table itself
     const tbody = document.querySelector('#logTable tbody');
     tbody.innerHTML = `<tr><td colspan="6" class="error">Could not load recent logs.</td></tr>`;
   }
@@ -75,10 +67,8 @@ async function loadRecentLogs() {
 
 /**
  * Populates the results card with the data from the newly created log.
- * @param {object} result - The log object returned from our backend function.
  */
 function displayResults(result) {
-  // Now we use object properties, which is much safer and clearer than array indices
   document.getElementById('clarity').innerText = result.Clarity || 'N/A';
   document.getElementById('immune').innerText = result.Immune || 'N/A';
   document.getElementById('physical').innerText = result.PhysicalReadiness || 'N/A';
@@ -89,7 +79,6 @@ function displayResults(result) {
 
 /**
  * Renders the rows in the recent logs table.
- * @param {Array<Array>} rows - An array of log entries.
  */
 function renderLogTable(rows) {
   const tbody = document.querySelector('#logTable tbody');
@@ -102,20 +91,17 @@ function renderLogTable(rows) {
   
   rows.forEach(row => {
     const tr = document.createElement('tr');
-    // The recent-log function returns an array of arrays, so we iterate through the cells
     row.forEach((cell, index) => {
       const td = document.createElement('td');
       
-      // Format the date for display
       if (index === 0) {
           td.textContent = new Date(cell).toLocaleDateString();
       } else {
           td.textContent = cell;
       }
 
-      td.title = cell; // Show full content on hover
+      td.title = cell;
 
-      // Add CSS classes for styling 'high', 'medium', 'low' scores
       if ([2, 3, 4].includes(index)) {
         const value = String(cell || '').toLowerCase();
         if (["high", "medium", "low"].includes(value)) {
@@ -136,20 +122,28 @@ function resetUI() {
   const spinner = document.getElementById('spinner');
   button.disabled = false;
   button.innerText = "Analyze Log";
-  button.style.opacity = 1;
   spinner.style.display = 'none';
 }
 
 /**
  * This is the entry point of our application.
- * It waits for the page to be fully loaded, then sets up our event listeners.
  */
 document.addEventListener('DOMContentLoaded', () => {
   const analyzeBtn = document.getElementById('analyzeBtn');
+  const logTextarea = document.getElementById('log');
+
   if (analyzeBtn) {
     analyzeBtn.addEventListener('click', submitLog);
   }
   
-  // Load the initial set of logs when the page loads
+  if (logTextarea) {
+    logTextarea.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        submitLog();
+      }
+    });
+  }
+
   loadRecentLogs();
 });

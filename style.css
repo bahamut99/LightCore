@@ -1,17 +1,27 @@
 body {
   font-family: 'Segoe UI', sans-serif;
-  background: #F8FAFC;
-  color: #111;
+  /* This is the new, more distinct "silver" background */
+  background: #E5E7EB; 
+  /* A softer dark gray for default text */
+  color: #2c3e50; 
   padding: 2rem;
   max-width: 800px;
   margin: auto;
 }
 
+/* This new class replaces the inline styles from your HTML */
+.header-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 2rem;
+}
+
 h1 {
-  color: #3B82F6;
-  text-align: center;
-  font-size: 2rem;
-  margin-bottom: 1rem;
+  color: #1E3A8A; /* Moved from inline style to here */
+  text-align: left; /* Changed from center to align with the logo */
+  font-size: 1.75rem; /* Moved from inline style */
+  margin: 0; /* Moved from inline style */
 }
 
 .card {
@@ -37,10 +47,16 @@ button {
   color: white;
   font-weight: bold;
   cursor: pointer;
+  transition: background-color 0.2s; /* Added a nice transition effect */
 }
 
 button:hover {
   background-color: #2563EB;
+}
+
+button:disabled { /* Added style for when the button is disabled */
+  background-color: #93C5FD;
+  cursor: not-allowed;
 }
 
 .score {
