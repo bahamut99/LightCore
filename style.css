@@ -19,9 +19,14 @@ body {
 
 h1 {
   color: #1E3A8A; /* Moved from inline style to here */
-  text-align: left; /* Changed from center to align with the logo */
+  text-align: left; /* Aligns with the logo */
   font-size: 1.75rem; /* Moved from inline style */
   margin: 0; /* Moved from inline style */
+}
+
+h2 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
 }
 
 .card {
@@ -86,6 +91,7 @@ th, td {
   text-overflow: ellipsis;
 }
 
+/* We only need a background change on hover now */
 td:hover {
   background: #f0f9ff;
 }
@@ -115,41 +121,30 @@ th {
 .medium { color: #ca8a04; font-weight: bold; }
 .low { color: #dc2626; font-weight: bold; }
 
-/* This will be the parent container for our tooltip */
+/* === TOOLTIP STYLES === */
 .tooltip-container {
   position: relative;
 }
 
-/* This is the tooltip "bubble" itself */
 .tooltip-text {
-  /* Hide the tooltip by default */
   visibility: hidden;
   opacity: 0;
-  
-  /* Styling the bubble */
-  width: 300px; /* Give it a fixed width */
-  background-color: #2c3e50; /* A dark background */
-  color: #fff; /* White text */
+  width: 300px;
+  background-color: #2c3e50;
+  color: #fff;
   text-align: left;
   border-radius: 6px;
   padding: 8px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-
-  /* Positioning the tooltip */
   position: absolute;
   z-index: 10;
-  bottom: 125%; /* Position it above the table cell */
+  bottom: 125%;
   left: 50%;
-  margin-left: -150px; /* Use half of the width to center it */
-
-  /* A smooth fade-in transition */
+  margin-left: -150px;
   transition: opacity 0.3s;
-  
-  /* Allow text to wrap inside the tooltip */
   white-space: normal;
 }
 
-/* This makes the tooltip visible when hovering over the container */
 .tooltip-container:hover .tooltip-text {
   visibility: visible;
   opacity: 1;
