@@ -1,7 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
 const SUPABASE_URL = 'https://bcoottemxdthoopmaict.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjb290dGVteGR0aG9vcG1haWN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxOTEzMjksImV4cCI6MjA2NTc2NzMyOX0.CVYIdU0AHBDd00IlF5jh0HP264txAGh28LBJxDAA9Ng';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJI...'; // truncated for clarity
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -34,56 +34,61 @@ async function submitLog() {
     let result;
     try {
       result = await response.json();
+      console.log("Received result from backend:", result);
     } catch (err) {
       console.error("Failed to parse JSON response", err);
-      alert("Something went wrong: Invalid response format");
+      alert("Something went wrong: Invalid JSON format from backend");
       return;
     }
 
-    const text = result.message?.trim() ?? '';
+    if (!result || !result.message) {
+      console.error("Missing 'message' in result:", result);
+      throw new Error("Result is undefined or improperly formatted.");
+    }
+
+    const text = result.message.trim();
 
     if (
       !text.toLowerCase().includes('clarity:') ||
       !text.toLowerCase().includes('immune:') ||
       !text.toLowerCase().includes('physical:')
     ) {
-      throw new Error("GPT response did not contain expected scoring keywords.");
+      throw new Error("GPT response missing expected fields.");
     }
 
-    function convertScore(raw) {
-      const match = String(raw).match(/(\d+)/);
-      const n = match ? parseInt(match[1], 10) : NaN;
+    function convertScore(num) {
+      const n = parseInt(num, 10);
       if (isNaN(n)) return 'unknown';
       if (n >= 8) return 'high';
       if (n >= 5) return 'medium';
       return 'low';
     }
 
-    const clarityRaw = text.match(/clarity:\s*([^\n]+)/i)?.[1];
-    const immuneRaw = text.match(/immune:\s*([^\n]+)/i)?.[1];
-    const physicalRaw = text.match(/physical:\s*([^\n]+)/i)?.[1];
+    const clarityRaw = text.match(/clarity:\s*(\d+)/i)?.[1];
+    const immuneRaw = text.match(/immune:\s*(\d+)/i)?.[1];
+    const physicalRaw = text.match(/physical:\s*(\d+)/i)?.[1];
 
-    const scores = convertScore(clarityRaw);
+    const clarity = convertScore(clarityRaw);
     const immune = convertScore(immuneRaw);
     const physical = convertScore(physicalRaw);
     const note = text.split('\n').slice(-1)[0] ?? 'No note provided.';
 
-    if ([scores, immune, physical].includes('unknown')) {
-      throw new Error("GPT failed to extract one or more scores.");
+    if ([clarity, immune, physical].includes('unknown')) {
+      throw new Error("GPT returned scores that couldn't be parsed.");
     }
 
     await supabase.from('daily_logs').insert([
       {
         Date: new Date().toISOString(),
         Log: entry,
-        Clarity: scores,
+        Clarity: clarity,
         Immune: immune,
         PhysicalReadiness: physical,
         Notes: note
       }
     ]);
 
-    displayResults([scores, immune, physical, note]);
+    displayResults([clarity, immune, physical, note]);
     await loadRecentLogs();
     document.getElementById('log').value = '';
   } catch (e) {
@@ -127,6 +132,8 @@ async function loadRecentLogs() {
     console.error("Error fetching logs:", error);
     return;
   }
+
+  console.log("Fetched logs:", data);
 
   const rows = Array.isArray(data)
     ? data.map(row => [
