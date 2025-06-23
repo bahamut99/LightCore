@@ -13,14 +13,12 @@ async function submitLog() {
     return;
   }
 
-  // --- Update UI to show loading state ---
   button.disabled = true;
   button.innerText = "Analyzing...";
   spinner.style.display = 'inline-block';
   document.getElementById('results').style.display = 'none';
 
   try {
-    // --- Call the secure backend function ---
     const response = await fetch('/.netlify/functions/analyze-log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -34,7 +32,6 @@ async function submitLog() {
 
     const newLog = await response.json();
     
-    // --- Display new data and refresh the logs table ---
     displayResults(newLog); 
     await loadRecentLogs();
 
@@ -42,7 +39,6 @@ async function submitLog() {
     alert("Something went wrong:\n" + e.message);
     console.error(e);
   } finally {
-    // --- Reset UI regardless of success or failure ---
     resetUI();
   }
 }
@@ -57,6 +53,7 @@ async function loadRecentLogs() {
       throw new Error("Failed to load recent logs");
     }
     const recentLogs = await response.json();
+    // We now pass the full data objects to renderLogTable
     renderLogTable(recentLogs);
   } catch (e) {
     console.error("Failed to load logs:", e.message);
@@ -74,66 +71,74 @@ function displayResults(result) {
   document.getElementById('physical').innerText = result.PhysicalReadiness || 'N/A';
   document.getElementById('notes').innerText = result.Notes || 'N/A';
   document.getElementById('results').style.display = 'block';
-  document.getElementById('log').value = ''; // Clear the textarea
+  document.getElementById('log').value = '';
 }
+
 /**
  * Renders the rows in the recent logs table.
- * Now includes logic to add a custom tooltip for long text.
+ * Each row is now clickable to open a details modal.
  */
-function renderLogTable(rows) {
+function renderLogTable(logs) {
   const tbody = document.querySelector('#logTable tbody');
-  tbody.innerHTML = ''; // Clear existing rows
+  tbody.innerHTML = '';
 
-  if (!rows || rows.length === 0) {
+  if (!logs || logs.length === 0) {
     tbody.innerHTML = `<tr><td colspan="6" style="text-align: center;">No entries found.</td></tr>`;
     return;
   }
   
-  rows.forEach(row => {
+  logs.forEach(logData => {
     const tr = document.createElement('tr');
-    row.forEach((cellData, index) => {
-      const td = document.createElement('td');
-      const cellText = cellData ?? ''; // Ensure we have a string to work with
-      
-      // === NEW LOGIC STARTS HERE ===
+    
+    // Make the entire row clickable
+    tr.addEventListener('click', () => openLogModal(logData));
 
-      // Define which columns can have tooltips and a max length before truncating
-      const columnsWithTooltip = [1, 5]; // Column index 1 (Log) and 5 (Notes)
-      const maxLength = 25; // Max characters to show in the cell
-
-      if (columnsWithTooltip.includes(index) && cellText.length > maxLength) {
-        // 1. Truncate the text shown in the cell
-        const truncatedText = cellText.substring(0, maxLength) + '...';
-        td.textContent = truncatedText;
-        
-        // 2. Add the tooltip container class to the <td>
-        td.classList.add('tooltip-container');
-        
-        // 3. Create and append the hidden tooltip span
-        const tooltip = document.createElement('span');
-        tooltip.classList.add('tooltip-text');
-        tooltip.textContent = cellText; // The tooltip gets the FULL text
-        td.appendChild(tooltip);
-
-      } else {
-        // If text is not long, just add it normally
-        // And format the date for the first column
-        td.textContent = (index === 0) ? new Date(cellText).toLocaleDateString() : cellText;
-      }
-      
-      // === END OF NEW LOGIC ===
-
-      // Add CSS classes for styling 'high', 'medium', 'low' scores
-      if ([2, 3, 4].includes(index)) {
-        const value = String(cellText).toLowerCase();
-        if (["high", "medium", "low"].includes(value)) {
-          td.classList.add(value);
-        }
-      }
-      tr.appendChild(td);
-    });
+    // Create and append cells for the table view
+    // Note: The recent-logs function now returns full objects, not arrays of arrays
+    td(new Date(logData.created_at).toLocaleDateString(), tr);
+    td(logData.Log, tr);
+    td(logData.Clarity, tr, true);
+    td(logData.Immune, tr, true);
+    td(logData.PhysicalReadiness, tr, true);
+    td(logData.Notes, tr);
+    
     tbody.appendChild(tr);
-});
+  });
+}
+
+// Helper function to create and append a <td> element
+function td(content, parent, isScore = false) {
+    const cell = document.createElement('td');
+    cell.textContent = content;
+    if (isScore) {
+        const value = String(content || '').toLowerCase();
+        if (["high", "medium", "low"].includes(value)) {
+          cell.classList.add(value);
+        }
+    }
+    parent.appendChild(cell);
+}
+
+
+/**
+ * Populates and shows the log detail modal.
+ */
+function openLogModal(logData) {
+    document.getElementById('modalDate').textContent = new Date(logData.created_at).toLocaleString();
+    document.getElementById('modalLog').textContent = logData.Log;
+    document.getElementById('modalClarity').textContent = logData.Clarity;
+    document.getElementById('modalImmune').textContent = logData.Immune;
+    document.getElementById('modalPhysical').textContent = logData.PhysicalReadiness;
+    document.getElementById('modalNotes').textContent = logData.Notes;
+    
+    document.getElementById('logModal').style.display = 'flex';
+}
+
+/**
+ * Hides the log detail modal.
+ */
+function closeLogModal() {
+    document.getElementById('logModal').style.display = 'none';
 }
 
 /**
@@ -141,10 +146,9 @@ function renderLogTable(rows) {
  */
 function resetUI() {
   const button = document.getElementById('analyzeBtn');
-  const spinner = document.getElementById('spinner');
+  spinner.style.display = 'none';
   button.disabled = false;
   button.innerText = "Analyze Log";
-  spinner.style.display = 'none';
 }
 
 /**
@@ -153,6 +157,8 @@ function resetUI() {
 document.addEventListener('DOMContentLoaded', () => {
   const analyzeBtn = document.getElementById('analyzeBtn');
   const logTextarea = document.getElementById('log');
+  const closeModalBtn = document.getElementById('closeModal');
+  const modalOverlay = document.getElementById('logModal');
 
   if (analyzeBtn) {
     analyzeBtn.addEventListener('click', submitLog);
@@ -165,6 +171,19 @@ document.addEventListener('DOMContentLoaded', () => {
         submitLog();
       }
     });
+  }
+
+  // Event listeners for closing the modal
+  if(closeModalBtn) {
+      closeModalBtn.addEventListener('click', closeLogModal);
+  }
+  if(modalOverlay) {
+      // Close modal if user clicks on the dim overlay
+      modalOverlay.addEventListener('click', (event) => {
+          if (event.target === modalOverlay) {
+              closeLogModal();
+          }
+      });
   }
 
   loadRecentLogs();
