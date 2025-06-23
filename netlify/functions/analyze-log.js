@@ -5,6 +5,13 @@ exports.handler = async function (event) {
 
   if (event.httpMethod !== 'POST') {
     return {
+const fetch = require('node-fetch');
+
+exports.handler = async function (event) {
+  console.log("Function hit:", event.httpMethod);
+
+  if (event.httpMethod !== 'POST') {
+    return {
       statusCode: 405,
       body: JSON.stringify({ error: 'Method not allowed' }),
     };
@@ -50,7 +57,6 @@ exports.handler = async function (event) {
     });
 
     const data = await openaiResponse.json();
-
     console.log("Full OpenAI response:", JSON.stringify(data, null, 2));
 
     if (!data.choices || !data.choices[0]?.message?.content) {
@@ -61,7 +67,7 @@ exports.handler = async function (event) {
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ message })
+      body: JSON.stringify({ message })  // ✅ Correct format for frontend
     };
 
   } catch (err) {
