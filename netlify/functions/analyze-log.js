@@ -1,10 +1,4 @@
-exports.handler = async function (event) {
-  console.log("Function hit:", event.httpMethod);
-
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      body: JSON.stringify({ error: 'Method not allowed' }),
+// This is the complete and correct code for analyze-log.js
 import { createClient } from '@supabase/supabase-js';
 
 // Helper function to convert numeric scores to text labels
