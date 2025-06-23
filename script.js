@@ -47,14 +47,13 @@ async function submitLog() {
     }
 
     const text = result.message.trim();
+    console.log("GPT raw message:", text);
 
-    if (
-      !text.toLowerCase().includes('clarity:') ||
-      !text.toLowerCase().includes('immune:') ||
-      !text.toLowerCase().includes('physical:')
-    ) {
-      throw new Error("GPT response missing expected fields.");
-    }
+    const clarityRaw = text.match(/clarity:\s*(\d+)/i)?.[1];
+    const immuneRaw = text.match(/immune:\s*(\d+)/i)?.[1];
+    const physicalRaw = text.match(/physical:\s*(\d+)/i)?.[1];
+
+    console.log("Extracted Scores:", clarityRaw, immuneRaw, physicalRaw);
 
     function convertScore(num) {
       const n = parseInt(num, 10);
@@ -64,14 +63,10 @@ async function submitLog() {
       return 'low';
     }
 
-    const clarityRaw = text.match(/clarity:\s*(\d+)/i)?.[1];
-    const immuneRaw = text.match(/immune:\s*(\d+)/i)?.[1];
-    const physicalRaw = text.match(/physical:\s*(\d+)/i)?.[1];
-
     const clarity = convertScore(clarityRaw);
     const immune = convertScore(immuneRaw);
     const physical = convertScore(physicalRaw);
-    const note = text.split('\n').slice(-1)[0] ?? 'No note provided.';
+    const note = text.split(/note:/i)?.[1]?.trim() ?? 'No note provided.';
 
     if ([clarity, immune, physical].includes('unknown')) {
       throw new Error("GPT returned scores that couldn't be parsed.");
