@@ -1,11 +1,60 @@
 body {
   font-family: 'Segoe UI', sans-serif;
-  background: #E5E7EB; 
-  color: #2c3e50; 
-  padding: 2rem;
-  max-width: 800px;
+  background: #E5E7EB;
+  color: #2c3e50;
+  padding: 1rem;
+  /* Adjusted for larger layout */
   margin: auto;
 }
+
+/* === NEW LAYOUT STYLES === */
+.main-container {
+  display: flex;
+  flex-wrap: wrap;
+  /* Allows columns to stack on smaller screens */
+  gap: 2rem;
+  max-width: 1600px;
+  margin: auto;
+}
+
+.charts-column {
+  flex: 1;
+  /* Takes up 1 part of the available space */
+  min-width: 350px;
+  /* Minimum width before it wraps */
+}
+
+.main-column {
+  flex: 2;
+  /* Takes up 2 parts of the available space */
+  min-width: 350px;
+}
+
+.toggle-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.toggle-buttons button {
+  flex-grow: 1;
+  background-color: #e2e8f0;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.toggle-buttons button.active {
+  background-color: #3B82F6;
+  color: white;
+  border-color: #3B82F6;
+}
+
+.chart-container {
+  margin-bottom: 1.5rem;
+}
+
+/* === END NEW LAYOUT STYLES === */
+
 
 .header-container {
   display: flex;
@@ -32,10 +81,11 @@ h2 {
   border-radius: 1rem;
   padding: 1.5rem;
   margin-bottom: 1.5rem;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
 }
 
-textarea, button {
+textarea,
+button {
   width: 100%;
   padding: 0.75rem;
   border-radius: 0.5rem;
@@ -72,12 +122,12 @@ button:disabled {
   color: #374151;
 }
 
-/* New styles for the AI Notes section */
 .notes-section {
   border-top: 1px solid #E5E7EB;
   margin-top: 1rem;
   padding-top: 1rem;
 }
+
 .notes-section p {
   margin: 0.5rem 0 0 0;
   line-height: 1.5;
@@ -90,15 +140,16 @@ table {
   margin-top: 1rem;
 }
 
-tbody tr { /* Make table rows clickable */
-    cursor: pointer;
+tbody tr {
+  cursor: pointer;
 }
 
 tbody tr:hover {
-    background: #f0f9ff;
+  background: #f0f9ff;
 }
 
-th, td {
+th,
+td {
   text-align: left;
   padding: 0.75rem;
   border-bottom: 1px solid #E5E7EB;
@@ -123,22 +174,34 @@ th {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.high { color: #16a34a; font-weight: bold; }
-.medium { color: #ca8a04; font-weight: bold; }
-.low { color: #dc2626; font-weight: bold; }
+.high {
+  color: #16a34a;
+  font-weight: bold;
+}
+
+.medium {
+  color: #ca8a04;
+  font-weight: bold;
+}
+
+.low {
+  color: #dc2626;
+  font-weight: bold;
+}
 
 .subtle-text {
-    font-size: 0.8rem;
-    color: #6B7280;
-    text-align: center;
-    margin-top: -1rem;
-    margin-bottom: 1rem;
+  font-size: 0.8rem;
+  color: #6B7280;
+  text-align: center;
+  margin-top: -1rem;
+  margin-bottom: 1rem;
 }
 
-/* === MODAL STYLES === */
 .modal-overlay {
   position: fixed;
   z-index: 100;
@@ -147,7 +210,7 @@ th {
   width: 100%;
   height: 100%;
   overflow: auto;
-  background-color: rgba(0,0,0,0.5); /* Dimmed background */
+  background-color: rgba(0, 0, 0, 0.5);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -159,7 +222,7 @@ th {
   border-radius: 1rem;
   width: 90%;
   max-width: 600px;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
   position: relative;
   animation: fadeIn 0.3s;
 }
@@ -184,27 +247,36 @@ th {
 }
 
 .modal-scores {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 .modal-content h4 {
-    margin-top: 1.5rem;
+  margin-top: 1.5rem;
 }
+
 .modal-content p {
-    line-height: 1.6;
-    margin-top: 0.5rem;
+  line-height: 1.6;
+  margin-top: 0.5rem;
 }
+
 .modal-content hr {
-    border: none;
-    border-top: 1px solid #E5E7EB;
-    margin: 1.5rem 0;
+  border: none;
+  border-top: 1px solid #E5E7EB;
+  margin: 1.5rem 0;
 }
 
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

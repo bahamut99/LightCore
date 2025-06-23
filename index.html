@@ -1,65 +1,114 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>LightCore - Your Health Dashboard</title>
     <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body>
-    <div class="header-container">
-      <img src="https://i.imgur.com/d5N9dkk.png" alt="LightCore Logo" style="height: 44px;">
-      <h1>LightCore - Your Health Dashboard</h1>
-    </div>
+    <div class="main-container">
+      <div class="charts-column">
+        <div class="card">
+          <h2>📊 Trends</h2>
+          <div class="toggle-buttons">
+            <button id="btn7day" class="active">7 Day</button>
+            <button id="btn30day">30 Day</button>
+          </div>
+          <div class="chart-container">
+            <canvas id="clarityChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <canvas id="immuneChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <canvas id="physicalChart"></canvas>
+          </div>
+        </div>
+      </div>
 
-    <div class="card">
-      <label for="log">Daily Log Entry:</label>
-      <textarea id="log" rows="5" placeholder="I slept 6 hrs, forgot to eat until 2pm, had no energy to work out..."></textarea>
-      <div style="display: flex; align-items: center; gap: 0.5rem;">
-        <button id="analyzeBtn">Analyze Log</button>
-        <div id="spinner" style="display:none;" class="loader"></div>
+      <div class="main-column">
+        <div class="header-container">
+          <img
+            src="https://i.imgur.com/d5N9dkk.png"
+            alt="LightCore Logo"
+            style="height: 44px"
+          />
+          <h1>LightCore - Your Health Dashboard</h1>
+        </div>
+
+        <div class="card">
+          <label for="log">Daily Log Entry:</label>
+          <textarea
+            id="log"
+            rows="5"
+            placeholder="I slept 6 hrs, forgot to eat until 2pm, had no energy to work out..."
+          ></textarea>
+          <div style="display: flex; align-items: center; gap: 0.5rem">
+            <button id="analyzeBtn">Analyze Log</button>
+            <div id="spinner" style="display: none" class="loader"></div>
+          </div>
+        </div>
+
+        <div class="card" id="results" style="display: none">
+          <div class="score">
+            <span class="label">Mental Clarity:</span>
+            <span id="clarity"></span>
+          </div>
+          <div class="score">
+            <span class="label">Immune Risk:</span> <span id="immune"></span>
+          </div>
+          <div class="score">
+            <span class="label">Physical Output:</span>
+            <span id="physical"></span>
+          </div>
+          <div class="notes-section">
+            <span class="label">AI Notes:</span>
+            <p id="notes"></p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>🕓 Recent Entries</h2>
+          <p class="subtle-text">Click on a row to see full details.</p>
+          <table id="logTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Log</th>
+                <th>Clarity</th>
+                <th>Immune</th>
+                <th>Physical</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
-    <div class="card" id="results" style="display:none">
-      <div class="score"><span class="label">Mental Clarity:</span> <span id="clarity"></span></div>
-      <div class="score"><span class="label">Immune Risk:</span> <span id="immune"></span></div>
-      <div class="score"><span class="label">Physical Output:</span> <span id="physical"></span></div>
-      <div class="notes-section">
-        <span class="label">AI Notes:</span>
-        <p id="notes"></p>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>🕓 Recent Entries</h2>
-      <p class="subtle-text">Click on a row to see full details.</p>
-      <table id="logTable">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Log</th>
-            <th>Clarity</th>
-            <th>Immune</th>
-            <th>Physical</th>
-            <th>Notes</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-    
-    <div id="logModal" class="modal-overlay" style="display: none;">
+    <div id="logModal" class="modal-overlay" style="display: none">
       <div class="modal-content">
         <button id="closeModal" class="modal-close-btn">&times;</button>
         <h3 id="modalDate"></h3>
         <h4>Full Log Entry:</h4>
         <p id="modalLog"></p>
-        <hr>
+        <hr />
         <h4>AI Analysis:</h4>
         <div class="modal-scores">
-          <div><span class="label">Mental Clarity:</span> <span id="modalClarity"></span></div>
-          <div><span class="label">Immune Risk:</span> <span id="modalImmune"></span></div>
-          <div><span class="label">Physical Output:</span> <span id="modalPhysical"></span></div>
+          <div>
+            <span class="label">Mental Clarity:</span>
+            <span id="modalClarity"></span>
+          </div>
+          <div>
+            <span class="label">Immune Risk:</span>
+            <span id="modalImmune"></span>
+          </div>
+          <div>
+            <span class="label">Physical Output:</span>
+            <span id="modalPhysical"></span>
+          </div>
         </div>
         <h4>AI Notes:</h4>
         <p id="modalNotes"></p>
