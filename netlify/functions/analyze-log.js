@@ -1,12 +1,3 @@
-const fetch = require('node-fetch');
-
-exports.handler = async function (event) {
-  console.log("Function hit:", event.httpMethod);
-
-  if (event.httpMethod !== 'POST') {
-    return {
-const fetch = require('node-fetch');
-
 exports.handler = async function (event) {
   console.log("Function hit:", event.httpMethod);
 
@@ -67,7 +58,7 @@ exports.handler = async function (event) {
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ message })  // ✅ Correct format for frontend
+      body: JSON.stringify({ message })
     };
 
   } catch (err) {
