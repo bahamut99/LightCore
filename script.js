@@ -28,7 +28,7 @@ async function submitLog() {
         'Accept': 'application/json',
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ log: entry }) // Explicit for safety
+      body: JSON.stringify({ log: entry })
     });
 
     let result;
@@ -50,21 +50,22 @@ async function submitLog() {
       throw new Error("GPT response did not contain expected scoring keywords.");
     }
 
-    function convertScore(num) {
-  const n = parseInt(num, 10);
-  if (isNaN(n)) return 'unknown';
-  if (n >= 8) return 'high';
-  if (n >= 5) return 'medium';
-  return 'low';
-}
+    function convertScore(raw) {
+      const match = String(raw).match(/(\d+)/);
+      const n = match ? parseInt(match[1], 10) : NaN;
+      if (isNaN(n)) return 'unknown';
+      if (n >= 8) return 'high';
+      if (n >= 5) return 'medium';
+      return 'low';
+    }
 
-const clarityRaw = text.match(/clarity:\s*(\d+)/i)?.[1];
-const immuneRaw = text.match(/immune:\s*(\d+)/i)?.[1];
-const physicalRaw = text.match(/physical:\s*(\d+)/i)?.[1];
+    const clarityRaw = text.match(/clarity:\s*([^\n]+)/i)?.[1];
+    const immuneRaw = text.match(/immune:\s*([^\n]+)/i)?.[1];
+    const physicalRaw = text.match(/physical:\s*([^\n]+)/i)?.[1];
 
-const scores = convertScore(clarityRaw);
-const immune = convertScore(immuneRaw);
-const physical = convertScore(physicalRaw);
+    const scores = convertScore(clarityRaw);
+    const immune = convertScore(immuneRaw);
+    const physical = convertScore(physicalRaw);
     const note = text.split('\n').slice(-1)[0] ?? 'No note provided.';
 
     if ([scores, immune, physical].includes('unknown')) {
@@ -126,8 +127,6 @@ async function loadRecentLogs() {
     console.error("Error fetching logs:", error);
     return;
   }
-
-  console.log("Fetched logs:", data);
 
   const rows = Array.isArray(data)
     ? data.map(row => [
