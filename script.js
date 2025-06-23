@@ -1,20 +1,24 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+// This file is now the single source of truth for all frontend JavaScript.
+// It does NOT contain any secret keys or direct database logic.
 
-const SUPABASE_URL = 'https://bcoottemxdthoopmaict.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjb290dGVteGR0aG9vcG1haWN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxOTEzMjksImV4cCI6MjA2NTc2NzMyOX0.CVYIdU0AHBDd00IlF5jh0HP264txAGh28LBJxDAA9Ng';
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+/**
+ * Handles the log submission process.
+ * 1. Disables the button and shows a spinner.
+ * 2. Sends the user's log entry to our secure Netlify function.
+ * 3. Displays the results returned by the function.
+ * 4. Refreshes the recent logs table.
+ */
 async function submitLog() {
-  const entry = document.getElementById('log').value.trim();
+  const entryText = document.getElementById('log').value.trim();
   const button = document.getElementById('analyzeBtn');
   const spinner = document.getElementById('spinner');
 
-  if (!entry) {
+  if (!entryText) {
     alert("Please enter a log entry.");
     return;
   }
 
+  // --- Update UI to show loading state ---
   button.disabled = true;
   button.innerText = "Analyzing...";
   button.style.opacity = 0.7;
@@ -22,78 +26,111 @@ async function submitLog() {
   document.getElementById('results').style.display = 'none';
 
   try {
+    // --- Call the secure backend function ---
     const response = await fetch('/.netlify/functions/analyze-log', {
       method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ log: entry })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ log: entryText }),
     });
 
-    let result;
-    try {
-      result = await response.json();
-      console.log("Received result from backend:", result);
-    } catch (err) {
-      console.error("Failed to parse JSON response", err);
-      alert("Something went wrong: Invalid JSON format from backend");
-      return;
+    if (!response.ok) {
+      // Try to get a specific error message from the backend, or use a generic one
+      const errorData = await response.json().catch(() => ({ error: 'An unknown error occurred.' }));
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
     }
 
-    if (!result || !result.message) {
-      console.error("Missing 'message' in result:", result);
-      throw new Error("Result is undefined or improperly formatted.");
-    }
+    const newLog = await response.json();
+    
+    // --- Display new data and refresh the logs table ---
+    displayResults(newLog); 
+    await loadRecentLogs(); // Refresh the table to include the new log
 
-    const text = result.message.trim();
-    console.log("GPT raw message:", text);
-
-    const clarityRaw = text.match(/clarity:\s*(\d+)/i)?.[1];
-    const immuneRaw = text.match(/immune:\s*(\d+)/i)?.[1];
-    const physicalRaw = text.match(/physical:\s*(\d+)/i)?.[1];
-
-    console.log("Extracted Scores:", clarityRaw, immuneRaw, physicalRaw);
-
-    function convertScore(num) {
-      const n = parseInt(num, 10);
-      if (isNaN(n)) return 'unknown';
-      if (n >= 8) return 'high';
-      if (n >= 5) return 'medium';
-      return 'low';
-    }
-
-    const clarity = convertScore(clarityRaw);
-    const immune = convertScore(immuneRaw);
-    const physical = convertScore(physicalRaw);
-    const note = text.split(/note:/i)?.[1]?.trim() ?? 'No note provided.';
-
-    if ([clarity, immune, physical].includes('unknown')) {
-      throw new Error("GPT returned scores that couldn't be parsed.");
-    }
-
-    await supabase.from('daily_logs').insert([
-      {
-        Date: new Date().toISOString(),
-        Log: entry,
-        Clarity: clarity,
-        Immune: immune,
-        PhysicalReadiness: physical,
-        Notes: note
-      }
-    ]);
-
-    displayResults([clarity, immune, physical, note]);
-    await loadRecentLogs();
-    document.getElementById('log').value = '';
   } catch (e) {
     alert("Something went wrong:\n" + e.message);
     console.error(e);
   } finally {
+    // --- Reset UI regardless of success or failure ---
     resetUI();
   }
 }
 
+/**
+ * Fetches the last 7 logs from our secure Netlify function.
+ */
+async function loadRecentLogs() {
+  try {
+    const response = await fetch('/.netlify/functions/recent-logs');
+    if (!response.ok) {
+      throw new Error("Failed to load recent logs");
+    }
+    const recentLogs = await response.json();
+    renderLogTable(recentLogs);
+  } catch (e) {
+    console.error("Failed to load logs:", e.message);
+    // You could also display an error message in the table itself
+    const tbody = document.querySelector('#logTable tbody');
+    tbody.innerHTML = `<tr><td colspan="6" class="error">Could not load recent logs.</td></tr>`;
+  }
+}
+
+/**
+ * Populates the results card with the data from the newly created log.
+ * @param {object} result - The log object returned from our backend function.
+ */
+function displayResults(result) {
+  // Now we use object properties, which is much safer and clearer than array indices
+  document.getElementById('clarity').innerText = result.Clarity || 'N/A';
+  document.getElementById('immune').innerText = result.Immune || 'N/A';
+  document.getElementById('physical').innerText = result.PhysicalReadiness || 'N/A';
+  document.getElementById('notes').innerText = result.Notes || 'N/A';
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('log').value = ''; // Clear the textarea
+}
+
+/**
+ * Renders the rows in the recent logs table.
+ * @param {Array<Array>} rows - An array of log entries.
+ */
+function renderLogTable(rows) {
+  const tbody = document.querySelector('#logTable tbody');
+  tbody.innerHTML = ''; // Clear existing rows
+
+  if (!rows || rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center;">No entries found.</td></tr>`;
+    return;
+  }
+  
+  rows.forEach(row => {
+    const tr = document.createElement('tr');
+    // The recent-log function returns an array of arrays, so we iterate through the cells
+    row.forEach((cell, index) => {
+      const td = document.createElement('td');
+      
+      // Format the date for display
+      if (index === 0) {
+          td.textContent = new Date(cell).toLocaleDateString();
+      } else {
+          td.textContent = cell;
+      }
+
+      td.title = cell; // Show full content on hover
+
+      // Add CSS classes for styling 'high', 'medium', 'low' scores
+      if ([2, 3, 4].includes(index)) {
+        const value = String(cell || '').toLowerCase();
+        if (["high", "medium", "low"].includes(value)) {
+          td.classList.add(value);
+        }
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+/**
+ * Resets the analyze button and spinner to their default state.
+ */
 function resetUI() {
   const button = document.getElementById('analyzeBtn');
   const spinner = document.getElementById('spinner');
@@ -103,87 +140,16 @@ function resetUI() {
   spinner.style.display = 'none';
 }
 
-function displayResults(result) {
-  if (!Array.isArray(result) || result.includes(undefined)) {
-    console.warn("Invalid result structure:", result);
-    return;
+/**
+ * This is the entry point of our application.
+ * It waits for the page to be fully loaded, then sets up our event listeners.
+ */
+document.addEventListener('DOMContentLoaded', () => {
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  if (analyzeBtn) {
+    analyzeBtn.addEventListener('click', submitLog);
   }
-
-  document.getElementById('clarity').innerText = result[0];
-  document.getElementById('immune').innerText = result[1];
-  document.getElementById('physical').innerText = result[2];
-  document.getElementById('notes').innerText = result[3];
-  document.getElementById('results').style.display = 'block';
-}
-
-async function loadRecentLogs() {
-  const { data, error } = await supabase
-    .from('daily_logs')
-    .select('Date, Log, Clarity, Immune, PhysicalReadiness, Notes')
-    .order('Date', { ascending: false })
-    .limit(7);
-
-  if (error) {
-    console.error("Error fetching logs:", error);
-    return;
-  }
-
-  console.log("Fetched logs:", data);
-
-  const rows = Array.isArray(data)
-    ? data.map(row => [
-        new Date(row.Date).toLocaleDateString(),
-        row.Log,
-        row.Clarity,
-        row.Immune,
-        row.PhysicalReadiness,
-        row.Notes
-      ])
-    : [];
-
-  renderLogTable(rows);
-}
-
-function renderLogTable(rows) {
-  const tbody = document.querySelector('#logTable tbody');
-  tbody.innerHTML = '';
-
-  if (!Array.isArray(rows) || rows.length === 0) {
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = 6;
-    td.textContent = "No entries found.";
-    td.style.textAlign = 'center';
-    tr.appendChild(td);
-    tbody.appendChild(tr);
-    return;
-  }
-
-  rows.forEach(row => {
-    if (!Array.isArray(row) || row.length !== 6) {
-      console.warn("Skipping malformed row:", row);
-      return;
-    }
-
-    const tr = document.createElement('tr');
-
-    row.forEach((cell, index) => {
-      const td = document.createElement('td');
-      td.textContent = cell ?? '';
-      td.title = cell ?? '';
-
-      if ([2, 3, 4].includes(index)) {
-        const val = String(cell ?? '').toLowerCase();
-        if (["high", "medium", "low"].includes(val)) {
-          td.classList.add(val);
-        }
-      }
-
-      tr.appendChild(td);
-    });
-
-    tbody.appendChild(tr);
-  });
-}
-
-window.onload = loadRecentLogs;
+  
+  // Load the initial set of logs when the page loads
+  loadRecentLogs();
+});
