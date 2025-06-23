@@ -76,9 +76,9 @@ function displayResults(result) {
   document.getElementById('results').style.display = 'block';
   document.getElementById('log').value = ''; // Clear the textarea
 }
-
 /**
  * Renders the rows in the recent logs table.
+ * Now includes logic to add a custom tooltip for long text.
  */
 function renderLogTable(rows) {
   const tbody = document.querySelector('#logTable tbody');
@@ -91,19 +91,41 @@ function renderLogTable(rows) {
   
   rows.forEach(row => {
     const tr = document.createElement('tr');
-    row.forEach((cell, index) => {
+    row.forEach((cellData, index) => {
       const td = document.createElement('td');
+      const cellText = cellData ?? ''; // Ensure we have a string to work with
       
-      if (index === 0) {
-          td.textContent = new Date(cell).toLocaleDateString();
+      // === NEW LOGIC STARTS HERE ===
+
+      // Define which columns can have tooltips and a max length before truncating
+      const columnsWithTooltip = [1, 5]; // Column index 1 (Log) and 5 (Notes)
+      const maxLength = 25; // Max characters to show in the cell
+
+      if (columnsWithTooltip.includes(index) && cellText.length > maxLength) {
+        // 1. Truncate the text shown in the cell
+        const truncatedText = cellText.substring(0, maxLength) + '...';
+        td.textContent = truncatedText;
+        
+        // 2. Add the tooltip container class to the <td>
+        td.classList.add('tooltip-container');
+        
+        // 3. Create and append the hidden tooltip span
+        const tooltip = document.createElement('span');
+        tooltip.classList.add('tooltip-text');
+        tooltip.textContent = cellText; // The tooltip gets the FULL text
+        td.appendChild(tooltip);
+
       } else {
-          td.textContent = cell;
+        // If text is not long, just add it normally
+        // And format the date for the first column
+        td.textContent = (index === 0) ? new Date(cellText).toLocaleDateString() : cellText;
       }
+      
+      // === END OF NEW LOGIC ===
 
-      td.title = cell;
-
+      // Add CSS classes for styling 'high', 'medium', 'low' scores
       if ([2, 3, 4].includes(index)) {
-        const value = String(cell || '').toLowerCase();
+        const value = String(cellText).toLowerCase();
         if (["high", "medium", "low"].includes(value)) {
           td.classList.add(value);
         }
@@ -111,7 +133,7 @@ function renderLogTable(rows) {
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
-  });
+});
 }
 
 /**
