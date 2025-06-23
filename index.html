@@ -24,11 +24,15 @@
       <div class="score"><span class="label">Mental Clarity:</span> <span id="clarity"></span></div>
       <div class="score"><span class="label">Immune Risk:</span> <span id="immune"></span></div>
       <div class="score"><span class="label">Physical Output:</span> <span id="physical"></span></div>
-      <div class="score"><span class="label">AI Notes:</span> <span id="notes"></span></div>
+      <div class="notes-section">
+        <span class="label">AI Notes:</span>
+        <p id="notes"></p>
+      </div>
     </div>
 
     <div class="card">
-      <h2 style="font-size: 1.25rem; margin-bottom: 1rem;">🕓 Recent Entries</h2>
+      <h2>🕓 Recent Entries</h2>
+      <p class="subtle-text">Click on a row to see full details.</p>
       <table id="logTable">
         <thead>
           <tr>
@@ -44,6 +48,24 @@
       </table>
     </div>
     
+    <div id="logModal" class="modal-overlay" style="display: none;">
+      <div class="modal-content">
+        <button id="closeModal" class="modal-close-btn">&times;</button>
+        <h3 id="modalDate"></h3>
+        <h4>Full Log Entry:</h4>
+        <p id="modalLog"></p>
+        <hr>
+        <h4>AI Analysis:</h4>
+        <div class="modal-scores">
+          <div><span class="label">Mental Clarity:</span> <span id="modalClarity"></span></div>
+          <div><span class="label">Immune Risk:</span> <span id="modalImmune"></span></div>
+          <div><span class="label">Physical Output:</span> <span id="modalPhysical"></span></div>
+        </div>
+        <h4>AI Notes:</h4>
+        <p id="modalNotes"></p>
+      </div>
+    </div>
+
     <script src="script.js" type="module"></script>
   </body>
 </html>
