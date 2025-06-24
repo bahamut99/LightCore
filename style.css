@@ -3,15 +3,19 @@ body {
   background: #E5E7EB;
   color: #2c3e50;
   padding: 1rem;
-  /* Adjusted for larger layout */
   margin: auto;
 }
 
-/* === NEW LAYOUT STYLES === */
+/* This is the main container for the auth forms, to center them */
+#auth-container {
+  max-width: 450px;
+  margin: 4rem auto;
+}
+
+/* === LAYOUT STYLES === */
 .main-container {
   display: flex;
   flex-wrap: wrap;
-  /* Allows columns to stack on smaller screens */
   gap: 2rem;
   max-width: 1600px;
   margin: auto;
@@ -19,14 +23,11 @@ body {
 
 .charts-column {
   flex: 1;
-  /* Takes up 1 part of the available space */
   min-width: 350px;
-  /* Minimum width before it wraps */
 }
 
 .main-column {
   flex: 2;
-  /* Takes up 2 parts of the available space */
   min-width: 350px;
 }
 
@@ -52,9 +53,6 @@ body {
 .chart-container {
   margin-bottom: 1.5rem;
 }
-
-/* === END NEW LAYOUT STYLES === */
-
 
 .header-container {
   display: flex;
@@ -84,14 +82,25 @@ h2 {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
 }
 
+/* === FORM & BUTTON STYLES === */
 textarea,
-button {
+button,
+input[type="email"],
+input[type="password"] {
   width: 100%;
   padding: 0.75rem;
   border-radius: 0.5rem;
   border: 1px solid #D1D5DB;
   margin-top: 0.5rem;
   font-size: 1rem;
+  box-sizing: border-box;
+  /* Ensures padding doesn't affect width */
+}
+
+form label {
+  display: block;
+  margin-top: 1rem;
+  font-weight: 500;
 }
 
 button {
@@ -111,6 +120,43 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.logout-btn {
+  background-color: #fff;
+  color: #3B82F6;
+  border: 1px solid #3B82F6;
+  margin-left: auto;
+  /* Pushes the button to the far right */
+  width: auto;
+  /* Overrides the default full-width */
+  padding: 0.5rem 1rem;
+}
+
+.logout-btn:hover {
+  background-color: #EFF6FF;
+}
+
+.auth-toggle {
+  text-align: center;
+  margin-top: 1.5rem;
+}
+
+.auth-toggle a {
+  color: #3B82F6;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.auth-toggle a:hover {
+  text-decoration: underline;
+}
+
+.error-message {
+  color: #dc2626;
+  margin-top: 1rem;
+  text-align: center;
+}
+
+/* === SCORE & TABLE STYLES === */
 .score {
   display: flex;
   justify-content: space-between;
@@ -164,6 +210,15 @@ th {
   color: #1E3A8A;
 }
 
+.subtle-text {
+  font-size: 0.8rem;
+  color: #6B7280;
+  text-align: center;
+  margin-top: -1rem;
+  margin-bottom: 1rem;
+}
+
+/* === UTILITY & MODAL STYLES === */
 .loader {
   width: 18px;
   height: 18px;
@@ -192,14 +247,6 @@ th {
 .low {
   color: #dc2626;
   font-weight: bold;
-}
-
-.subtle-text {
-  font-size: 0.8rem;
-  color: #6B7280;
-  text-align: center;
-  margin-top: -1rem;
-  margin-bottom: 1rem;
 }
 
 .modal-overlay {

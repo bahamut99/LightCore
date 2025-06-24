@@ -1,20 +1,121 @@
-// This file is the single source of truth for all frontend JavaScript.
+// We re-introduce the Supabase client for frontend auth handling.
+// This uses the PUBLIC anon key, which is safe to expose in a browser.
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
-// Global object to hold our chart instances. This allows us to destroy them before creating new ones.
+// === IMPORTANT: PASTE YOUR SUPABASE URL AND PUBLIC ANON KEY HERE ===
+const SUPABASE_URL = 'https://bcoottemxdthoopmaict.supabase.co'; 
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjb290dGVteGR0aG9vcG1haWN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxOTEzMjksImV4cCI6MjA2NTc2NzMyOX0.CVYIdU0AHBDd00IlF5jh0HP264txAGh28LBJxDAA9Ng';
+// =================================================================
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Global object to hold our chart instances.
 let charts = {};
 
-/**
- * Handles the log submission process.
- */
+// === UI ELEMENT REFERENCES ===
+const authContainer = document.getElementById('auth-container');
+const appContainer = document.getElementById('app-container');
+const loginForm = document.getElementById('login-form');
+const signupForm = document.getElementById('signup-form');
+const logoutButton = document.getElementById('logout-button');
+const showSignupLink = document.getElementById('show-signup');
+const showLoginLink = document.getElementById('show-login');
+const authError = document.getElementById('auth-error');
+
+// === AUTHENTICATION LOGIC ===
+
+// Sign Up Handler
+signupForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const email = document.getElementById('signup-email').value;
+    const password = document.getElementById('signup-password').value;
+
+    const { data, error } = await supabase.auth.signUp({ email, password });
+
+    if (error) {
+        authError.textContent = error.message;
+        authError.style.display = 'block';
+    } else {
+        authError.style.display = 'none';
+        alert('Success! Please check your email for a confirmation link.');
+    }
+});
+
+// Login Handler
+loginForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+        authError.textContent = error.message;
+        authError.style.display = 'block';
+    } else {
+        authError.style.display = 'none';
+        // The onAuthStateChange listener will handle showing the dashboard
+    }
+});
+
+// Logout Handler
+logoutButton.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    // The onAuthStateChange listener will handle showing the auth forms
+});
+
+// Session State Listener - This is the core of the auth logic!
+supabase.auth.onAuthStateChange((event, session) => {
+    if (session) {
+        // User is logged in
+        showDashboard();
+        // Load user-specific data
+        loadRecentLogs();
+        fetchAndRenderCharts(7);
+    } else {
+        // User is logged out
+        showAuthForms();
+    }
+});
+
+
+// === UI TOGGLING LOGIC ===
+
+function showDashboard() {
+    authContainer.style.display = 'none';
+    appContainer.style.display = 'block';
+}
+
+function showAuthForms() {
+    appContainer.style.display = 'none';
+    authContainer.style.display = 'block';
+}
+
+showSignupLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    loginForm.style.display = 'none';
+    signupForm.style.display = 'block';
+    showSignupLink.style.display = 'none';
+    showLoginLink.style.display = 'block';
+});
+
+showLoginLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    signupForm.style.display = 'none';
+    loginForm.style.display = 'block';
+    showLoginLink.style.display = 'none';
+    showSignupLink.style.display = 'block';
+});
+
+
+// === DATA AND DASHBOARD FUNCTIONS (Mostly Unchanged) ===
+
 async function submitLog() {
   const entryText = document.getElementById('log').value.trim();
   const button = document.getElementById('analyzeBtn');
   const spinner = document.getElementById('spinner');
 
-  if (!entryText) {
-    alert("Please enter a log entry.");
-    return;
-  }
+  if (!entryText) { alert("Please enter a log entry."); return; }
 
   button.disabled = true;
   button.innerText = "Analyzing...";
@@ -22,9 +123,13 @@ async function submitLog() {
   document.getElementById('results').style.display = 'none';
 
   try {
+    const { data: { session } } = await supabase.auth.getSession();
     const response = await fetch('/.netlify/functions/analyze-log', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+      },
       body: JSON.stringify({ log: entryText }),
     });
 
@@ -32,17 +137,12 @@ async function submitLog() {
       const errorData = await response.json().catch(() => ({ error: 'An unknown error occurred.' }));
       throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
     }
-
     const newLog = await response.json();
-    
     displayResults(newLog); 
     await loadRecentLogs();
-    // After a new log is submitted, refresh the charts as well
     await fetchAndRenderCharts(7);
     document.querySelector('#btn7day').classList.add('active');
     document.querySelector('#btn30day').classList.remove('active');
-
-
   } catch (e) {
     alert("Something went wrong:\n" + e.message);
     console.error(e);
@@ -51,27 +151,34 @@ async function submitLog() {
   }
 }
 
-/**
- * Fetches the last 7 logs for the table display.
- */
 async function loadRecentLogs() {
   try {
-    const response = await fetch('/.netlify/functions/recent-logs');
-    if (!response.ok) {
-      throw new Error("Failed to load recent logs");
-    }
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch('/.netlify/functions/recent-logs', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+    });
+    if (!response.ok) throw new Error("Failed to load recent logs");
     const recentLogs = await response.json();
     renderLogTable(recentLogs);
   } catch (e) {
     console.error("Failed to load logs:", e.message);
-    const tbody = document.querySelector('#logTable tbody');
-    tbody.innerHTML = `<tr><td colspan="6" class="error">Could not load recent logs.</td></tr>`;
   }
 }
 
-/**
- * Populates the results card with the data from the newly created log.
- */
+async function fetchAndRenderCharts(range) {
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch(`/.netlify/functions/get-chart-data?range=${range}`, {
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (!response.ok) throw new Error('Failed to fetch chart data');
+        const data = await response.json();
+        renderAllCharts(data);
+    } catch (error) {
+        console.error("Error fetching or rendering charts:", error);
+    }
+}
+
 function displayResults(result) {
   document.getElementById('clarity').innerText = result.Clarity || 'N/A';
   document.getElementById('immune').innerText = result.Immune || 'N/A';
@@ -81,29 +188,22 @@ function displayResults(result) {
   document.getElementById('log').value = '';
 }
 
-/**
- * Renders the rows in the recent logs table.
- */
 function renderLogTable(logs) {
   const tbody = document.querySelector('#logTable tbody');
   tbody.innerHTML = '';
-
   if (!logs || logs.length === 0) {
     tbody.innerHTML = `<tr><td colspan="6" style="text-align: center;">No entries found.</td></tr>`;
     return;
   }
-  
   logs.forEach(logData => {
     const tr = document.createElement('tr');
     tr.addEventListener('click', () => openLogModal(logData));
-
     td(new Date(logData.created_at).toLocaleDateString(), tr);
     td(logData.Log, tr);
     td(logData.Clarity, tr, true);
     td(logData.Immune, tr, true);
     td(logData.PhysicalReadiness, tr, true);
     td(logData.Notes, tr);
-    
     tbody.appendChild(tr);
   });
 }
@@ -113,16 +213,11 @@ function td(content, parent, isScore = false) {
     cell.textContent = content;
     if (isScore) {
         const value = String(content || '').toLowerCase();
-        if (["high", "medium", "low"].includes(value)) {
-          cell.classList.add(value);
-        }
+        if (["high", "medium", "low"].includes(value)) cell.classList.add(value);
     }
     parent.appendChild(cell);
 }
 
-/**
- * Modal open/close functions
- */
 function openLogModal(logData) {
     document.getElementById('modalDate').textContent = new Date(logData.created_at).toLocaleString();
     document.getElementById('modalLog').textContent = logData.Log;
@@ -137,9 +232,6 @@ function closeLogModal() {
     document.getElementById('logModal').style.display = 'none';
 }
 
-/**
- * Resets the analyze button and spinner to their default state.
- */
 function resetUI() {
   const button = document.getElementById('analyzeBtn');
   const spinner = document.getElementById('spinner');
@@ -148,36 +240,15 @@ function resetUI() {
   spinner.style.display = 'none';
 }
 
-
-// === NEW CHARTING FUNCTIONS ===
-
-/**
- * Fetches data from our new endpoint and triggers the chart rendering.
- * @param {number} range - The number of days for the chart (e.g., 7 or 30).
- */
-async function fetchAndRenderCharts(range) {
-    try {
-        const response = await fetch(`/.netlify/functions/get-chart-data?range=${range}`);
-        if (!response.ok) throw new Error('Failed to fetch chart data');
-        const data = await response.json();
-        renderAllCharts(data);
-    } catch (error) {
-        console.error("Error fetching or rendering charts:", error);
-        // You could add an error message to the chart area here
-    }
-}
-
-/**
- * Main function to render all three charts.
- * @param {object} data - The chart data from our Netlify function.
- */
 function renderAllCharts(data) {
-    const sharedOptions = {
+    const sharedOptions = { /* ... Chart options ... */ };
+    // Chart rendering functions from before...
+    const commonOptions = {
         plugins: { legend: { display: false } },
         scales: { 
             y: { 
                 beginAtZero: true, 
-                max: 4, // Max value is 3 (high) + 1 for padding
+                max: 4,
                 ticks: {
                     stepSize: 1,
                     callback: function(value) {
@@ -187,72 +258,46 @@ function renderAllCharts(data) {
                 }
             } 
         },
-        elements: { line: { tension: 0.3 } } // Makes the lines smooth
+        elements: { line: { tension: 0.3 } }
     };
-
-    renderChart('clarityChart', 'Mental Clarity', data.labels, data.clarityData, '#3B82F6', sharedOptions);
-    renderChart('immuneChart', 'Immune Risk', data.labels, data.immuneData, '#ca8a04', sharedOptions);
-    renderChart('physicalChart', 'Physical Output', data.labels, data.physicalData, '#16a34a', sharedOptions);
+    renderChart('clarityChart', 'Mental Clarity', data.labels, data.clarityData, '#3B82F6', commonOptions);
+    renderChart('immuneChart', 'Immune Risk', data.labels, data.immuneData, '#ca8a04', commonOptions);
+    renderChart('physicalChart', 'Physical Output', data.labels, data.physicalData, '#16a34a', commonOptions);
 }
 
-/**
- * Renders a single chart instance.
- * @param {string} canvasId - The ID of the <canvas> element.
- * @param {string} label - The label for the dataset (e.g., 'Mental Clarity').
- * @param {Array} labels - The x-axis labels (dates).
- * @param {Array} data - The y-axis data (scores).
- * @param {string} color - The line/point color for the chart.
- * @param {object} options - The shared chart options.
- */
 function renderChart(canvasId, label, labels, data, color, options) {
-    // If a chart instance already exists, destroy it before creating a new one.
-    if (charts[canvasId]) {
-        charts[canvasId].destroy();
-    }
-
+    if (charts[canvasId]) charts[canvasId].destroy();
     const ctx = document.getElementById(canvasId).getContext('2d');
     charts[canvasId] = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
             datasets: [{
-                label: label,
-                data: data,
-                backgroundColor: color,
-                borderColor: color,
-                borderWidth: 2,
-                pointRadius: 3,
+                label: label, data: data, backgroundColor: color,
+                borderColor: color, borderWidth: 2, pointRadius: 3,
             }]
         },
         options: {
-            ...options, // Use the shared options
-            plugins: {
-                ...options.plugins,
-                title: { // Add a specific title to each chart
-                    display: true,
-                    text: label,
-                    font: { size: 16 }
-                }
-            }
+            ...options,
+            plugins: { ...options.plugins, title: { display: true, text: label, font: { size: 16 } } }
         }
     });
 }
 
-
-/**
- * This is the entry point of our application.
- */
+// Initial setup listener
 document.addEventListener('DOMContentLoaded', () => {
-  const analyzeBtn = document.getElementById('analyzeBtn');
-  const logTextarea = document.getElementById('log');
   const closeModalBtn = document.getElementById('closeModal');
   const modalOverlay = document.getElementById('logModal');
   const btn7day = document.getElementById('btn7day');
   const btn30day = document.getElementById('btn30day');
 
-  // Button listeners
-  if (analyzeBtn) analyzeBtn.addEventListener('click', submitLog);
+  // Event listeners for UI elements that are always present
   if(closeModalBtn) closeModalBtn.addEventListener('click', closeLogModal);
+  if(modalOverlay) {
+      modalOverlay.addEventListener('click', (event) => {
+          if (event.target === modalOverlay) closeLogModal();
+      });
+  }
   if (btn7day) btn7day.addEventListener('click', () => {
     fetchAndRenderCharts(7);
     btn7day.classList.add('active');
@@ -263,25 +308,4 @@ document.addEventListener('DOMContentLoaded', () => {
     btn30day.classList.add('active');
     btn7day.classList.remove('active');
   });
-  
-  // Textarea listener
-  if (logTextarea) {
-    logTextarea.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        submitLog();
-      }
-    });
-  }
-
-  // Modal overlay listener
-  if(modalOverlay) {
-      modalOverlay.addEventListener('click', (event) => {
-          if (event.target === modalOverlay) closeLogModal();
-      });
-  }
-
-  // Initial data load
-  loadRecentLogs();
-  fetchAndRenderCharts(7); // Load the 7-day chart by default
 });
