@@ -30,28 +30,6 @@ body {
   min-width: 350px;
 }
 
-/* NEW styles for the side-by-side input cards */
-.input-row {
-  display: flex;
-  flex-wrap: wrap;
-  /* Allows stacking on smaller screens */
-  gap: 1.5rem;
-  align-items: stretch;
-}
-
-.input-row .card {
-  flex: 1;
-  min-width: 300px;
-  /* Ensures cards don't get too squished */
-  display: flex;
-  flex-direction: column;
-}
-
-.input-row textarea {
-  flex-grow: 1;
-  /* Allows the textarea to expand vertically */
-}
-
 /* This is a special container for the button below the input cards */
 .card-full-width {
   background: none;

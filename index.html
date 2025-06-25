@@ -75,39 +75,37 @@
         </div>
 
         <div class="main-column">
-          <div class="input-row">
-            <div class="card">
-              <label for="sleep-hours">😴 Hours Slept</label>
-              <input
-                type="number"
-                id="sleep-hours"
-                min="0"
-                max="24"
-                step="0.5"
-                placeholder="e.g., 7.5"
-              />
-              <label for="sleep-quality">⭐ Sleep Quality (1-5)</label>
-              <input
-                type="number"
-                id="sleep-quality"
-                min="1"
-                max="5"
-                placeholder="1=Poor, 5=Excellent"
-              />
-            </div>
-            <div class="card">
-              <label for="log">📝 Daily Log Entry</label>
-              <textarea
-                id="log"
-                rows="5"
-                placeholder="I woke up feeling clear-headed and ready to move..."
-              ></textarea>
+          <div class="card">
+            <label for="log">📝 Daily Log Entry</label>
+            <textarea
+              id="log"
+              rows="5"
+              placeholder="I woke up feeling clear-headed and ready to move..."
+            ></textarea>
+            <div style="display: flex; align-items: center; gap: 0.5rem">
+              <button id="analyzeBtn">Analyze Log</button>
+              <div id="spinner" style="display: none" class="loader"></div>
             </div>
           </div>
 
-          <div class="card-full-width">
-            <button id="analyzeBtn">Analyze Log</button>
-            <div id="spinner" style="display: none" class="loader"></div>
+          <div class="card">
+            <label for="sleep-hours">Hours Slept 😴</label>
+            <input
+              type="number"
+              id="sleep-hours"
+              min="0"
+              max="24"
+              step="0.5"
+              placeholder="e.g., 7.5"
+            />
+            <label for="sleep-quality">Sleep Quality (1-5) ⭐</label>
+            <input
+              type="number"
+              id="sleep-quality"
+              min="1"
+              max="5"
+              placeholder="1=Poor, 5=Excellent"
+            />
           </div>
 
           <div class="card" id="results" style="display: none">
