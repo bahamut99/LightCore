@@ -1,3 +1,10 @@
+alert("Script is running!"); // <-- ADD THIS LINE
+
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+// === IMPORTANT: PASTE YOUR SUPABASE URL AND PUBLIC ANON KEY HERE ===
+// ... rest of your file
+
 // We re-introduce the Supabase client for frontend auth handling.
 // This uses the PUBLIC anon key, which is safe to expose in a browser.
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
