@@ -1,14 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Helper function to convert numeric scores to text labels
-const scoreMap = {
-  'high': 3,
-  'medium': 2,
-  'low': 1
-};
+// === THIS HELPER FUNCTION WAS MISSING. IT IS NOW CORRECTLY RE-ADDED. ===
+function convertScore(num) {
+  const n = parseInt(num, 10);
+  if (isNaN(n)) return 'unknown';
+  if (n >= 8) return 'high';
+  if (n >= 5) return 'medium';
+  return 'low';
+}
+// ======================================================================
 
 export async function handler(event) {
-  // === 1. SECURITY CHECK ===
+  // 1. SECURITY CHECK
   const authHeader = event.headers.authorization;
   if (!authHeader) {
     return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
@@ -24,7 +27,7 @@ export async function handler(event) {
     return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
   }
   
-  // === 2. VALIDATE REQUEST BODY ===
+  // 2. VALIDATE REQUEST BODY
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
@@ -46,7 +49,7 @@ export async function handler(event) {
   );
 
   try {
-    // 3. === Call OpenAI for Analysis ===
+    // 3. Call OpenAI for Analysis
     const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -59,7 +62,6 @@ export async function handler(event) {
         messages: [
           {
             role: 'system',
-            // === THIS LINE IS THE FIX ===
             content: `You are a health analysis bot. Analyze the user's log and return a valid JSON object with four keys: "clarity", "immune", "physical" (each with a numerical score from 1-10), and "note" (a brief 1-2 sentence summary).`
           },
           {
@@ -71,7 +73,6 @@ export async function handler(event) {
     });
 
     if (!openaiResponse.ok) {
-        // We can get more details from the OpenAI response if it fails
         const errorBody = await openaiResponse.json();
         console.error("OpenAI API Error:", errorBody);
         throw new Error(`OpenAI API responded with status: ${openaiResponse.status}`);
@@ -79,7 +80,7 @@ export async function handler(event) {
 
     const aiData = await openaiResponse.json();
     
-    // 4. === Safely Parse the AI Response ===
+    // 4. Safely Parse the AI Response
     if (!aiData.choices || !aiData.choices[0].message?.content) {
       throw new Error("Invalid response structure from OpenAI");
     }
@@ -91,7 +92,7 @@ export async function handler(event) {
       throw new Error("OpenAI returned malformed JSON content.");
     }
     
-    // 5. === Prepare Data for Database ===
+    // 5. Prepare Data for Database
     const newLogEntry = {
         user_id: user.id,
         Log: entry,
@@ -101,7 +102,7 @@ export async function handler(event) {
         Notes: aiResult.note.trim(),
     };
 
-    // 6. === Insert Data into Supabase ===
+    // 6. Insert Data into Supabase
     const { data: insertedData, error: dbError } = await supabaseAdmin
         .from('daily_logs')
         .insert(newLogEntry)
@@ -113,7 +114,7 @@ export async function handler(event) {
       throw new Error("Failed to save log to the database.");
     }
 
-    // 7. === Return Success Response to Frontend ===
+    // 7. Return Success Response to Frontend
     return {
       statusCode: 200,
       body: JSON.stringify(insertedData),
