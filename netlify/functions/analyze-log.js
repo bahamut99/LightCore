@@ -1,28 +1,23 @@
-import { createClient } from '@supabase/supabase-js';
+// This version is for advanced debugging.
+export async function handler(event, context) {
+  console.log("--- Advanced Environment Variable Check ---");
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_KEY;
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
 
-export async function handler(event) {
-  // === NEW DIAGNOSTIC CODE ===
-  // This will print a report to your Netlify Function Log.
-  console.log("--- Netlify Environment Variable Check ---");
-  console.log("Does SUPABASE_URL exist?", !!process.env.SUPABASE_URL);
-  console.log("Does SUPABASE_KEY (the secret one) exist?", !!process.env.SUPABASE_KEY);
-  console.log("Does SUPABASE_ANON_KEY (the public one) exist?", !!process.env.SUPABASE_ANON_KEY);
-  console.log("Does OPENAI_API_KEY exist?", !!process.env.OPENAI_API_KEY);
-  console.log("------------------------------------------");
-  // The '!!' turns the value into a simple true or false.
+  console.log("SUPABASE_URL Type:", typeof url, "| Length:", url?.length);
+  console.log("SUPABASE_KEY (secret) Type:", typeof key, "| Length:", key?.length);
+  console.log("SUPABASE_ANON_KEY (public) Type:", typeof anonKey, "| Length:", anonKey?.length);
+  console.log("OPENAI_API_KEY Type:", typeof openaiKey, "| Length:", openaiKey?.length);
+  console.log("---------------------------------------");
 
-  // The rest of the function will still run and fail, which is expected.
-  // We just need the log output from above.
+  // The function will likely still fail, but this log is what we need.
+  const { createClient } = require('@supabase/supabase-js');
+  const supabaseAdmin = createClient(url, key);
 
-  const supabaseAdmin = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_KEY // This is the line that is failing
-  );
-
-  // The function will crash here, but after printing our report.
-  
   return {
       statusCode: 500,
-      body: JSON.stringify({ error: "This is a deliberate crash after logging." }),
+      body: JSON.stringify({ error: "This is a deliberate crash after advanced logging." }),
   };
 }
