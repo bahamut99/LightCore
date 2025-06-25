@@ -1,37 +1,31 @@
 import { createClient } from '@supabase/supabase-js';
 
 export async function handler(event, context) {
-  // Initialize Supabase client with secret keys from environment variables
+  // We will add the security check here in the final step.
+  
   const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_KEY
   );
 
   try {
-    // 1. === Query the Database ===
     const { data, error } = await supabase
       .from('daily_logs')
-      .select('created_at, Log, Clarity, Immune, PhysicalReadiness, Notes')
+      // === THE FIX IS HERE: We now select the new sleep columns ===
+      .select('created_at, Log, Clarity, Immune, PhysicalReadiness, Notes, sleep_hours, sleep_quality')
       .order('created_at', { ascending: false })
       .limit(7);
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
-    // 2. === Return the raw data directly ===
-    // The frontend now expects the full array of objects, so we no longer
-    // need to format it into an array of arrays. This is the fix.
     return {
       statusCode: 200,
       body: JSON.stringify(data),
     };
-
-  } catch (error) {
-    console.error("Error in recent-log function:", error);
+  } catch (e) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: error.message }),
+      body: JSON.stringify({ error: e.message }),
     };
   }
 }
