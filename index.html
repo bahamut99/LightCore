@@ -55,7 +55,7 @@
       </div>
 
       <div class="main-container">
-        <div class="charts-column">
+        <div class="left-column">
           <div class="card">
             <h2>📊 Trends</h2>
             <div class="toggle-buttons">
@@ -74,20 +74,40 @@
           </div>
         </div>
 
-        <div class="main-column">
+        <div class="center-column">
           <div class="card">
             <label for="log">📝 Daily Log Entry</label>
             <textarea
               id="log"
               rows="5"
-              placeholder="I woke up feeling clear-headed and ready to move..."
+              placeholder="I woke up feeling clear-headed..."
             ></textarea>
-            <div style="display: flex; align-items: center; gap: 0.5rem">
-              <button id="analyzeBtn">Analyze Log</button>
-              <div id="spinner" style="display: none" class="loader"></div>
+          </div>
+          <div class="card" id="results" style="display: none">
+            <div class="score">
+              <span class="label">Mental Clarity:</span>
+              <span id="clarity"></span>
+            </div>
+            <div class="score">
+              <span class="label">Immune Risk:</span> <span id="immune"></span>
+            </div>
+            <div class="score">
+              <span class="label">Physical Output:</span>
+              <span id="physical"></span>
+            </div>
+            <div class="notes-section">
+              <span class="label">AI Notes:</span>
+              <p id="notes"></p>
             </div>
           </div>
+          <div class="card">
+            <h2>🕓 Recent Entries</h2>
+            <p class="subtle-text">Click on a row to see full details.</p>
+            <table id="logTable"></table>
+          </div>
+        </div>
 
+        <div class="right-column">
           <div class="card">
             <label for="sleep-hours">Hours Slept 😴</label>
             <input
@@ -107,29 +127,9 @@
               placeholder="1=Poor, 5=Excellent"
             />
           </div>
-
-          <div class="card" id="results" style="display: none">
-            <div class="score">
-              <span class="label">Mental Clarity:</span>
-              <span id="clarity"></span>
-            </div>
-            <div class="score">
-              <span class="label">Immune Risk:</span> <span id="immune"></span>
-            </div>
-            <div class="score">
-              <span class="label">Physical Output:</span>
-              <span id="physical"></span>
-            </div>
-            <div class="notes-section">
-              <span class="label">AI Notes:</span>
-              <p id="notes"></p>
-            </div>
-          </div>
-
-          <div class="card">
-            <h2>🕓 Recent Entries</h2>
-            <p class="subtle-text">Click on a row to see full details.</p>
-            <table id="logTable"></table>
+          <div class="card-full-width">
+            <button id="analyzeBtn">Analyze Log</button>
+            <div id="spinner" style="display: none" class="loader"></div>
           </div>
         </div>
       </div>

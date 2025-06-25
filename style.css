@@ -11,36 +11,69 @@ body {
   margin: 4rem auto;
 }
 
-/* === LAYOUT STYLES === */
+/* === NEW 3-COLUMN LAYOUT STYLES === */
 .main-container {
   display: flex;
   flex-wrap: wrap;
   gap: 2rem;
-  max-width: 1600px;
+  align-items: flex-start;
+  /* Aligns columns to the top */
+  max-width: 1800px;
+  /* Increased max-width for 3 columns */
   margin: auto;
 }
 
-.charts-column {
+.left-column {
+  flex: 1.5;
+  /* Skinny column */
+  min-width: 350px;
+}
+
+.center-column {
+  flex: 3;
+  /* Main, wide column */
+  min-width: 400px;
+}
+
+.right-column {
   flex: 1;
-  min-width: 350px;
+  /* Skinny column */
+  min-width: 300px;
 }
 
-.main-column {
-  flex: 2;
-  min-width: 350px;
-}
-
-/* This is a special container for the button below the input cards */
 .card-full-width {
   background: none;
   border: none;
   box-shadow: none;
   padding: 0;
-  margin-top: -1rem;
 }
 
+/* === END NEW LAYOUT STYLES === */
 
-/* === GENERAL & HEADER STYLES === */
+
+.toggle-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.toggle-buttons button {
+  flex-grow: 1;
+  background-color: #e2e8f0;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.toggle-buttons button.active {
+  background-color: #3B82F6;
+  color: white;
+  border-color: #3B82F6;
+}
+
+.chart-container {
+  margin-bottom: 1.5rem;
+}
+
 .header-container {
   display: flex;
   align-items: center;
@@ -69,7 +102,6 @@ h2 {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
 }
 
-/* === FORM & BUTTON STYLES === */
 textarea,
 button,
 input[type="email"],
@@ -92,7 +124,6 @@ form label,
   color: #4B5563;
 }
 
-/* First label in a card has no top margin */
 .card label:first-of-type {
   margin-top: 0;
 }
