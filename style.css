@@ -6,7 +6,6 @@ body {
   margin: auto;
 }
 
-/* This is the main container for the auth forms, to center them */
 #auth-container {
   max-width: 450px;
   margin: 4rem auto;
@@ -31,29 +30,39 @@ body {
   min-width: 350px;
 }
 
-.toggle-buttons {
+/* NEW styles for the side-by-side input cards */
+.input-row {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  /* Allows stacking on smaller screens */
+  gap: 1.5rem;
+  align-items: stretch;
 }
 
-.toggle-buttons button {
+.input-row .card {
+  flex: 1;
+  min-width: 300px;
+  /* Ensures cards don't get too squished */
+  display: flex;
+  flex-direction: column;
+}
+
+.input-row textarea {
   flex-grow: 1;
-  background-color: #e2e8f0;
-  color: #475569;
-  border: 1px solid #cbd5e1;
+  /* Allows the textarea to expand vertically */
 }
 
-.toggle-buttons button.active {
-  background-color: #3B82F6;
-  color: white;
-  border-color: #3B82F6;
+/* This is a special container for the button below the input cards */
+.card-full-width {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin-top: -1rem;
 }
 
-.chart-container {
-  margin-bottom: 1.5rem;
-}
 
+/* === GENERAL & HEADER STYLES === */
 .header-container {
   display: flex;
   align-items: center;
@@ -86,7 +95,8 @@ h2 {
 textarea,
 button,
 input[type="email"],
-input[type="password"] {
+input[type="password"],
+input[type="number"] {
   width: 100%;
   padding: 0.75rem;
   border-radius: 0.5rem;
@@ -94,14 +104,21 @@ input[type="password"] {
   margin-top: 0.5rem;
   font-size: 1rem;
   box-sizing: border-box;
-  /* Ensures padding doesn't affect width */
 }
 
-form label {
+form label,
+.card label {
   display: block;
   margin-top: 1rem;
   font-weight: 500;
+  color: #4B5563;
 }
+
+/* First label in a card has no top margin */
+.card label:first-of-type {
+  margin-top: 0;
+}
+
 
 button {
   background-color: #3B82F6;
@@ -125,9 +142,7 @@ button:disabled {
   color: #3B82F6;
   border: 1px solid #3B82F6;
   margin-left: auto;
-  /* Pushes the button to the far right */
   width: auto;
-  /* Overrides the default full-width */
   padding: 0.5rem 1rem;
 }
 
@@ -314,7 +329,6 @@ th {
   border-top: 1px solid #E5E7EB;
   margin: 1.5rem 0;
 }
-
 
 @keyframes fadeIn {
   from {

@@ -26,7 +26,6 @@
           <button type="submit">Log In</button>
           <p id="auth-error" class="error-message" style="display: none"></p>
         </form>
-
         <form id="signup-form" style="display: none">
           <h2>Sign Up</h2>
           <label for="signup-email">Email</label>
@@ -35,7 +34,6 @@
           <input type="password" id="signup-password" required minlength="6" />
           <button type="submit">Sign Up</button>
         </form>
-
         <p class="auth-toggle">
           <a href="#" id="show-signup">Don't have an account? Sign Up</a>
           <a href="#" id="show-login" style="display: none"
@@ -77,17 +75,39 @@
         </div>
 
         <div class="main-column">
-          <div class="card">
-            <label for="log">Daily Log Entry:</label>
-            <textarea
-              id="log"
-              rows="5"
-              placeholder="I slept 6 hrs, forgot to eat until 2pm, had no energy to work out..."
-            ></textarea>
-            <div style="display: flex; align-items: center; gap: 0.5rem">
-              <button id="analyzeBtn">Analyze Log</button>
-              <div id="spinner" style="display: none" class="loader"></div>
+          <div class="input-row">
+            <div class="card">
+              <label for="sleep-hours">😴 Hours Slept</label>
+              <input
+                type="number"
+                id="sleep-hours"
+                min="0"
+                max="24"
+                step="0.5"
+                placeholder="e.g., 7.5"
+              />
+              <label for="sleep-quality">⭐ Sleep Quality (1-5)</label>
+              <input
+                type="number"
+                id="sleep-quality"
+                min="1"
+                max="5"
+                placeholder="1=Poor, 5=Excellent"
+              />
             </div>
+            <div class="card">
+              <label for="log">📝 Daily Log Entry</label>
+              <textarea
+                id="log"
+                rows="5"
+                placeholder="I woke up feeling clear-headed and ready to move..."
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="card-full-width">
+            <button id="analyzeBtn">Analyze Log</button>
+            <div id="spinner" style="display: none" class="loader"></div>
           </div>
 
           <div class="card" id="results" style="display: none">
@@ -111,50 +131,13 @@
           <div class="card">
             <h2>🕓 Recent Entries</h2>
             <p class="subtle-text">Click on a row to see full details.</p>
-            <table id="logTable">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Log</th>
-                  <th>Clarity</th>
-                  <th>Immune</th>
-                  <th>Physical</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
+            <table id="logTable"></table>
           </div>
         </div>
       </div>
     </div>
 
-    <div id="logModal" class="modal-overlay" style="display: none">
-      <div class="modal-content">
-        <button id="closeModal" class="modal-close-btn">&times;</button>
-        <h3 id="modalDate"></h3>
-        <h4>Full Log Entry:</h4>
-        <p id="modalLog"></p>
-        <hr />
-        <h4>AI Analysis:</h4>
-        <div class="modal-scores">
-          <div>
-            <span class="label">Mental Clarity:</span>
-            <span id="modalClarity"></span>
-          </div>
-          <div>
-            <span class="label">Immune Risk:</span>
-            <span id="modalImmune"></span>
-          </div>
-          <div>
-            <span class="label">Physical Output:</span>
-            <span id="modalPhysical"></span>
-          </div>
-        </div>
-        <h4>AI Notes:</h4>
-        <p id="modalNotes"></p>
-      </div>
-    </div>
+    <div id="logModal" class="modal-overlay" style="display: none"></div>
 
     <script src="script.js" type="module"></script>
   </body>
