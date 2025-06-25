@@ -1,23 +1,101 @@
-// This version is for advanced debugging.
-export async function handler(event, context) {
-  console.log("--- Advanced Environment Variable Check ---");
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_KEY;
-  const anonKey = process.env.SUPABASE_ANON_KEY;
-  const openaiKey = process.env.OPENAI_API_KEY;
+import { createClient } from '@supabase/supabase-js';
 
-  console.log("SUPABASE_URL Type:", typeof url, "| Length:", url?.length);
-  console.log("SUPABASE_KEY (secret) Type:", typeof key, "| Length:", key?.length);
-  console.log("SUPABASE_ANON_KEY (public) Type:", typeof anonKey, "| Length:", anonKey?.length);
-  console.log("OPENAI_API_KEY Type:", typeof openaiKey, "| Length:", openaiKey?.length);
-  console.log("---------------------------------------");
+function convertScore(num) {
+  const n = parseInt(num, 10);
+  if (isNaN(n)) return 'unknown';
+  if (n >= 8) return 'high';
+  if (n >= 5) return 'medium';
+  return 'low';
+}
 
-  // The function will likely still fail, but this log is what we need.
-  const { createClient } = require('@supabase/supabase-js');
-  const supabaseAdmin = createClient(url, key);
+export async function handler(event) {
+  // 1. Security Check: Verify the user's token
+  const authHeader = event.headers.authorization;
+  if (!authHeader) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
+  }
+  const token = authHeader.replace('Bearer ', '');
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !user) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
+  }
+  
+  // 2. Validate Request Body
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+  }
+  let body;
+  try { body = JSON.parse(event.body); } catch (e) { return { statusCode: 400, body: JSON.stringify({ error: 'Invalid request body' }) }; }
+  
+  const { log: entry, sleep_hours, sleep_quality } = body;
+  if (!entry) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'Log entry is required' }) };
+  }
 
-  return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "This is a deliberate crash after advanced logging." }),
-  };
+  // Use the powerful Admin client for operations that need to bypass RLS
+  const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
+  try {
+    // 3. Build the AI Prompt
+    let promptContent = `Daily Log: "${entry}"`;
+    if (sleep_hours) promptContent += `\nHours Slept: ${sleep_hours}`;
+    if (sleep_quality) promptContent += `\nSleep Quality Rating (1-5): ${sleep_quality}`;
+
+    // 4. Call OpenAI
+    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        response_format: { type: "json_object" },
+        messages: [{
+          role: 'system',
+          content: `You are a health analysis bot. Analyze the user's log and sleep data to return a valid JSON object with four keys: "clarity", "immune", "physical" (each with a numerical score from 1-10), and "note" (a brief 1-2 sentence summary). Your analysis should be more insightful if sleep data is provided.`
+        }, {
+          role: 'user',
+          content: promptContent,
+        }],
+      }),
+    });
+    if (!openaiResponse.ok) {
+        const errorBody = await openaiResponse.json();
+        throw new Error(`OpenAI API Error: ${errorBody.error.message}`);
+    }
+    const aiData = await openaiResponse.json();
+
+    // 5. Parse AI Response
+    let aiResult;
+    try {
+      aiResult = JSON.parse(aiData.choices[0].message.content);
+    } catch (e) { throw new Error("OpenAI returned malformed JSON."); }
+    
+    // 6. Prepare data for DB
+    const newLogEntry = {
+        user_id: user.id,
+        Log: entry,
+        Clarity: convertScore(aiResult.clarity),
+        Immune: convertScore(aiResult.immune),
+        PhysicalReadiness: convertScore(aiResult.physical),
+        Notes: aiResult.note.trim(),
+        sleep_hours: sleep_hours || null,
+        sleep_quality: sleep_quality || null,
+    };
+
+    // 7. Insert data into Supabase
+    const { data: insertedData, error: dbError } = await supabaseAdmin
+        .from('daily_logs')
+        .insert(newLogEntry)
+        .select()
+        .single();
+    if (dbError) throw new Error(`Supabase insert error: ${dbError.message}`);
+
+    return { statusCode: 200, body: JSON.stringify(insertedData) };
+  } catch (error) {
+    console.error("Error in analyze-log function:", error);
+    return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+  }
 }

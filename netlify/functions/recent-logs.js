@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 export async function handler(event, context) {
-  // === SECURITY CHECK ===
+  // Security Check
   const authHeader = event.headers.authorization;
   if (!authHeader) {
     return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header required.' }) };
@@ -9,19 +9,19 @@ export async function handler(event, context) {
   const token = authHeader.replace('Bearer ', '');
   const supabase = createClient(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY,
-    { global: { headers: { Authorization: `Bearer ${token}` } } }
+    process.env.SUPABASE_ANON_KEY
   );
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
   if (authError || !user) {
     return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
   }
 
   try {
-    // We can use the user-scoped client, which automatically respects RLS policies.
+    // This client is now scoped to the logged-in user and will respect RLS policies
     const { data, error } = await supabase
       .from('daily_logs')
       .select('created_at, Log, Clarity, Immune, PhysicalReadiness, Notes, sleep_hours, sleep_quality')
+      .eq('user_id', user.id) // Explicitly query for this user's logs
       .order('created_at', { ascending: false })
       .limit(7);
 
@@ -32,9 +32,6 @@ export async function handler(event, context) {
       body: JSON.stringify(data),
     };
   } catch (e) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: e.message }),
-    };
+    return { statusCode: 500, body: JSON.stringify({ error: e.message }) };
   }
 }
