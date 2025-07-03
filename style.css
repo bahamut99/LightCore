@@ -213,9 +213,10 @@ button:disabled {
 }
 
 table {
-  width: auto;
+  width: 100%;
   border-collapse: collapse;
   margin: 1rem auto;
+  table-layout: fixed;
 }
 
 tbody tr {
@@ -243,12 +244,12 @@ th {
 /* === TABLE COLUMN STYLES (FINAL) === */
 th:nth-child(1),
 td:nth-child(1) {
-  width: 4.5rem;
+  width: 10%;
 }
 
 th:nth-child(2),
 td:nth-child(2) {
-  width: 12rem;
+  width: 25.5%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -261,12 +262,12 @@ td:nth-child(4),
 th:nth-child(5),
 td:nth-child(5) {
   text-align: center;
-  width: 6rem;
+  width: 13%;
 }
 
 th:nth-child(6),
 td:nth-child(6) {
-  width: 12rem;
+  width: 25.5%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
