@@ -304,7 +304,8 @@ function renderLogTable(logs) {
         const tr = document.createElement('tr');
         tr.addEventListener('click', () => openLogModal(logData));
 
-        td(new Date(logData.created_at).toLocaleDateString(), tr);
+        // MODIFIED: This line now formats the date as "month/day"
+        td(new Date(logData.created_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }), tr);
         td(logData.Log, tr);
         td(logData.Clarity, tr, 'positive');
         td(logData.Immune, tr, 'inverse');
