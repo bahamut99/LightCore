@@ -26,6 +26,7 @@
           <button type="submit">Log In</button>
           <p id="auth-error" class="error-message" style="display: none"></p>
         </form>
+
         <form id="signup-form" style="display: none">
           <h2>Sign Up</h2>
           <label for="signup-email">Email</label>
@@ -34,6 +35,7 @@
           <input type="password" id="signup-password" required minlength="6" />
           <button type="submit">Sign Up</button>
         </form>
+
         <p class="auth-toggle">
           <a href="#" id="show-signup">Don't have an account? Sign Up</a>
           <a href="#" id="show-login" style="display: none"
@@ -87,6 +89,7 @@
               <div id="spinner" style="display: none" class="loader"></div>
             </div>
           </div>
+
           <div class="card" id="results" style="display: none">
             <div class="score">
               <span class="label">Mental Clarity:</span>
@@ -148,6 +151,12 @@
             <p id="ai-insight-text" class="subtle-text">
               Analyzing your data for new patterns...
             </p>
+          </div>
+          <div class="card">
+            <h2>📖 Insight History</h2>
+            <div id="insight-history-container">
+              <p class="subtle-text">Loading history...</p>
+            </div>
           </div>
         </div>
       </div>

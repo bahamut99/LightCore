@@ -17,27 +17,22 @@ body {
   flex-wrap: wrap;
   gap: 2rem;
   align-items: flex-start;
-  /* Aligns columns to the top */
   max-width: 1800px;
-  /* Increased max-width for 3 columns */
   margin: auto;
 }
 
 .left-column {
   flex: 1.5;
-  /* Skinny column */
   min-width: 350px;
 }
 
 .center-column {
   flex: 3;
-  /* Main, wide column */
   min-width: 400px;
 }
 
 .right-column {
   flex: 1;
-  /* Skinny column */
   min-width: 300px;
 }
 
@@ -251,25 +246,20 @@ th {
   }
 }
 
-/* New, more descriptive health score colors */
 .score-good {
   color: #16a34a;
   font-weight: bold;
 }
 
-/* Green */
 .score-neutral {
   color: #ca8a04;
   font-weight: bold;
 }
 
-/* Yellow */
 .score-bad {
   color: #dc2626;
   font-weight: bold;
 }
-
-/* Red */
 
 .modal-overlay {
   position: fixed;
@@ -347,4 +337,32 @@ th {
     opacity: 1;
     transform: scale(1);
   }
+}
+
+/* === NEW INSIGHT HISTORY STYLES === */
+.insight-item {
+  border-bottom: 1px solid #E5E7EB;
+  padding: 0.75rem 0;
+}
+
+.insight-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.insight-item:first-child {
+  padding-top: 0;
+}
+
+.insight-item summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.insight-item p {
+  margin-top: 0.75rem;
+  padding-left: 1rem;
+  color: #4B5563;
+  line-height: 1.5;
+  border-left: 2px solid #D1D5DB;
 }
