@@ -400,7 +400,7 @@ function resetUI() {
 }
 
 /**
- * Main function to render all three charts with new "muted neon" colors.
+ * Main function to render all three charts.
  */
 function renderAllCharts(data) {
     const commonOptions = {
