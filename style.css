@@ -1,7 +1,13 @@
+/* Import the new 'Inter' typeface from Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+
+/* === DARK MODE PALETTE & BASE STYLES === */
 body {
-  font-family: 'Segoe UI', sans-serif;
-  background: #E5E7EB;
-  color: #2c3e50;
+  /* A smoky graphite background */
+  background: #111827;
+  /* A light gray for default text */
+  color: #D1D5DB;
+  font-family: 'Inter', sans-serif;
   padding: 1rem;
   margin: auto;
 }
@@ -21,32 +27,109 @@ body {
   margin: auto;
 }
 
+.left-column,
+.center-column,
+.right-column {
+  min-width: 320px;
+  /* Base width for all columns */
+}
+
 .left-column {
-  flex: 1.5;
-  min-width: 350px;
+  flex: 2;
 }
 
 .center-column {
   flex: 3;
-  min-width: 400px;
 }
 
 .right-column {
-  flex: 1;
-  min-width: 300px;
+  flex: 1.5;
 }
 
-.toggle-buttons {
-  display: flex;
-  gap: 0.5rem;
+
+/* === CARD STYLES === */
+.card {
+  /* A darker card base, a step up from the body background */
+  background: #1F2937;
+  /* A subtle border to give the cards an edge */
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  /* A soft glow effect */
+  box-shadow: 0 0 25px rgba(0, 0, 0, 0.2), 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Glassmorphism style for the AI Insight card */
+.card-glass {
+  background: rgba(31, 41, 55, 0.5);
+  /* Semi-transparent background */
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  /* For Safari */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* === TYPOGRAPHY & TEXT STYLES === */
+h1 {
+  color: #F9FAFB;
+  /* Brighter white for main headers */
+  text-align: left;
+  font-size: 1.75rem;
+  margin: 0;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9CA3AF;
+  /* Muted gray for sub-headers */
   margin-bottom: 1rem;
 }
 
+.label {
+  font-weight: 500;
+  color: #D1D5DB;
+}
+
+/* === NEW PILL STYLES FOR SCORES === */
+.score-good,
+.score-neutral,
+.score-bad {
+  padding: 2px 8px;
+  border-radius: 99px;
+  /* Pill shape */
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.score-good {
+  background-color: rgba(74, 222, 128, 0.1);
+  /* Muted green background */
+  color: #4ade80;
+  /* Brighter green text */
+}
+
+.score-neutral {
+  background-color: rgba(250, 204, 21, 0.1);
+  color: #facc15;
+}
+
+.score-bad {
+  background-color: rgba(248, 113, 113, 0.1);
+  color: #f87171;
+}
+
+/* ... other styles remain largely the same, but with color adjustments ... */
+/* Full list provided for copy-pasting */
+
 .toggle-buttons button {
-  flex-grow: 1;
-  background-color: #e2e8f0;
-  color: #475569;
-  border: 1px solid #cbd5e1;
+  background-color: #374151;
+  color: #D1D5DB;
+  border: 1px solid #4B5563;
 }
 
 .toggle-buttons button.active {
@@ -55,50 +138,17 @@ body {
   border-color: #3B82F6;
 }
 
-.chart-container {
-  margin-bottom: 1.5rem;
-}
-
-
-/* === GENERAL & HEADER STYLES === */
-.header-container {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 2rem;
-}
-
-h1 {
-  color: #1E3A8A;
-  text-align: left;
-  font-size: 1.75rem;
-  margin: 0;
-}
-
-h2 {
-  font-size: 1.25rem;
-  margin-bottom: 1rem;
-}
-
-.card {
-  background: #ffffff;
-  border: 1px solid #E5E7EB;
-  border-radius: 1rem;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
-}
-
-/* === FORM & BUTTON STYLES === */
 textarea,
 button,
 input[type="email"],
 input[type="password"],
 input[type="number"] {
+  background: #374151;
+  color: #F9FAFB;
+  border: 1px solid #4B5563;
   width: 100%;
   padding: 0.75rem;
   border-radius: 0.5rem;
-  border: 1px solid #D1D5DB;
   margin-top: 0.5rem;
   font-size: 1rem;
   box-sizing: border-box;
@@ -109,13 +159,12 @@ form label,
   display: block;
   margin-top: 1rem;
   font-weight: 500;
-  color: #4B5563;
+  color: #9CA3AF;
 }
 
 .card label:first-of-type {
   margin-top: 0;
 }
-
 
 button {
   background-color: #3B82F6;
@@ -130,26 +179,22 @@ button:hover {
 }
 
 button:disabled {
-  background-color: #93C5FD;
+  background-color: #1E40AF;
+  color: #9CA3AF;
   cursor: not-allowed;
 }
 
 .logout-btn {
-  background-color: #fff;
-  color: #3B82F6;
-  border: 1px solid #3B82F6;
+  background-color: #374151;
+  color: #D1D5DB;
+  border: 1px solid #4B5563;
   margin-left: auto;
   width: auto;
   padding: 0.5rem 1rem;
 }
 
 .logout-btn:hover {
-  background-color: #EFF6FF;
-}
-
-.auth-toggle {
-  text-align: center;
-  margin-top: 1.5rem;
+  background-color: #4B5563;
 }
 
 .auth-toggle a {
@@ -163,25 +208,20 @@ button:disabled {
 }
 
 .error-message {
-  color: #dc2626;
+  color: #f87171;
   margin-top: 1rem;
   text-align: center;
 }
 
-/* === SCORE & TABLE STYLES === */
 .score {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 0.5rem 0;
 }
 
-.label {
-  font-weight: bold;
-  color: #374151;
-}
-
 .notes-section {
-  border-top: 1px solid #E5E7EB;
+  border-top: 1px solid #374151;
   margin-top: 1rem;
   padding-top: 1rem;
 }
@@ -189,7 +229,7 @@ button:disabled {
 .notes-section p {
   margin: 0.5rem 0 0 0;
   line-height: 1.5;
-  color: #4B5563;
+  color: #D1D5DB;
 }
 
 table {
@@ -203,14 +243,14 @@ tbody tr {
 }
 
 tbody tr:hover {
-  background: #f0f9ff;
+  background: #374151;
 }
 
 th,
 td {
   text-align: left;
   padding: 0.75rem;
-  border-bottom: 1px solid #E5E7EB;
+  border-bottom: 1px solid #374151;
   max-width: 200px;
   white-space: nowrap;
   overflow: hidden;
@@ -218,8 +258,8 @@ td {
 }
 
 th {
-  background-color: #EFF6FF;
-  color: #1E3A8A;
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #60A5FA;
 }
 
 .subtle-text {
@@ -227,17 +267,14 @@ th {
   color: #6B7280;
   text-align: center;
   margin-top: 0;
-  /* Adjusted for use in multiple places */
   margin-bottom: 0;
-  /* Adjusted for use in multiple places */
 }
 
-/* === UTILITY & MODAL STYLES === */
 .loader {
   width: 18px;
   height: 18px;
-  border: 3px solid #93C5FD;
-  border-top: 3px solid #3B82F6;
+  border: 3px solid #1E40AF;
+  border-top: 3px solid #60A5FA;
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }
@@ -248,37 +285,12 @@ th {
   }
 }
 
-.score-good {
-  color: #16a34a;
-  font-weight: bold;
-}
-
-.score-neutral {
-  color: #ca8a04;
-  font-weight: bold;
-}
-
-.score-bad {
-  color: #dc2626;
-  font-weight: bold;
-}
-
 .modal-overlay {
-  position: fixed;
-  z-index: 100;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  background-color: rgba(0, 0, 0, 0.7);
 }
 
 .modal-content {
-  background-color: #fefefe;
+  background-color: #1F2937;
   padding: 2rem;
   border-radius: 1rem;
   width: 90%;
@@ -286,10 +298,11 @@ th {
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
   position: relative;
   animation: fadeIn 0.3s;
+  border: 1px solid #374151;
 }
 
 .modal-close-btn {
-  color: #aaa;
+  color: #9CA3AF;
   position: absolute;
   top: 10px;
   right: 20px;
@@ -302,7 +315,7 @@ th {
 
 .modal-close-btn:hover,
 .modal-close-btn:focus {
-  color: black;
+  color: white;
   text-decoration: none;
   cursor: pointer;
 }
@@ -316,6 +329,7 @@ th {
 
 .modal-content h4 {
   margin-top: 1.5rem;
+  color: #9CA3AF;
 }
 
 .modal-content p {
@@ -325,7 +339,7 @@ th {
 
 .modal-content hr {
   border: none;
-  border-top: 1px solid #E5E7EB;
+  border-top: 1px solid #374151;
   margin: 1.5rem 0;
 }
 
@@ -341,9 +355,8 @@ th {
   }
 }
 
-/* === INSIGHT HISTORY STYLES === */
 .insight-item {
-  border-bottom: 1px solid #E5E7EB;
+  border-bottom: 1px solid #374151;
   padding: 0.75rem 0;
 }
 
@@ -364,17 +377,13 @@ th {
 .insight-item p {
   margin-top: 0.75rem;
   padding-left: 1rem;
-  color: #4B5563;
+  color: #9CA3AF;
   line-height: 1.5;
-  border-left: 2px solid #D1D5DB;
+  border-left: 2px solid #4B5563;
 }
 
-/* === NEW SCROLLABLE CONTAINER STYLE === */
 #insight-history-container {
   max-height: 250px;
-  /* Sets a maximum height, enough for about 5-6 entries */
   overflow-y: auto;
-  /* Adds a vertical scrollbar only when the content is too long */
   padding-right: 10px;
-  /* Adds a little space so the scrollbar doesn't hug the text */
 }
