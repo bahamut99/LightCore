@@ -9,46 +9,29 @@ function convertScore(num) {
 }
 
 export async function handler(event) {
-  // 1. Security Check: Verify the user's token
   const authHeader = event.headers.authorization;
-  if (!authHeader) {
-    return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
-  }
+  if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization required.' }) };
   const token = authHeader.replace('Bearer ', '');
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !user) {
-    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
-  }
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${token}` } } });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized.' }) };
   
-  // 2. Validate Request Body
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
-  }
+  if (event.httpMethod !== 'POST') return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   let body;
   try { body = JSON.parse(event.body); } catch (e) { return { statusCode: 400, body: JSON.stringify({ error: 'Invalid request body' }) }; }
-  
   const { log: entry, sleep_hours, sleep_quality } = body;
-  if (!entry) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Log entry is required' }) };
-  }
+  if (!entry) return { statusCode: 400, body: JSON.stringify({ error: 'Log entry is required' }) };
 
-  // Use the powerful Admin client for operations that need to bypass RLS
   const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
   try {
-    // 3. Build the AI Prompt
     let promptContent = `Daily Log: "${entry}"`;
     if (sleep_hours) promptContent += `\nHours Slept: ${sleep_hours}`;
     if (sleep_quality) promptContent += `\nSleep Quality Rating (1-5): ${sleep_quality}`;
 
-    // 4. Call OpenAI
     const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify({
         model: 'gpt-3.5-turbo',
         response_format: { type: "json_object" },
@@ -66,32 +49,22 @@ export async function handler(event) {
         throw new Error(`OpenAI API Error: ${errorBody.error.message}`);
     }
     const aiData = await openaiResponse.json();
-
-    // 5. Parse AI Response
     let aiResult;
     try {
       aiResult = JSON.parse(aiData.choices[0].message.content);
     } catch (e) { throw new Error("OpenAI returned malformed JSON."); }
     
-    // 6. Prepare data for DB
     const newLogEntry = {
-        user_id: user.id,
-        Log: entry,
-        Clarity: convertScore(aiResult.clarity),
-        Immune: convertScore(aiResult.immune),
-        PhysicalReadiness: convertScore(aiResult.physical),
-        Notes: aiResult.note.trim(),
-        sleep_hours: sleep_hours || null,
-        sleep_quality: sleep_quality || null,
+        user_id: user.id, Log: entry, Clarity: convertScore(aiResult.clarity), Immune: convertScore(aiResult.immune),
+        PhysicalReadiness: convertScore(aiResult.physical), Notes: aiResult.note.trim(),
+        sleep_hours: sleep_hours || null, sleep_quality: sleep_quality || null,
     };
 
-    // 7. Insert data into Supabase
-    const { data: insertedData, error: dbError } = await supabaseAdmin
-        .from('daily_logs')
-        .insert(newLogEntry)
-        .select()
-        .single();
+    const { data: insertedData, error: dbError } = await supabaseAdmin.from('daily_logs').insert(newLogEntry).select().single();
     if (dbError) throw new Error(`Supabase insert error: ${dbError.message}`);
+
+    const { error: insertError } = await supabaseAdmin.from('insights').insert({ user_id: user.id, insight_text: aiResult.note.trim() });
+    if (insertError) console.error("Failed to save insight to database:", insertError);
 
     return { statusCode: 200, body: JSON.stringify(insertedData) };
   } catch (error) {
