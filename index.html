@@ -26,7 +26,6 @@
           <button type="submit">Log In</button>
           <p id="auth-error" class="error-message" style="display: none"></p>
         </form>
-
         <form id="signup-form" style="display: none">
           <h2>Sign Up</h2>
           <label for="signup-email">Email</label>
@@ -35,7 +34,6 @@
           <input type="password" id="signup-password" required minlength="6" />
           <button type="submit">Sign Up</button>
         </form>
-
         <p class="auth-toggle">
           <a href="#" id="show-signup">Don't have an account? Sign Up</a>
           <a href="#" id="show-login" style="display: none"
@@ -110,19 +108,7 @@
           <div class="card">
             <h2>🕓 Recent Entries</h2>
             <p class="subtle-text">Click on a row to see full details.</p>
-            <table id="logTable">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Log</th>
-                  <th>Clarity</th>
-                  <th>Immune</th>
-                  <th>Physical</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
+            <table id="logTable"></table>
           </div>
         </div>
 
@@ -145,6 +131,12 @@
               max="5"
               placeholder="1=Poor, 5=Excellent"
             />
+          </div>
+          <div class="card">
+            <h2>💡 AI Insight</h2>
+            <p id="ai-insight-text" class="subtle-text">
+              Analyzing your data for new patterns...
+            </p>
           </div>
         </div>
       </div>

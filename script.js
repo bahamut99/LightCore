@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
-// === PASTE YOUR SUPABASE URL AND PUBLIC ANON KEY HERE ===
+// === IMPORTANT: PASTE YOUR SUPABASE URL AND PUBLIC ANON KEY HERE ===
 const SUPABASE_URL = 'https://bcoottemxdthoopmaict.supabase.co'; 
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjb290dGVteGR0aG9vcG1haWN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxOTEzMjksImV4cCI6MjA2NTc2NzMyOX0.CVYIdU0AHBDd00IlF5jh0HP264txAGh28LBJxDAA9Ng';
 // =========================================================
@@ -10,6 +10,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // Global object to hold our chart instances.
 let charts = {};
 
+// This is the main entry point for the application, ensuring all HTML is loaded first.
 document.addEventListener('DOMContentLoaded', () => {
     // === UI ELEMENT REFERENCES ===
     const authContainer = document.getElementById('auth-container');
@@ -66,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
             appContainer.style.display = 'block';
             loadRecentLogs();
             fetchAndRenderCharts(7);
+            fetchAndDisplayInsight();
         } else {
             appContainer.style.display = 'none';
             authContainer.style.display = 'block';
@@ -166,6 +168,7 @@ async function submitLog() {
         displayResults(newLog); 
         await loadRecentLogs();
         await fetchAndRenderCharts(7);
+        await fetchAndDisplayInsight();
         document.querySelector('#btn7day').classList.add('active');
         document.querySelector('#btn30day').classList.remove('active');
 
@@ -216,6 +219,40 @@ async function fetchAndRenderCharts(range) {
 }
 
 /**
+ * Fetches and displays the AI insight.
+ */
+async function fetchAndDisplayInsight() {
+    const insightTextElement = document.getElementById('ai-insight-text');
+    insightTextElement.textContent = 'Analyzing your data for new patterns...';
+    insightTextElement.classList.add('subtle-text');
+
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        
+        const response = await fetch('/.netlify/functions/get-insight', {
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+
+        if (!response.ok) throw new Error("Failed to fetch insight");
+        
+        const data = await response.json();
+
+        if (data.insight) {
+            insightTextElement.textContent = data.insight;
+            insightTextElement.classList.remove('subtle-text');
+        } else {
+            insightTextElement.textContent = 'Not enough data to generate an insight yet.';
+        }
+
+    } catch (e) {
+        console.error("Failed to load insight:", e.message);
+        insightTextElement.textContent = 'Could not load insight at this time.';
+    }
+}
+
+
+/**
  * Populates the results card with the data from the newly created log.
  */
 function displayResults(result) {
@@ -248,7 +285,7 @@ function renderLogTable(logs) {
         td(new Date(logData.created_at).toLocaleDateString(), tr);
         td(logData.Log, tr);
         td(logData.Clarity, tr, 'positive');
-        td(logData.Immune, tr, 'inverse'); // Immune is an "inverse" score
+        td(logData.Immune, tr, 'inverse');
         td(logData.PhysicalReadiness, tr, 'positive');
         td(logData.Notes, tr);
         
@@ -271,9 +308,9 @@ function td(content, parent, scoreType = null) {
             if (value === 'medium') cell.classList.add('score-neutral');
             if (value === 'low') cell.classList.add('score-bad');
         } else if (scoreType === 'inverse') {
-            if (value === 'high') cell.classList.add('score-bad'); // High risk is bad (red)
+            if (value === 'high') cell.classList.add('score-bad');
             if (value === 'medium') cell.classList.add('score-neutral');
-            if (value === 'low') cell.classList.add('score-good');  // Low risk is good (green)
+            if (value === 'low') cell.classList.add('score-good');
         }
     }
     parent.appendChild(cell);
@@ -368,12 +405,12 @@ function renderChart(canvasId, label, labels, data, color, options) {
         },
         options: {
             ...options,
-            plugins: { 
+            plugins: {
                 ...options.plugins,
-                title: { 
+                title: {
                     ...options.plugins.title,
-                    text: label 
-                } 
+                    text: label
+                }
             }
         }
     });
