@@ -241,15 +241,15 @@ th {
   color: #60A5FA;
 }
 
-/* === TABLE COLUMN STYLES (FINAL) === */
+/* === TABLE COLUMN STYLES (MODIFIED) === */
 th:nth-child(1),
 td:nth-child(1) {
-  width: 10%;
+  width: 8%;
 }
 
 th:nth-child(2),
 td:nth-child(2) {
-  width: 25.5%;
+  width: 26.5%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -267,13 +267,13 @@ td:nth-child(5) {
 
 th:nth-child(6),
 td:nth-child(6) {
-  width: 25.5%;
+  width: 26.5%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* =================================== */
+/* ===================================== */
 
 .subtle-text {
   font-size: 0.8rem;
