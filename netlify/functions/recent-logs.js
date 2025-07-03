@@ -18,10 +18,13 @@ export async function handler(event, context) {
   }
 
   try {
-    // Now this client will correctly respect the RLS policies
+    // This client will now correctly respect the RLS policies
     const { data, error } = await supabase
       .from('daily_logs')
       .select('created_at, Log, Clarity, Immune, PhysicalReadiness, Notes, sleep_hours, sleep_quality')
+      // === THIS LINE IS THE FIX ===
+      // We must explicitly filter for the logged-in user's ID.
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(7);
 

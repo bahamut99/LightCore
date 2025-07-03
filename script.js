@@ -10,7 +10,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let charts = {};
 
 document.addEventListener('DOMContentLoaded', () => {
-    // === UI ELEMENT REFERENCES ===
     const authContainer = document.getElementById('auth-container');
     const appContainer = document.getElementById('app-container');
     const loginForm = document.getElementById('login-form');
@@ -26,7 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const btn7day = document.getElementById('btn7day');
     const btn30day = document.getElementById('btn30day');
 
-    // === AUTHENTICATION EVENT LISTENERS ===
     signupForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         const email = document.getElementById('signup-email').value;
@@ -58,7 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
         await supabase.auth.signOut();
     });
 
-    // === SESSION STATE LISTENER ===
     supabase.auth.onAuthStateChange((event, session) => {
         if (session) {
             authContainer.style.display = 'none';
@@ -73,7 +70,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // === UI TOGGLING & OTHER EVENT LISTENERS ===
     showSignupLink.addEventListener('click', (e) => {
         e.preventDefault();
         loginForm.style.display = 'none';
@@ -122,9 +118,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-/**
- * Handles the log submission process.
- */
 async function submitLog() {
     const entryText = document.getElementById('log').value.trim();
     const sleepHours = document.getElementById('sleep-hours').value;
@@ -180,9 +173,6 @@ async function submitLog() {
     }
 }
 
-/**
- * Fetches the last 7 logs for the table display.
- */
 async function loadRecentLogs() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -200,9 +190,6 @@ async function loadRecentLogs() {
     }
 }
 
-/**
- * Fetches data from our chart endpoint and triggers rendering.
- */
 async function fetchAndRenderCharts(range) {
     try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -218,9 +205,6 @@ async function fetchAndRenderCharts(range) {
     }
 }
 
-/**
- * Fetches and displays the AI insight.
- */
 async function fetchAndDisplayInsight() {
     const insightTextElement = document.getElementById('ai-insight-text');
     insightTextElement.textContent = 'Analyzing your data for new patterns...';
@@ -251,9 +235,6 @@ async function fetchAndDisplayInsight() {
     }
 }
 
-/**
- * Fetches and displays the AI insight history.
- */
 async function fetchAndRenderInsightHistory() {
     const container = document.getElementById('insight-history-container');
     container.innerHTML = '<p class="subtle-text">Loading history...</p>';
@@ -299,9 +280,6 @@ async function fetchAndRenderInsightHistory() {
 }
 
 
-/**
- * Populates the results card with the data from the newly created log.
- */
 function displayResults(result) {
     document.getElementById('clarity').innerText = result.Clarity || 'N/A';
     document.getElementById('immune').innerText = result.Immune || 'N/A';
@@ -313,9 +291,6 @@ function displayResults(result) {
     document.getElementById('sleep-quality').value = '';
 }
 
-/**
- * Renders the rows in the recent logs table.
- */
 function renderLogTable(logs) {
     const tbody = document.querySelector('#logTable tbody');
     tbody.innerHTML = '';
@@ -340,9 +315,6 @@ function renderLogTable(logs) {
     });
 }
 
-/**
- * Helper function to create and append a <td> element
- */
 function td(content, parent, scoreType = null) {
     const cell = document.createElement('td');
     cell.textContent = content;
@@ -363,9 +335,6 @@ function td(content, parent, scoreType = null) {
     parent.appendChild(cell);
 }
 
-/**
- * Populates and shows the log detail modal.
- */
 function openLogModal(logData) {
     document.getElementById('modalDate').textContent = new Date(logData.created_at).toLocaleString();
     document.getElementById('modalLog').textContent = logData.Log;
@@ -381,16 +350,10 @@ function openLogModal(logData) {
     document.getElementById('logModal').style.display = 'flex';
 }
 
-/**
- * Hides the log detail modal.
- */
 function closeLogModal() {
     document.getElementById('logModal').style.display = 'none';
 }
 
-/**
- * Resets the analyze button and spinner to their default state.
- */
 function resetUI() {
     const button = document.getElementById('analyzeBtn');
     const spinner = document.getElementById('spinner');
@@ -399,9 +362,6 @@ function resetUI() {
     spinner.style.display = 'none';
 }
 
-/**
- * Main function to render all three charts.
- */
 function renderAllCharts(data) {
     const commonOptions = {
         plugins: { 
@@ -439,9 +399,6 @@ function renderAllCharts(data) {
     renderChart('physicalChart', 'Physical Output', data.labels, data.physicalData, physicalColor, commonOptions);
 }
 
-/**
- * Renders a single chart instance.
- */
 function renderChart(canvasId, label, labels, data, hexColor, options) {
     if (charts[canvasId]) {
         charts[canvasId].destroy();
