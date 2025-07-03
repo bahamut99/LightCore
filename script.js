@@ -183,7 +183,7 @@ async function submitLog() {
 async function loadRecentLogs() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return; // Don't run if not logged in
+        if (!session) return; 
         const response = await fetch('/.netlify/functions/recent-logs', {
             headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
@@ -203,7 +203,7 @@ async function loadRecentLogs() {
 async function fetchAndRenderCharts(range) {
     try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return; // Don't run if not logged in
+        if (!session) return;
         const response = await fetch(`/.netlify/functions/get-chart-data?range=${range}`, {
             headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
@@ -247,9 +247,9 @@ function renderLogTable(logs) {
 
         td(new Date(logData.created_at).toLocaleDateString(), tr);
         td(logData.Log, tr);
-        td(logData.Clarity, tr, true);
-        td(logData.Immune, tr, true);
-        td(logData.PhysicalReadiness, tr, true);
+        td(logData.Clarity, tr, 'positive');
+        td(logData.Immune, tr, 'inverse'); // Immune is an "inverse" score
+        td(logData.PhysicalReadiness, tr, 'positive');
         td(logData.Notes, tr);
         
         tbody.appendChild(tr);
@@ -259,13 +259,21 @@ function renderLogTable(logs) {
 /**
  * Helper function to create and append a <td> element
  */
-function td(content, parent, isScore = false) {
+function td(content, parent, scoreType = null) {
     const cell = document.createElement('td');
     cell.textContent = content;
-    if (isScore) {
+    
+    if (scoreType) {
         const value = String(content || '').toLowerCase();
-        if (["high", "medium", "low"].includes(value)) {
-            cell.classList.add(value);
+        
+        if (scoreType === 'positive') {
+            if (value === 'high') cell.classList.add('score-good');
+            if (value === 'medium') cell.classList.add('score-neutral');
+            if (value === 'low') cell.classList.add('score-bad');
+        } else if (scoreType === 'inverse') {
+            if (value === 'high') cell.classList.add('score-bad'); // High risk is bad (red)
+            if (value === 'medium') cell.classList.add('score-neutral');
+            if (value === 'low') cell.classList.add('score-good');  // Low risk is good (green)
         }
     }
     parent.appendChild(cell);
@@ -278,11 +286,9 @@ function openLogModal(logData) {
     document.getElementById('modalDate').textContent = new Date(logData.created_at).toLocaleString();
     document.getElementById('modalLog').textContent = logData.Log;
     
-    // Populate sleep data, handling null values
     document.getElementById('modalSleepHours').textContent = logData.sleep_hours || 'N/A';
     document.getElementById('modalSleepQuality').textContent = logData.sleep_quality ? `${logData.sleep_quality} / 5` : 'N/A';
     
-    // Populate analysis data
     document.getElementById('modalClarity').textContent = logData.Clarity;
     document.getElementById('modalImmune').textContent = logData.Immune;
     document.getElementById('modalPhysical').textContent = logData.PhysicalReadiness;

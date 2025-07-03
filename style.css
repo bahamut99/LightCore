@@ -11,7 +11,7 @@ body {
   margin: 4rem auto;
 }
 
-/* === NEW 3-COLUMN LAYOUT STYLES === */
+/* === LAYOUT STYLES === */
 .main-container {
   display: flex;
   flex-wrap: wrap;
@@ -41,16 +41,6 @@ body {
   min-width: 300px;
 }
 
-.card-full-width {
-  background: none;
-  border: none;
-  box-shadow: none;
-  padding: 0;
-}
-
-/* === END NEW LAYOUT STYLES === */
-
-
 .toggle-buttons {
   display: flex;
   gap: 0.5rem;
@@ -74,6 +64,8 @@ body {
   margin-bottom: 1.5rem;
 }
 
+
+/* === GENERAL & HEADER STYLES === */
 .header-container {
   display: flex;
   align-items: center;
@@ -102,6 +94,7 @@ h2 {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
 }
 
+/* === FORM & BUTTON STYLES === */
 textarea,
 button,
 input[type="email"],
@@ -258,20 +251,25 @@ th {
   }
 }
 
-.high {
+/* New, more descriptive health score colors */
+.score-good {
   color: #16a34a;
   font-weight: bold;
 }
 
-.medium {
+/* Green */
+.score-neutral {
   color: #ca8a04;
   font-weight: bold;
 }
 
-.low {
+/* Yellow */
+.score-bad {
   color: #dc2626;
   font-weight: bold;
 }
+
+/* Red */
 
 .modal-overlay {
   position: fixed;
