@@ -3,8 +3,6 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 // === PASTE YOUR SUPABASE URL AND PUBLIC ANON KEY HERE ===
 const SUPABASE_URL = 'https://bcoottemxdthoopmaict.supabase.co'; 
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjb290dGVteGR0aG9vcG1haWN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxOTEzMjksImV4cCI6MjA2NTc2NzMyOX0.CVYIdU0AHBDd00IlF5jh0HP264txAGh28LBJxDAA9Ng';
-// =========================================================
-
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let charts = {};
@@ -304,7 +302,6 @@ function renderLogTable(logs) {
         const tr = document.createElement('tr');
         tr.addEventListener('click', () => openLogModal(logData));
 
-        // MODIFIED: This line now formats the date as "month/day"
         td(new Date(logData.created_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }), tr);
         td(logData.Log, tr);
         td(logData.Clarity, tr, 'positive');
@@ -316,23 +313,32 @@ function renderLogTable(logs) {
     });
 }
 
+// === MODIFIED: This function is now more robust and correctly builds the score bubbles ===
 function td(content, parent, scoreType = null) {
     const cell = document.createElement('td');
-    cell.textContent = content;
-    
+
     if (scoreType) {
+        // For score cells, create a separate <span> for the bubble styling.
+        const bubble = document.createElement('span');
+        bubble.textContent = content;
         const value = String(content || '').toLowerCase();
-        
+
+        // Apply the appropriate class to the bubble, not the cell.
         if (scoreType === 'positive') {
-            if (value === 'high') cell.classList.add('score-good');
-            if (value === 'medium') cell.classList.add('score-neutral');
-            if (value === 'low') cell.classList.add('score-bad');
+            if (value === 'high') bubble.classList.add('score-good');
+            else if (value === 'medium') bubble.classList.add('score-neutral');
+            else if (value === 'low') bubble.classList.add('score-bad');
         } else if (scoreType === 'inverse') {
-            if (value === 'high') cell.classList.add('score-bad');
-            if (value === 'medium') cell.classList.add('score-neutral');
-            if (value === 'low') cell.classList.add('score-good');
+            if (value === 'high') bubble.classList.add('score-bad');
+            else if (value === 'medium') bubble.classList.add('score-neutral');
+            else if (value === 'low') bubble.classList.add('score-good');
         }
+        cell.appendChild(bubble); // Add the styled bubble to the cell.
+    } else {
+        // For regular text cells, just add the text content.
+        cell.textContent = content;
     }
+    
     parent.appendChild(cell);
 }
 
