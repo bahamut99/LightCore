@@ -1,9 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
-const scoreMap = { 'high': 3, 'medium': 2, 'low': 1 };
+// This map is for scores where "high" is good.
+const positiveScoreMap = { 'high': 3, 'medium': 2, 'low': 1 };
+
+// === NEW: This is an inverted map just for Immune Risk ===
+// Now, a "low" risk will show up as a high value on the chart.
+const inverseScoreMap = { 'high': 1, 'medium': 2, 'low': 3 };
 
 export async function handler(event) {
-  // Security Check
+  // Security Check (no changes here)
   const authHeader = event.headers.authorization;
   if (!authHeader) {
     return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header required.' }) };
@@ -26,19 +31,29 @@ export async function handler(event) {
     const { data, error } = await supabase
       .from('daily_logs')
       .select('created_at, Clarity, Immune, PhysicalReadiness, sleep_hours, sleep_quality')
-      .eq('user_id', user.id) // Explicitly query for this user's logs
+      .eq('user_id', user.id)
       .gte('created_at', startDate.toISOString())
       .order('created_at', { ascending: true });
 
     if (error) { throw error; }
 
-    const chartData = { labels: [], clarityData: [], immuneData: [], physicalData: [] };
+    const chartData = {
+      labels: [],
+      clarityData: [],
+      immuneData: [],
+      physicalData: []
+    };
+
     data.forEach(row => {
       const dateLabel = new Date(row.created_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
       chartData.labels.push(dateLabel);
-      chartData.clarityData.push(scoreMap[row.Clarity?.toLowerCase()] || 0);
-      chartData.immuneData.push(scoreMap[row.Immune?.toLowerCase()] || 0);
-      chartData.physicalData.push(scoreMap[row.PhysicalReadiness?.toLowerCase()] || 0);
+
+      // Clarity and Physical still use the positive map
+      chartData.clarityData.push(positiveScoreMap[row.Clarity?.toLowerCase()] || 0);
+      chartData.physicalData.push(positiveScoreMap[row.PhysicalReadiness?.toLowerCase()] || 0);
+      
+      // === THE FIX IS HERE: Immune Risk now uses the new inverse map ===
+      chartData.immuneData.push(inverseScoreMap[row.Immune?.toLowerCase()] || 0);
     });
 
     return {
