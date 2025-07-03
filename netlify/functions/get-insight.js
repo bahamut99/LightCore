@@ -7,6 +7,7 @@ export async function handler(event) {
     return { statusCode: 401, body: JSON.stringify({ error: 'Authorization required.' }) };
   }
   const token = authHeader.replace('Bearer ', '');
+  // We use the anon key here because we are passing the user's token for verification.
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
   if (authError || !user) {
@@ -15,7 +16,7 @@ export async function handler(event) {
 
   try {
     // 2. Fetch User's Last 30 Days of Data
-    // The client is scoped to the user and will respect RLS policies.
+    // This client is now scoped to the logged-in user and will respect RLS policies.
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -29,7 +30,6 @@ export async function handler(event) {
     if (dbError) throw new Error(`Supabase query error: ${dbError.message}`);
 
     if (!logs || logs.length < 3) {
-      // Not enough data to find a meaningful insight yet.
       return { statusCode: 200, body: JSON.stringify({ insight: "Keep logging your entries for a few more days, and I'll be able to show you some interesting patterns!" }) };
     }
 
@@ -70,7 +70,22 @@ export async function handler(event) {
     const aiData = await openaiResponse.json();
     const insight = aiData.choices[0].message.content;
 
-    // 5. Return the Insight
+    // === NEW: 5. Save the new insight to the database ===
+    // We create a new admin client to bypass RLS for this system-level write.
+    const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+    const { error: insertError } = await supabaseAdmin
+      .from('insights')
+      .insert({
+        user_id: user.id,
+        insight_text: insight
+      });
+
+    if (insertError) {
+      // Log the error but don't stop the user from seeing the insight.
+      console.error("Failed to save insight to database:", insertError);
+    }
+
+    // 6. Return the Insight to the user
     return {
       statusCode: 200,
       body: JSON.stringify({ insight: insight }),
