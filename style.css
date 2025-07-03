@@ -208,7 +208,8 @@ button:disabled {
 }
 
 .table-container {
-  overflow-x: auto;
+  overflow-x: hidden;
+  /* MODIFIED: Prevents horizontal scrollbar */
   -webkit-overflow-scrolling: touch;
 }
 
@@ -216,6 +217,8 @@ table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 1rem;
+  table-layout: fixed;
+  /* ADDED: Ensures column widths are respected */
 }
 
 tbody tr {
@@ -233,12 +236,53 @@ td {
   padding: 0.75rem;
   border-bottom: 1px solid #374151;
   white-space: nowrap;
+  /* MODIFIED: Keeps text on one line for truncation */
+  overflow: hidden;
+  /* ADDED: Hides text that overflows the cell */
+  text-overflow: ellipsis;
+  /* ADDED: Shows '...' for truncated text */
+  vertical-align: middle;
+  /* ADDED: Improves vertical alignment */
 }
 
 th {
   background-color: rgba(59, 130, 246, 0.1);
   color: #60A5FA;
 }
+
+/* ADDED: This new section defines column widths and centers the scores */
+/* === TABLE COLUMN STYLES === */
+th:nth-child(1),
+td:nth-child(1) {
+  width: 14%;
+}
+
+/* Date */
+th:nth-child(2),
+td:nth-child(2) {
+  width: 30%;
+}
+
+/* Log */
+th:nth-child(6),
+td:nth-child(6) {
+  width: 20%;
+}
+
+/* Notes */
+
+/* --- Score Columns --- */
+th:nth-child(3),
+td:nth-child(3),
+th:nth-child(4),
+td:nth-child(4),
+th:nth-child(5),
+td:nth-child(5) {
+  text-align: center;
+  width: 12%;
+}
+
+/* ========================= */
 
 .subtle-text {
   font-size: 0.8rem;
@@ -256,6 +300,8 @@ th {
   font-size: 0.8rem;
   font-weight: 500;
   text-align: center;
+  display: inline-block;
+  /* ADDED: Ensures padding and centering behave correctly */
 }
 
 .score-good {
