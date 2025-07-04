@@ -3,6 +3,8 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 // === PASTE YOUR SUPABASE URL AND PUBLIC ANON KEY HERE ===
 const SUPABASE_URL = 'https://bcoottemxdthoopmaict.supabase.co'; 
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjb290dGVteGR0aG9vcG1haWN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxOTEzMjksImV4cCI6MjA2NTc2NzMyOX0.CVYIdU0AHBDd00IlF5jh0HP264txAGh28LBJxDAA9Ng';
+// =========================================================
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let charts = {};
@@ -22,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalOverlay = document.getElementById('logModal');
     const btn7day = document.getElementById('btn7day');
     const btn30day = document.getElementById('btn30day');
+    const googleHealthBtn = document.getElementById('google-health-btn'); // New button
 
     signupForm.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -62,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchAndRenderCharts(7);
             fetchAndDisplayInsight();
             fetchAndRenderInsightHistory();
+            // We would eventually check here if the user is already connected
         } else {
             appContainer.style.display = 'none';
             authContainer.style.display = 'block';
@@ -114,6 +118,15 @@ document.addEventListener('DOMContentLoaded', () => {
         btn30day.classList.add('active');
         btn7day.classList.remove('active');
     });
+
+    // ADDED: Event listener for the new connect button
+    if (googleHealthBtn) {
+        googleHealthBtn.addEventListener('click', () => {
+            alert("This will start the connection process with Google Health. Backend setup is the next step!");
+            // In the next step, this will redirect to our Netlify Function:
+            // window.location.href = '/.netlify/functions/google-health-auth-start';
+        });
+    }
 });
 
 async function submitLog() {
@@ -313,17 +326,14 @@ function renderLogTable(logs) {
     });
 }
 
-// === MODIFIED: This function is now more robust and correctly builds the score bubbles ===
 function td(content, parent, scoreType = null) {
     const cell = document.createElement('td');
 
     if (scoreType) {
-        // For score cells, create a separate <span> for the bubble styling.
         const bubble = document.createElement('span');
         bubble.textContent = content;
         const value = String(content || '').toLowerCase();
 
-        // Apply the appropriate class to the bubble, not the cell.
         if (scoreType === 'positive') {
             if (value === 'high') bubble.classList.add('score-good');
             else if (value === 'medium') bubble.classList.add('score-neutral');
@@ -333,9 +343,8 @@ function td(content, parent, scoreType = null) {
             else if (value === 'medium') bubble.classList.add('score-neutral');
             else if (value === 'low') bubble.classList.add('score-good');
         }
-        cell.appendChild(bubble); // Add the styled bubble to the cell.
+        cell.appendChild(bubble);
     } else {
-        // For regular text cells, just add the text content.
         cell.textContent = content;
     }
     

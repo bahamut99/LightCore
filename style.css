@@ -439,6 +439,53 @@ td:nth-child(6) {
   border-left: 2px solid #4B5563;
 }
 
+/* === ADDED: Google Health Connect Styles === */
+.health-connect-container {
+  border-top: 1px solid #374151;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  text-align: center;
+}
+
+.health-connect-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: auto;
+  padding: 0.5rem 1rem;
+  background-color: #374151;
+  border: 1px solid #4B5563;
+  font-weight: 500;
+  margin-top: 0;
+  /* Override default button margin */
+}
+
+.health-connect-btn:hover {
+  background-color: #4B5563;
+}
+
+.health-connect-logo {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: #D1D5DB;
+}
+
+.health-connect-logo.connected {
+  fill: #4ade80;
+  /* Green color when connected */
+}
+
+p.connected-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: #9CA3AF;
+}
+
+/* ========================================= */
+
 /* === ADDED: Styles for Footer and About Page === */
 .footer {
   text-align: center;
