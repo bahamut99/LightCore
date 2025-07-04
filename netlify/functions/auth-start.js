@@ -10,7 +10,7 @@ exports.handler = async (event, context) => {
 
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
-    // IMPORTANT: This now points to our new callback function name
+    // The redirect URI must exactly match what's in the Google Cloud Console
     redirect_uri: 'https://lightcorehealth.netlify.app/.netlify/functions/auth-callback',
     response_type: 'code',
     scope: scopes.join(' '),
