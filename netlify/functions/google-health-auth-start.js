@@ -1,3 +1,4 @@
+// Forcing a new deploy
 const { URLSearchParams } = require('url');
 
 exports.handler = async (event, context) => {
@@ -14,13 +15,12 @@ exports.handler = async (event, context) => {
     redirect_uri: 'https://lightcorehealth.netlify.app/.netlify/functions/google-health-auth-callback',
     response_type: 'code',
     scope: scopes.join(' '),
-    access_type: 'offline', // Required to get a refresh token
-    prompt: 'consent' // Forces the consent screen to be shown every time
+    access_type: 'offline',
+    prompt: 'consent'
   });
 
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 
-  // Redirect the user to Google's authorization screen.
   return {
     statusCode: 302,
     headers: {
