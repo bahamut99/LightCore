@@ -123,8 +123,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const CLIENT_ID = '370829569323-9tphtoufc72qmqcoemefi37r0eojq7pp.apps.googleusercontent.com';
             const REDIRECT_URI = 'https://lightcorehealth.netlify.app/.netlify/functions/google-auth';
             const SCOPES = [
-                'https://www.googleapis.com/auth/fitness.activity.readonly',
-                'https://www.googleapis.com/auth/fitness.sleep.readonly',
+                'https://www.googleapis.com/auth/fitness.activity.read',
+                'https://www.googleapis.com/auth/fitness.sleep.read',
             ];
 
             const params = new URLSearchParams({
