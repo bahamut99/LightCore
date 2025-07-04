@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalOverlay = document.getElementById('logModal');
     const btn7day = document.getElementById('btn7day');
     const btn30day = document.getElementById('btn30day');
-    const googleHealthBtn = document.getElementById('google-health-btn'); // New button
+    const googleHealthBtn = document.getElementById('google-health-btn');
 
     signupForm.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -65,7 +65,6 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchAndRenderCharts(7);
             fetchAndDisplayInsight();
             fetchAndRenderInsightHistory();
-            // We would eventually check here if the user is already connected
         } else {
             appContainer.style.display = 'none';
             authContainer.style.display = 'block';
@@ -119,12 +118,10 @@ document.addEventListener('DOMContentLoaded', () => {
         btn7day.classList.remove('active');
     });
 
-    // ADDED: Event listener for the new connect button
+    // MODIFIED: This now starts the real authentication flow
     if (googleHealthBtn) {
         googleHealthBtn.addEventListener('click', () => {
-            alert("This will start the connection process with Google Health. Backend setup is the next step!");
-            // In the next step, this will redirect to our Netlify Function:
-            // window.location.href = '/.netlify/functions/google-health-auth-start';
+            window.location.href = '/.netlify/functions/google-health-auth-start';
         });
     }
 });
