@@ -118,10 +118,9 @@ document.addEventListener('DOMContentLoaded', () => {
         btn7day.classList.remove('active');
     });
 
-    // MODIFIED: This now starts the real authentication flow
     if (googleHealthBtn) {
         googleHealthBtn.addEventListener('click', () => {
-            window.location.href = '/.netlify/functions/google-health-auth-start';
+            window.location.href = '/.netlify/functions/auth-start';
         });
     }
 });

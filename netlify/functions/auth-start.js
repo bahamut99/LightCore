@@ -1,8 +1,6 @@
-// Forcing a new deploy
 const { URLSearchParams } = require('url');
 
 exports.handler = async (event, context) => {
-  // Scopes we are requesting from the user.
   const scopes = [
     'https://www.googleapis.com/auth/fitness.activity.readonly',
     'https://www.googleapis.com/auth/fitness.sleep.readonly',
@@ -12,7 +10,8 @@ exports.handler = async (event, context) => {
 
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
-    redirect_uri: 'https://lightcorehealth.netlify.app/.netlify/functions/google-health-auth-callback',
+    // IMPORTANT: This now points to our new callback function name
+    redirect_uri: 'https://lightcorehealth.netlify.app/.netlify/functions/auth-callback',
     response_type: 'code',
     scope: scopes.join(' '),
     access_type: 'offline',
