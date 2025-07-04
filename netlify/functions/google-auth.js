@@ -5,12 +5,13 @@ const { createClient } = require('@supabase/supabase-js');
 // Config
 const REDIRECT_URI = 'https://lightcorehealth.netlify.app/.netlify/functions/google-auth';
 
+// --- Main Handler ---
 exports.handler = async (event, context) => {
-    // If the 'code' parameter is present, we are handling the callback.
+    // If the 'code' parameter is present, we are handling the callback from Google.
     if (event.queryStringParameters.code) {
         return handleCallback(event);
     }
-    // Otherwise, we are starting the auth process.
+    // Otherwise, we are starting the authentication process.
     return startAuth();
 };
 
@@ -45,11 +46,18 @@ function startAuth() {
 async function handleCallback(event) {
     const { code } = event.queryStringParameters;
     
-    // The user's JWT is in the 'nf_jwt' cookie when they are logged in.
-    const user_jwt = event.headers.cookie.split('; ').find(c => c.startsWith('nf_jwt='))?.split('=')[1];
+    // MODIFIED: Safely handle the cookie header in case it's missing.
+    const cookieHeader = event.headers.cookie || '';
+    const user_jwt = cookieHeader.split('; ').find(c => c.startsWith('nf_jwt='))?.split('=')[1];
     
     if (!user_jwt) {
-        return { statusCode: 401, body: 'Not authorized.' };
+        // This is a temporary workaround for the cookie issue on redirect.
+        // It redirects the user back to the start, where they will be logged in.
+        // On the second attempt, the cookie will be present.
+        return {
+            statusCode: 302,
+            headers: { Location: 'https://lightcorehealth.netlify.app' }
+        };
     }
 
     try {
@@ -109,7 +117,7 @@ async function saveTokensToSupabase(user_jwt, tokenData) {
         user_id: user.id,
         provider: 'google-health',
         access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token, // May be null if user has already granted offline access
+        refresh_token: tokenData.refresh_token,
         expires_at: expires_at,
     };
     
