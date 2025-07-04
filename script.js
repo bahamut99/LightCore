@@ -120,7 +120,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (googleHealthBtn) {
         googleHealthBtn.addEventListener('click', () => {
-            window.location.href = '/.netlify/functions/auth-start';
+            // Build the Google Auth URL directly on the front-end to bypass Netlify's caching issue.
+            const CLIENT_ID = '370829569323-9phtoufc722qmqcoemefk37f0eojq7op.apps.googleusercontent.com';
+            const REDIRECT_URI = 'https://lightcorehealth.netlify.app/.netlify/functions/auth-callback';
+            const SCOPES = [
+                'https://www.googleapis.com/auth/fitness.activity.readonly',
+                'https://www.googleapis.com/auth/fitness.sleep.readonly',
+                'https://www.googleapis.com/auth/fitness.blood_pressure.readonly',
+                'https://www.googleapis.com/auth/fitness.blood_glucose.readonly'
+            ];
+
+            const params = new URLSearchParams({
+                client_id: CLIENT_ID,
+                redirect_uri: REDIRECT_URI,
+                response_type: 'code',
+                scope: SCOPES.join(' '),
+                access_type: 'offline',
+                prompt: 'consent'
+            });
+
+            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+
+            // Redirect the user to Google for authorization
+            window.location.href = authUrl;
         });
     }
 });
