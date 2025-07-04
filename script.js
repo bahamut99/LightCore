@@ -9,6 +9,34 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let charts = {};
 
+// --- Helper function to check for Google Health integration ---
+async function checkGoogleHealthConnection() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    
+    // Check if a token exists for this user
+    const { data, error } = await supabase
+        .from('user_integrations')
+        .select('id')
+        .eq('provider', 'google-health')
+        .single();
+        
+    const manualInputs = document.getElementById('manual-sleep-inputs');
+    const connectButton = document.getElementById('google-health-connect');
+    const connectedMessage = document.getElementById('google-health-connected');
+
+    if (data) { // Connection exists
+        manualInputs.style.display = 'none';
+        connectButton.style.display = 'none';
+        connectedMessage.style.display = 'block';
+    } else { // No connection
+        manualInputs.style.display = 'block';
+        connectButton.style.display = 'block';
+        connectedMessage.style.display = 'none';
+    }
+}
+
+
 document.addEventListener('DOMContentLoaded', () => {
     const authContainer = document.getElementById('auth-container');
     const appContainer = document.getElementById('app-container');
@@ -65,6 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchAndRenderCharts(7);
             fetchAndDisplayInsight();
             fetchAndRenderInsightHistory();
+            checkGoogleHealthConnection(); // Check connection status on login
         } else {
             appContainer.style.display = 'none';
             authContainer.style.display = 'block';
@@ -120,26 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (googleHealthBtn) {
         googleHealthBtn.addEventListener('click', () => {
-            const CLIENT_ID = '370829569323-9tphtoufc72qmqcoemefi37r0eojq7pp.apps.googleusercontent.com';
-            const REDIRECT_URI = 'https://lightcorehealth.netlify.app/.netlify/functions/google-auth';
-            const SCOPES = [
-                'https://www.googleapis.com/auth/fitness.activity.read',
-                'https://www.googleapis.com/auth/fitness.sleep.read',
-                'https://www.googleapis.com/auth/fitness.blood_glucose.read',
-                'https://www.googleapis.com/auth/fitness.blood_pressure.read',
-            ];  
-
-            const params = new URLSearchParams({
-                client_id: CLIENT_ID,
-                redirect_uri: REDIRECT_URI,
-                response_type: 'code',
-                scope: SCOPES.join(' '),
-                access_type: 'offline',
-                prompt: 'consent'
-            });
-
-            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-            window.location.href = authUrl;
+            window.location.href = '/.netlify/functions/google-auth';
         });
     }
 });
