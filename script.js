@@ -1,8 +1,3 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-// Forcing deploy at 10:39 PM
-// === PASTE YOUR SUPABASE URL AND PUBLIC ANON KEY HERE ===
-const SUPABASE_URL = 'https://bcoottemxdthoopmaict.supabase.co'; 
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjb290dGVteGR0aG9vcG1haWN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxOTEzMjksImV4cCI6MjA2NTc2NzMyOX0.CVYIdU0AHBDd00IlF5jh0HP264txAGh28LBJxDAA9Ng';
 // =========================================================
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -120,29 +115,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (googleHealthBtn) {
         googleHealthBtn.addEventListener('click', () => {
-            // Build the Google Auth URL directly on the front-end to bypass Netlify's caching issue.
-            const CLIENT_ID = '370829569323-9tphtoufc72qmqcoemefi37r0eojq7pp.apps.googleusercontent.com';
-            const REDIRECT_URI = 'https://lightcorehealth.netlify.app/.netlify/functions/auth-callback';
-            const SCOPES = [
-                'https://www.googleapis.com/auth/fitness.activity.readonly',
-                'https://www.googleapis.com/auth/fitness.sleep.readonly',
-                'https://www.googleapis.com/auth/fitness.blood_pressure.readonly',
-                'https://www.googleapis.com/auth/fitness.blood_glucose.readonly'
-            ];
-
-            const params = new URLSearchParams({
-                client_id: CLIENT_ID,
-                redirect_uri: REDIRECT_URI,
-                response_type: 'code',
-                scope: SCOPES.join(' '),
-                access_type: 'offline',
-                prompt: 'consent'
-            });
-
-            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-
-            // Redirect the user to Google for authorization
-            window.location.href = authUrl;
+            // Redirect to our new, single auth function
+            window.location.href = '/.netlify/functions/google-auth';
         });
     }
 });
