@@ -125,7 +125,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const SCOPES = [
                 'https://www.googleapis.com/auth/fitness.activity.read',
                 'https://www.googleapis.com/auth/fitness.sleep.read',
-            ];
+                'https://www.googleapis.com/auth/fitness.blood_glucose.read',
+                'https://www.googleapis.com/auth/fitness.blood_pressure.read',
+            ];  
 
             const params = new URLSearchParams({
                 client_id: CLIENT_ID,
