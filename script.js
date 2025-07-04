@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (googleHealthBtn) {
         googleHealthBtn.addEventListener('click', () => {
             // Build the Google Auth URL directly on the front-end to bypass Netlify's caching issue.
-            const CLIENT_ID = '370829569323-9phtoufc722qmqcoemefk37f0eojq7op.apps.googleusercontent.com';
+            const CLIENT_ID = '370829569323-9tphtoufc72qmqcoemefi37r0eojq7pp.apps.googleusercontent.com';
             const REDIRECT_URI = 'https://lightcorehealth.netlify.app/.netlify/functions/auth-callback';
             const SCOPES = [
                 'https://www.googleapis.com/auth/fitness.activity.readonly',
