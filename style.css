@@ -241,7 +241,7 @@ th {
   color: #60A5FA;
 }
 
-/* === TABLE COLUMN STYLES (MODIFIED) === */
+/* === TABLE COLUMN STYLES === */
 th:nth-child(1),
 td:nth-child(1) {
   width: 8%;
@@ -273,7 +273,7 @@ td:nth-child(6) {
   text-overflow: ellipsis;
 }
 
-/* ===================================== */
+/* ========================= */
 
 .subtle-text {
   font-size: 0.8rem;
@@ -438,3 +438,40 @@ td:nth-child(6) {
   line-height: 1.5;
   border-left: 2px solid #4B5563;
 }
+
+/* === ADDED: Styles for Footer and About Page === */
+.footer {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.footer-link {
+  font-size: 0.8rem;
+  color: #6B7280;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footer-link:hover {
+  color: #9CA3AF;
+  text-decoration: underline;
+}
+
+.about-container {
+  max-width: 800px;
+  margin: 2rem auto;
+  padding: 1rem;
+}
+
+.about-container h4 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: #9CA3AF;
+}
+
+.about-container p {
+  line-height: 1.7;
+  color: #D1D5DB;
+}
+
+/* ============================================ */
