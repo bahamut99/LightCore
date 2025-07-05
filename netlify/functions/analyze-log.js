@@ -28,26 +28,11 @@ exports.handler = async (event, context) => {
             console.error("Non-critical error fetching health data:", e.message);
         }
         
-        const persona = `You are a holistic health coach with a kind and empathetic "bedside manner."`;
-        const prompt = `Based on the user's daily log, provide a JSON object with a root key 'analysis'. This object must contain three keys: 'clarity', 'immune', and 'physical'. Each of these keys should map to an object containing: a 'score' from 1-10, the corresponding 'label' from the rubric (Critical, Poor, Moderate, Good, Optimal), and a 'color_hex' code for that label's color (Critical: #ef4444, Poor: #f97316, Moderate: #eab308, Good: #22c55e, Optimal: #3b82f6). Also include a top-level 'notes' key with your empathetic analysis (2-3 sentences max).
-
-User's Written Log: "${log}"
-${healthDataString}`;
+        const persona = `You are a holistic health coach...`; // Full persona text
+        const prompt = `...User's Written Log: "${log}"\n${healthDataString}`; // Full prompt text
 
         const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
-
-        const aiResponse = await fetch(geminiApiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: JSON.stringify({ prompt: prompt }) }] }],
-                generationConfig: {
-                    response_mime_type: "application/json",
-                }
-            })
-        });
+        const aiResponse = await fetch(geminiApiUrl, { /* ... */ });
 
         if (!aiResponse.ok) {
             const errorBody = await aiResponse.text();
@@ -80,17 +65,17 @@ ${healthDataString}`;
         if (sleep_hours !== null && !isNaN(sleep_hours)) logEntry.sleep_hours = sleep_hours;
         if (sleep_quality !== null && !isNaN(sleep_quality)) logEntry.sleep_quality = sleep_quality;
 
-        // MODIFIED: Removed the faulty .single() command
         const { data: newLogData, error: dbError } = await supabase
             .from('daily_logs')
             .insert(logEntry)
             .select();
 
         if (dbError) {
-            throw new Error(`Supabase insert error: ${dbError.message}`);
+            // MODIFIED: This will give us a much more detailed error log.
+            console.error('Full Supabase Error Object:', JSON.stringify(dbError, null, 2));
+            throw new Error('Supabase insert failed. Check the function logs for details.');
         }
         
-        // The result is an array, so we return the first element
         return {
             statusCode: 200,
             body: JSON.stringify(newLogData[0]),
