@@ -65,16 +65,20 @@ ${healthDataString}`;
             sleep_hours,
             sleep_quality
         };
+        
+        // MODIFIED: Removed the .single() modifier to make the insert more robust.
+        const { data: newLogData, error: dbError } = await supabase
+            .from('logs')
+            .insert(logEntry)
+            .select();
 
-        const { data: newLog, error: dbError } = await supabase.from('logs').insert(logEntry).select().single();
         if (dbError) {
-            // Throw a proper Error object with the message
             throw new Error(`Supabase insert error: ${dbError.message}`);
         }
 
         return {
             statusCode: 200,
-            body: JSON.stringify(newLog),
+            body: JSON.stringify(newLogData[0]), // Return the first (and only) inserted record
         };
 
     } catch (error) {
