@@ -22,7 +22,7 @@ async function handleTokenCallback() {
             return;
         }
 
-        const expires_at = new Date(Date.now() + expiresIn * 1000).toISOString();
+        const expires_at = new Date(Date.now() + parseInt(expiresIn) * 1000).toISOString();
 
         const integrationData = {
             user_id: user.id,
@@ -274,7 +274,6 @@ async function fetchAndRenderCharts(range) {
             headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
         if (!response.ok) {
-            // Check if the response body contains a specific error message
             const errorData = await response.json().catch(() => null);
             if (errorData && errorData.error) {
                 throw new Error(errorData.error);
@@ -401,7 +400,7 @@ function renderLogTable(logs) {
 function td(content, parent, type = null, label = '') {
     const cell = document.createElement('td');
     
-    if (type === 'score') {
+    if (type === 'score' && label) {
         const span = document.createElement('span');
         span.className = 'score-bubble';
         span.textContent = label;

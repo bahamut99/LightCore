@@ -9,6 +9,7 @@ exports.handler = async (event, context) => {
     if (userError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
 
     try {
+        // Select all columns from the cleaned-up table
         const { data, error } = await supabase
             .from('daily_logs')
             .select('*')
@@ -16,9 +17,7 @@ exports.handler = async (event, context) => {
             .order('created_at', { ascending: false })
             .limit(10);
 
-        if (error) {
-            throw error;
-        }
+        if (error) throw new Error(`Supabase select error: ${error.message}`);
         
         return {
             statusCode: 200,
