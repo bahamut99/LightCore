@@ -42,8 +42,7 @@ ${healthDataString}`;
             },
             body: JSON.stringify({
                 model: 'gpt-3.5-turbo-1106',
-                messages: [{ role: 'system', content: persona }, { role: 'user', content: prompt }]
-                // MODIFIED: Removed the unsupported 'response_format' property.
+                messages: [{ role: 'system', content: persona }, { role: 'user', content: prompt }],
             })
         });
 
@@ -57,11 +56,11 @@ ${healthDataString}`;
 
         const logEntry = {
             user_id: user.id,
-            Log: log,
-            Clarity: analysis.Clarity,
-            Immune: analysis.Immune,
-            PhysicalReadiness: analysis.PhysicalReadiness,
-            Notes: analysis.Notes,
+            log: log,
+            clarity: analysis.Clarity,
+            immune: analysis.Immune,
+            physical_readiness: analysis.PhysicalReadiness,
+            notes: analysis.Notes,
         };
 
         if (sleep_hours !== null && !isNaN(sleep_hours)) {
@@ -71,8 +70,9 @@ ${healthDataString}`;
             logEntry.sleep_quality = sleep_quality;
         }
 
+        // MODIFIED: Corrected table name from 'logs' to 'daily_logs'
         const { data: newLogData, error: dbError } = await supabase
-            .from('logs')
+            .from('daily_logs')
             .insert(logEntry)
             .select();
 
@@ -81,6 +81,13 @@ ${healthDataString}`;
         }
         
         const newLog = newLogData[0];
+
+        // Manually add back the camelCase keys for the front-end to prevent breaking the UI
+        newLog.Clarity = newLog.clarity;
+        newLog.Immune = newLog.immune;
+        newLog.PhysicalReadiness = newLog.physical_readiness;
+        newLog.Notes = newLog.notes;
+        newLog.Log = newLog.log;
 
         return {
             statusCode: 200,
