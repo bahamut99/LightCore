@@ -18,8 +18,7 @@ exports.handler = async (event, context) => {
             .limit(20);
 
         if (error) throw new Error(`Supabase fetch error: ${error.message}`);
-
-        // The front-end expects an 'insight_text' property
+        
         const insights = data.map(item => ({
             created_at: item.created_at,
             insight_text: item.ai_notes 

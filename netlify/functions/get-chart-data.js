@@ -22,7 +22,7 @@ exports.handler = async (event, context) => {
             .gte('created_at', startDate.toISOString())
             .order('created_at', { ascending: true });
 
-        if (error) throw error;
+        if (error) throw new Error(`Supabase select error: ${error.message}`);
 
         const labels = data.map(log => new Date(log.created_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }));
         const clarityData = data.map(log => log.clarity_score);
@@ -37,7 +37,7 @@ exports.handler = async (event, context) => {
         console.error('Error fetching chart data:', error);
         return {
             statusCode: 500,
-            body: JSON.stringify({ error: 'Failed to fetch chart data' }),
+            body: JSON.stringify({ error: error.message }),
         };
     }
 };

@@ -1,101 +1,56 @@
-import { createClient } from '@supabase/supabase-js';
+const { createClient } = require('@supabase/supabase-js');
+const fetch = require('node-fetch');
 
-export async function handler(event) {
-  // 1. Security Check: Verify the user is logged in.
-  const authHeader = event.headers.authorization;
-  if (!authHeader) {
-    return { statusCode: 401, body: JSON.stringify({ error: 'Authorization required.' }) };
-  }
-  const token = authHeader.replace('Bearer ', '');
-  // We use the anon key here because we are passing the user's token for verification.
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !user) {
-    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
-  }
+exports.handler = async (event, context) => {
+    const token = event.headers.authorization?.split(' ')[1];
+    if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Not authorized.' }) };
 
-  try {
-    // 2. Fetch User's Last 30 Days of Data
-    // This client is now scoped to the logged-in user and will respect RLS policies.
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
 
-    const { data: logs, error: dbError } = await supabase
-      .from('daily_logs')
-      .select('created_at, Log, Clarity, Immune, PhysicalReadiness, sleep_hours, sleep_quality')
-      .eq('user_id', user.id)
-      .gte('created_at', thirtyDaysAgo.toISOString())
-      .order('created_at', { ascending: false });
+    try {
+        const { data: logs, error } = await supabase
+            .from('daily_logs')
+            .select('created_at, log, clarity_score, immune_score, physical_readiness_score, ai_notes')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(15);
 
-    if (dbError) throw new Error(`Supabase query error: ${dbError.message}`);
+        if (error) throw new Error(`Supabase fetch error: ${error.message}`);
+        if (logs.length < 3) return { statusCode: 200, body: JSON.stringify({ insight: 'Log a few more entries to unlock new insights.' }) };
 
-    if (!logs || logs.length < 3) {
-      return { statusCode: 200, body: JSON.stringify({ insight: "Keep logging your entries for a few more days, and I'll be able to show you some interesting patterns!" }) };
+        const persona = `You are a health data analyst. Your job is to find a single, actionable correlation in the provided health data logs.`;
+        const prompt = `Analyze the following user health logs to find one new, interesting, and actionable correlation. Present it as a concise insight, starting with "I've noticed a pattern:" or "It's interesting that...". Be encouraging and brief. The data is an array of JSON objects:\n\n${JSON.stringify(logs, null, 2)}`;
+
+        const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+
+        const aiResponse = await fetch(geminiApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }]
+            })
+        });
+
+        if (!aiResponse.ok) {
+            const errorBody = await aiResponse.text();
+            throw new Error(`Gemini API error: ${aiResponse.status} ${errorBody}`);
+        }
+
+        const aiData = await aiResponse.json();
+        const insight = aiData.candidates[0].content.parts[0].text;
+
+        return {
+            statusCode: 200,
+            body: JSON.stringify({ insight }),
+        };
+
+    } catch (error) {
+        console.error('Error in get-insight function:', error);
+        return {
+            statusCode: 500,
+            body: JSON.stringify({ error: error.message }),
+        };
     }
-
-    // 3. Format the Data for the AI
-    const formattedHistory = logs.map(log => {
-      let entry = `Date: ${new Date(log.created_at).toLocaleDateString()}; Sleep: ${log.sleep_hours || 'N/A'}h (Quality: ${log.sleep_quality || 'N/A'}/5); Clarity: ${log.Clarity}; Immune Risk: ${log.Immune}; Physical Output: ${log.PhysicalReadiness}; Note: "${log.Log}"`;
-      return entry;
-    }).join('\n');
-
-    // 4. Call OpenAI with our Persona-Driven Prompt
-    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'system',
-            content: "You are LightCore, a friendly, empathetic, and insightful AI health coach. Your tone is supportive and encouraging, like a knowledgeable friend. You are not a doctor and you must never give direct medical advice. Your goal is to find one interesting correlation or pattern in the user's recent health data."
-          },
-          {
-            role: 'user',
-            content: `Here is my health data for the last ${logs.length} days:\n\n${formattedHistory}\n\nBased on this data, what is the single most interesting and actionable pattern you can find? Frame it as a gentle observation to help me on my wellness journey. Be concise and keep it to 1-3 sentences.`
-          },
-        ],
-        temperature: 0.6,
-      }),
-    });
-
-    if (!openaiResponse.ok) {
-        const errorBody = await openaiResponse.json();
-        throw new Error(`OpenAI API Error: ${errorBody.error.message}`);
-    }
-
-    const aiData = await openaiResponse.json();
-    const insight = aiData.choices[0].message.content;
-
-    // === NEW: 5. Save the new insight to the database ===
-    // We create a new admin client to bypass RLS for this system-level write.
-    const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-    const { error: insertError } = await supabaseAdmin
-      .from('insights')
-      .insert({
-        user_id: user.id,
-        insight_text: insight
-      });
-
-    if (insertError) {
-      // Log the error but don't stop the user from seeing the insight.
-      console.error("Failed to save insight to database:", insertError);
-    }
-
-    // 6. Return the Insight to the user
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ insight: insight }),
-    };
-
-  } catch (error) {
-    console.error("Error in get-insight function:", error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message }),
-    };
-  }
-}
+};
