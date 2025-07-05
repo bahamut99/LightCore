@@ -42,8 +42,8 @@ ${healthDataString}`;
             },
             body: JSON.stringify({
                 model: 'gpt-3.5-turbo-1106',
-                messages: [{ role: 'system', content: persona }, { role: 'user', content: prompt }],
-                response_format: { type: "json_object" }
+                messages: [{ role: 'system', content: persona }, { role: 'user', content: prompt }]
+                // MODIFIED: Removed the unsupported 'response_format' property.
             })
         });
 
@@ -62,22 +62,25 @@ ${healthDataString}`;
             Immune: analysis.Immune,
             PhysicalReadiness: analysis.PhysicalReadiness,
             Notes: analysis.Notes,
-            sleep_hours,
-            sleep_quality
         };
 
-        // --- MODIFIED: Separated the insert operation for robustness ---
-        const { error: dbError } = await supabase
+        if (sleep_hours !== null && !isNaN(sleep_hours)) {
+            logEntry.sleep_hours = sleep_hours;
+        }
+        if (sleep_quality !== null && !isNaN(sleep_quality)) {
+            logEntry.sleep_quality = sleep_quality;
+        }
+
+        const { data: newLogData, error: dbError } = await supabase
             .from('logs')
-            .insert(logEntry);
+            .insert(logEntry)
+            .select();
 
         if (dbError) {
-            // Throw a proper error with the message from the database
             throw new Error(`Supabase insert error: ${dbError.message}`);
         }
         
-        // Construct the object to send back to the front-end
-        const newLog = { ...logEntry, created_at: new Date().toISOString() };
+        const newLog = newLogData[0];
 
         return {
             statusCode: 200,
