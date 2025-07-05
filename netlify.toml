@@ -10,3 +10,7 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
   external_node_modules = []
+  
+  # This block increases the timeout for our data-fetching function
+[functions."fetch-health-data"]
+  timeout = 25 # Increase timeout to 25 seconds
