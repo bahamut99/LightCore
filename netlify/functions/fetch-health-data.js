@@ -2,17 +2,7 @@ const fetch = require('node-fetch');
 const { URLSearchParams } = require('url');
 const { createClient } = require('@supabase/supabase-js');
 
-// --- Correctly get a Supabase client with the user's permissions ---
-const getSupabaseClient = (event) => {
-    const token = event.headers.authorization.split(' ')[1];
-    if (!token) throw new Error('Not authorized. No token provided.');
-
-    return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
-        global: { headers: { Authorization: `Bearer ${token}` } }
-    });
-};
-
-// --- Helper to get a fresh access token ---
+// --- Helper to get a fresh access token from Google ---
 async function getValidAccessToken(supabase, userId) {
     let { data: tokens, error } = await supabase
         .from('user_integrations')
@@ -62,10 +52,14 @@ async function getValidAccessToken(supabase, userId) {
 // --- Main handler ---
 exports.handler = async (event, context) => {
     try {
-        const supabase = getSupabaseClient(event);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('User not found.');
+        // Correctly authenticate the user via the passed Supabase JWT
+        if (!event.headers.authorization) throw new Error('No auth header');
+        const token = event.headers.authorization.split(' ')[1];
 
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) throw new Error('User not found for provided token.');
+        
         const accessToken = await getValidAccessToken(supabase, user.id);
 
         const now = new Date();
@@ -93,7 +87,7 @@ exports.handler = async (event, context) => {
         const fitnessData = await fitnessResponse.json();
         
         let stepCount = 0;
-        if (fitnessData.bucket && fitnessData.bucket[0].dataset[0].point.length > 0) {
+        if (fitnessData.bucket && fitnessData.bucket.length > 0 && fitnessData.bucket[0].dataset[0].point.length > 0) {
             stepCount = fitnessData.bucket[0].dataset[0].point[0].value[0].intVal;
         }
 
