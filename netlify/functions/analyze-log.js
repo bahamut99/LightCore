@@ -2,29 +2,29 @@ const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
 exports.handler = async (event, context) => {
-    // Safely get the user JWT
-    const cookieHeader = event.headers.cookie || '';
-    const user_jwt = cookieHeader.split('; ').find(c => c.startsWith('nf_jwt='))?.split('=')[1];
-    if (!user_jwt) return { statusCode: 401, body: JSON.stringify({ error: 'Not authorized.'}) };
+    // --- Correctly authenticate the user via Supabase JWT ---
+    const token = event.headers.authorization.split(' ')[1];
+    if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Not authorized: No token.'}) };
+
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
-        global: { headers: { Authorization: `Bearer ${user_jwt}` } }
-    });
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { statusCode: 401, body: JSON.stringify({ error: 'User not found.'}) };
+    if (userError || !user) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'User not found or token invalid.'}) };
+    }
 
     const { log, sleep_hours, sleep_quality } = JSON.parse(event.body);
 
     let healthDataString = "";
     try {
-        // Call our function to get health data
+        // Call our function to get health data, passing the auth token
         const healthResponse = await fetch('https://lightcorehealth.netlify.app/.netlify/functions/fetch-health-data', {
-            headers: { 'Cookie': event.headers.cookie }
+            method: 'POST', // Use POST to send a body
+            headers: { 'Authorization': `Bearer ${token}` }
         });
         
         if (healthResponse.ok) {
             const data = await healthResponse.json();
-            // Only add health data string if steps are successfully retrieved
             if (data && data.steps !== null && data.steps !== undefined) {
                 healthDataString = `
 ---
@@ -34,7 +34,6 @@ Automated Health Data:
 `;
             }
         } else {
-             // Log the error from fetch-health-data but don't crash
              console.error(`Failed to fetch health data: ${healthResponse.status}`);
         }
     } catch (e) {
@@ -51,7 +50,6 @@ ${healthDataString}
 `;
 
     try {
-        // Call the AI
         const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -76,7 +74,6 @@ ${healthDataString}
         const aiData = await aiResponse.json();
         const analysis = JSON.parse(aiData.choices[0].message.content);
 
-        // Save everything to the database
         const logEntry = {
             user_id: user.id,
             Log: log,
@@ -110,7 +107,6 @@ ${healthDataString}
     }
 };
 
-// Config to increase the timeout
 module.exports.config = {
   timeout: 25,
 };
