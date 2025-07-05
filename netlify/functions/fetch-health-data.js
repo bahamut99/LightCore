@@ -125,7 +125,7 @@ exports.handler = async (event, context) => {
     }
 };
 
-// This exports a config object to override the default timeout
-exports.config = {
+// Use module.exports.config for Netlify to recognize it correctly.
+module.exports.config = {
   timeout: 25,
 };

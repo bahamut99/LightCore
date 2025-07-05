@@ -3,7 +3,8 @@ const fetch = require('node-fetch');
 
 exports.handler = async (event, context) => {
     // --- Get the logged-in user's details ---
-    const user_jwt = event.headers.cookie.split('; ').find(c => c.startsWith('nf_jwt='))?.split('=')[1];
+    const cookieHeader = event.headers.cookie || '';
+    const user_jwt = cookieHeader.split('; ').find(c => c.startsWith('nf_jwt='))?.split('=')[1];
     if (!user_jwt) return { statusCode: 401, body: 'Not authorized.' };
     
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
@@ -104,7 +105,7 @@ ${healthDataString}
     }
 };
 
-// This exports a config object to override the default timeout
-exports.config = {
+// Use module.exports.config for Netlify to recognize it correctly.
+module.exports.config = {
   timeout: 25,
 };
