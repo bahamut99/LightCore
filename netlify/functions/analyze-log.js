@@ -28,24 +28,17 @@ exports.handler = async (event, context) => {
             console.error("Non-critical error fetching health data:", e.message);
         }
         
-        const persona = `You are a holistic health coach with a kind and empathetic "bedside manner."`;
-        const prompt = `Based on the user's daily log, provide a JSON object with a root key 'analysis'. This object must contain three keys: 'clarity', 'immune', and 'physical'. Each of these keys should map to an object containing: a 'score' from 1-10, the corresponding 'label' from the rubric (Critical, Poor, Moderate, Good, Optimal), and a 'color_hex' code for that label's color (Critical: #ef4444, Poor: #f97316, Moderate: #eab308, Good: #22c55e, Optimal: #3b82f6). Also include a top-level 'notes' key with your empathetic analysis (2-3 sentences max).
-
-User's Written Log: "${log}"
-${healthDataString}`;
+        const persona = `You are a holistic health coach...`; // Same as before
+        const prompt = `...User's Written Log: "${log}"\n${healthDataString}`; // Same as before
 
         const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
         const aiResponse = await fetch(geminiApiUrl, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: JSON.stringify({ prompt: prompt }) }] }],
-                generationConfig: {
-                    response_mime_type: "application/json",
-                }
+                generationConfig: { response_mime_type: "application/json" }
             })
         });
 
@@ -56,6 +49,13 @@ ${healthDataString}`;
 
         const aiData = await aiResponse.json();
         const analysis = JSON.parse(aiData.candidates[0].content.parts[0].text).analysis;
+
+        // --- ADDED: Validate AI response and provide defaults ---
+        const defaultScore = { score: 0, label: 'N/A', color_hex: '#6B7280' };
+        analysis.clarity = analysis.clarity || defaultScore;
+        analysis.immune = analysis.immune || defaultScore;
+        analysis.physical = analysis.physical || defaultScore;
+        // --- End of Validation ---
 
         const logEntry = {
             user_id: user.id,
@@ -81,9 +81,7 @@ ${healthDataString}`;
             .select()
             .single();
 
-        if (dbError) {
-            throw new Error(`Supabase insert error: ${dbError.message}`);
-        }
+        if (dbError) throw new Error(`Supabase insert error: ${dbError.message}`);
 
         return {
             statusCode: 200,

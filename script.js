@@ -388,29 +388,33 @@ function renderLogTable(logs) {
 
         td(new Date(logData.created_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }), tr);
         td(logData.log, tr);
-        td(logData.clarity_score, tr, 'score', logData.clarity_label);
-        td(logData.immune_score, tr, 'score', logData.immune_label);
-        td(logData.physical_readiness_score, tr, 'score', logData.physical_readiness_label);
+        td(logData.clarity_label, tr, 'score', logData.clarity_color);
+        td(logData.immune_label, tr, 'score', logData.immune_color);
+        td(logData.physical_readiness_label, tr, 'score', logData.physical_readiness_color);
         td(logData.ai_notes, tr);
         
         tbody.appendChild(tr);
     });
 }
 
-function td(content, parent, type = null, label = '') {
+function td(content, parent, type = null, color = '') {
     const cell = document.createElement('td');
     
-    if (type === 'score' && label) {
+    if (type === 'score') {
         const span = document.createElement('span');
         span.className = 'score-bubble';
-        span.textContent = label;
+        span.textContent = content || 'N/A';
         
-        const score = parseInt(content);
-        if (score <= 2) span.classList.add('score-critical');
-        else if (score <= 4) span.classList.add('score-poor');
-        else if (score <= 6) span.classList.add('score-moderate');
-        else if (score <= 8) span.classList.add('score-good');
-        else if (score > 8) span.classList.add('score-optimal');
+        if (color) {
+            const rgb = color.match(/\d+/g);
+            if (rgb) {
+                span.style.backgroundColor = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.1)`;
+            }
+            span.style.color = color;
+        } else {
+             span.style.backgroundColor = 'rgba(107, 114, 128, 0.1)';
+             span.style.color = '#6B7280';
+        }
 
         cell.appendChild(span);
     } else {
