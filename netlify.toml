@@ -1,16 +1,8 @@
-[build]
-  publish = "."
-  functions = "netlify/functions"
+# This increases the timeout for both the analysis and data-fetching functions.
+# This should resolve the 502 error.
 
-  [build.environment]
-    NODE_VERSION = "18"
-    NODE_MODULES_CACHE = "true"
+[functions."analyze-log"]
+  timeout = 25 # Increase timeout to 25 seconds
 
-[functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
-  external_node_modules = []
-  
-  # This block increases the timeout for our data-fetching function
 [functions."fetch-health-data"]
   timeout = 25 # Increase timeout to 25 seconds
