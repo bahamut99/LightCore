@@ -439,30 +439,12 @@ td:nth-child(6) {
   border-left: 2px solid #4B5563;
 }
 
-/* === ADDED: Google Health Connect Styles === */
+/* === Google Health Connect Styles === */
 .health-connect-container {
   border-top: 1px solid #374151;
   margin-top: 1.5rem;
   padding-top: 1.5rem;
   text-align: center;
-}
-
-.health-connect-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  width: auto;
-  padding: 0.5rem 1rem;
-  background-color: #374151;
-  border: 1px solid #4B5563;
-  font-weight: 500;
-  margin-top: 0;
-  /* Override default button margin */
-}
-
-.health-connect-btn:hover {
-  background-color: #4B5563;
 }
 
 .health-connect-logo {
@@ -484,7 +466,77 @@ p.connected-text {
   color: #9CA3AF;
 }
 
+/* ADDED: New styles for the toggle switch UI */
+.health-connect-container.toggle-style {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-align: left;
+}
+
+.health-connect-container.toggle-style span {
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-left: 0.5rem;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 28px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #374151;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+}
+
+input:checked+.slider {
+  background-color: #2563EB;
+}
+
+input:focus+.slider {
+  box-shadow: 0 0 1px #2563EB;
+}
+
+input:checked+.slider:before {
+  transform: translateX(22px);
+}
+
+.slider.round {
+  border-radius: 34px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
 /* ========================================= */
+
 
 /* === ADDED: Styles for Footer and About Page === */
 .footer {

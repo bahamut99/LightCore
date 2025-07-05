@@ -18,20 +18,20 @@ async function checkGoogleHealthConnection() {
         .from('user_integrations')
         .select('id')
         .eq('provider', 'google-health')
-        .eq('user_id', session.user.id) // Check for the currently logged-in user
-        .maybeSingle(); // Use maybeSingle() to prevent errors if no row is found
+        .eq('user_id', session.user.id)
+        .maybeSingle();
         
     const manualInputs = document.getElementById('manual-sleep-inputs');
-    const connectButton = document.getElementById('google-health-connect');
+    const connectContainer = document.getElementById('google-health-connect');
     const connectedMessage = document.getElementById('google-health-connected');
 
     if (data) { // Connection exists
         manualInputs.style.display = 'none';
-        connectButton.style.display = 'none';
-        connectedMessage.style.display = 'block';
+        connectContainer.style.display = 'none';
+        connectedMessage.style.display = 'flex'; // Use flex to align icon and text
     } else { // No connection
         manualInputs.style.display = 'block';
-        connectButton.style.display = 'block';
+        connectContainer.style.display = 'flex'; // Use flex to align
         connectedMessage.style.display = 'none';
     }
 }
@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalOverlay = document.getElementById('logModal');
     const btn7day = document.getElementById('btn7day');
     const btn30day = document.getElementById('btn30day');
-    const googleHealthBtn = document.getElementById('google-health-btn');
+    const googleHealthToggle = document.getElementById('google-health-toggle'); // MODIFIED
 
     signupForm.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -147,9 +147,12 @@ document.addEventListener('DOMContentLoaded', () => {
         btn7day.classList.remove('active');
     });
 
-    if (googleHealthBtn) {
-        googleHealthBtn.addEventListener('click', () => {
-            window.location.href = '/.netlify/functions/google-auth';
+    // MODIFIED: Use 'change' event on the toggle switch
+    if (googleHealthToggle) {
+        googleHealthToggle.addEventListener('change', () => {
+            if (googleHealthToggle.checked) {
+                window.location.href = '/.netlify/functions/google-auth';
+            }
         });
     }
 });

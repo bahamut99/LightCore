@@ -167,27 +167,29 @@
                 placeholder="1=Poor, 5=Excellent"
               />
             </div>
-            <div id="google-health-connect" class="health-connect-container">
-              <p class="subtle-text" style="margin: 0 0 0.5rem 0">
-                Automate with Google Health
-              </p>
-              <button id="google-health-btn" class="health-connect-btn">
-                <svg class="health-connect-logo">
-                  <use href="#google-health-logo"></use>
-                </svg>
-                <span>Connect</span>
-              </button>
+            <div
+              id="google-health-connect"
+              class="health-connect-container toggle-style"
+            >
+              <svg class="health-connect-logo">
+                <use href="#google-health-logo"></use>
+              </svg>
+              <span>Automate with Google Health</span>
+              <label class="switch">
+                <input type="checkbox" id="google-health-toggle" />
+                <span class="slider round"></span>
+              </label>
             </div>
             <div
               id="google-health-connected"
               class="health-connect-container"
               style="display: none"
             >
-              <p class="subtle-text connected-text">
+              <p class="connected-text">
                 <svg class="health-connect-logo connected">
                   <use href="#google-health-logo"></use>
                 </svg>
-                Sleep data will be imported automatically.
+                Sleep data is automated.
               </p>
             </div>
           </div>
