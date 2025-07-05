@@ -14,12 +14,12 @@ async function checkGoogleHealthConnection() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
     
-    // Check if a token exists for this user
     const { data, error } = await supabase
         .from('user_integrations')
         .select('id')
         .eq('provider', 'google-health')
-        .single();
+        .eq('user_id', session.user.id) // Check for the currently logged-in user
+        .maybeSingle(); // Use maybeSingle() to prevent errors if no row is found
         
     const manualInputs = document.getElementById('manual-sleep-inputs');
     const connectButton = document.getElementById('google-health-connect');
@@ -93,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchAndRenderCharts(7);
             fetchAndDisplayInsight();
             fetchAndRenderInsightHistory();
-            checkGoogleHealthConnection(); // Check connection status on login
+            checkGoogleHealthConnection();
         } else {
             appContainer.style.display = 'none';
             authContainer.style.display = 'block';
