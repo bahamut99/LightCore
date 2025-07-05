@@ -3,7 +3,6 @@ const fetch = require('node-fetch');
 
 exports.handler = async (event, context) => {
     try {
-        // Authenticate user
         const token = event.headers.authorization?.split(' ')[1];
         if (!token) throw new Error('Not authorized: No token.');
 
@@ -13,8 +12,7 @@ exports.handler = async (event, context) => {
 
         const { log, sleep_hours, sleep_quality } = JSON.parse(event.body);
 
-        // Fetch automated health data
-        let objectiveData = {};
+        let healthDataString = "";
         try {
             const healthResponse = await fetch('https://lightcorehealth.netlify.app/.netlify/functions/fetch-health-data', {
                 method: 'POST',
@@ -23,76 +21,54 @@ exports.handler = async (event, context) => {
             if (healthResponse.ok) {
                 const data = await healthResponse.json();
                 if (data && data.steps !== null && data.steps !== undefined) {
-                    objectiveData.steps = data.steps;
+                    healthDataString = `\n---\nAutomated Health Data:\n- Today's Step Count: ${data.steps}\n---`;
                 }
             }
         } catch (e) {
             console.error("Non-critical error fetching health data:", e.message);
         }
+        
+        const persona = `You are a holistic health coach with a kind and empathetic "bedside manner."`;
+        const prompt = `Based on the user's daily log, provide scores for "Clarity" (mental), "Immune" (risk), and "PhysicalReadiness" (output). Each score must be one of three values: "high", "medium", or "low". Also provide a "Notes" string (2-3 sentences max) summarizing your reasoning in a supportive tone. Return your response in a valid JSON object format.
 
-        // --- New Gemini Prompt Structure ---
-        const geminiPrompt = {
-            "userContext": {
-                "timeZone": "America/Chicago" // Example, can be made dynamic later
-            },
-            "subjectiveLog": log,
-            "objectiveData": objectiveData,
-            "scoringRubric": {
-                "1-2": "Critical 🔴",
-                "3-4": "Poor 🟠",
-                "5-6": "Moderate 🟡",
-                "7-8": "Good 🟢",
-                "9-10": "Optimal 🔵"
-            },
-            "instructions": "Analyze the provided subjective log and objective data. Return a JSON object with a root key 'analysis'. This object must contain three keys: 'clarity', 'immune', and 'physical'. Each of these keys should map to an object containing: a 'score' from 1-10, the corresponding 'label' from the rubric, and a 'color_hex' code for that label's color. Also include a top-level 'notes' key with your empathetic analysis (2-3 sentences max)."
-        };
+User's Written Log: "${log}"
+${healthDataString}`;
 
-        const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
-
-        const aiResponse = await fetch(geminiApiUrl, {
+        const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
             },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: JSON.stringify(geminiPrompt) }] }],
-                generationConfig: {
-                    response_mime_type: "application/json",
-                }
+                model: 'gpt-3.5-turbo-1106',
+                messages: [{ role: 'system', content: persona }, { role: 'user', content: prompt }],
             })
         });
 
         if (!aiResponse.ok) {
             const errorBody = await aiResponse.text();
-            throw new Error(`Gemini API error: ${aiResponse.status} ${errorBody}`);
+            throw new Error(`AI API error: ${aiResponse.status} ${errorBody}`);
         }
 
         const aiData = await aiResponse.json();
-        // The Gemini response is nested differently
-        const analysis = aiData.candidates[0].content.parts[0].text.analysis;
+        const analysis = JSON.parse(aiData.choices[0].message.content);
 
-        // --- New Log Entry with detailed scores ---
         const logEntry = {
             user_id: user.id,
             log: log,
-            // Clarity
-            clarity_label: analysis.clarity.label,
-            clarity_score: analysis.clarity.score,
-            clarity_color: analysis.clarity.color_hex,
-            // Immune
-            immune_label: analysis.immune.label,
-            immune_score: analysis.immune.score,
-            immune_color: analysis.immune.color_hex,
-            // Physical
-            physical_readiness_label: analysis.physical.label,
-            physical_readiness_score: analysis.physical.score,
-            physical_readiness_color: analysis.physical.color_hex,
-            // Notes & Sleep
-            ai_notes: analysis.notes,
+            clarity: analysis.Clarity,
+            immune: analysis.Immune,
+            physical_readiness: analysis.PhysicalReadiness,
+            notes: analysis.Notes,
         };
-        
-        if (sleep_hours !== null && !isNaN(sleep_hours)) logEntry.sleep_hours = sleep_hours;
-        if (sleep_quality !== null && !isNaN(sleep_quality)) logEntry.sleep_quality = sleep_quality;
+
+        if (sleep_hours !== null && !isNaN(sleep_hours)) {
+            logEntry.sleep_hours = sleep_hours;
+        }
+        if (sleep_quality !== null && !isNaN(sleep_quality)) {
+            logEntry.sleep_quality = sleep_quality;
+        }
 
         const { data: newLogData, error: dbError } = await supabase
             .from('daily_logs')
@@ -102,18 +78,12 @@ exports.handler = async (event, context) => {
         if (dbError) {
             throw new Error(`Supabase insert error: ${dbError.message}`);
         }
-
-        // The front-end still expects the old property names for now. We will update it in the next phase.
-        const responseData = { ...newLogData[0] };
-        responseData.Clarity = responseData.clarity_label;
-        responseData.Immune = responseData.immune_label;
-        responseData.PhysicalReadiness = responseData.physical_readiness_label;
-        responseData.Notes = responseData.ai_notes;
-        responseData.Log = responseData.log;
         
+        const newLog = newLogData[0];
+
         return {
             statusCode: 200,
-            body: JSON.stringify(responseData),
+            body: JSON.stringify(newLog),
         };
 
     } catch (error) {

@@ -9,7 +9,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let charts = {};
 
-// --- Helper function to check for and save tokens from URL ---
 async function handleTokenCallback() {
     if (window.location.hash.includes('access_token')) {
         const params = new URLSearchParams(window.location.hash.substring(1));
@@ -46,7 +45,6 @@ async function handleTokenCallback() {
     }
 }
 
-// --- Helper function to check for Google Health integration ---
 async function checkGoogleHealthConnection() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
@@ -72,7 +70,6 @@ async function checkGoogleHealthConnection() {
         connectedMessage.style.display = 'none';
     }
 }
-
 
 document.addEventListener('DOMContentLoaded', () => {
     const authContainer = document.getElementById('auth-container');
@@ -245,8 +242,8 @@ async function submitLog() {
         document.querySelector('#btn30day').classList.remove('active');
 
     } catch (e) {
-        alert("Something went wrong:\n" + e.message);
         console.error(e);
+        alert("Something went wrong:\n" + e.message);
     } finally {
         resetUI();
     }
@@ -276,7 +273,14 @@ async function fetchAndRenderCharts(range) {
         const response = await fetch(`/.netlify/functions/get-chart-data?range=${range}`, {
             headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
-        if (!response.ok) throw new Error('Failed to fetch chart data');
+        if (!response.ok) {
+            // Check if the response body contains a specific error message
+            const errorData = await response.json().catch(() => null);
+            if (errorData && errorData.error) {
+                throw new Error(errorData.error);
+            }
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
         renderAllCharts(data);
     } catch (error) {
@@ -360,7 +364,6 @@ async function fetchAndRenderInsightHistory() {
 
 
 function displayResults(result) {
-    // The backend now sends back the full object with new score columns
     document.getElementById('clarity').innerText = `${result.clarity_score}/10 (${result.clarity_label})`;
     document.getElementById('immune').innerText = `${result.immune_score}/10 (${result.immune_label})`;
     document.getElementById('physical').innerText = `${result.physical_readiness_score}/10 (${result.physical_readiness_label})`;
@@ -385,7 +388,7 @@ function renderLogTable(logs) {
         tr.addEventListener('click', () => openLogModal(logData));
 
         td(new Date(logData.created_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }), tr);
-        td(logData.log, tr); // Use new snake_case column names
+        td(logData.log, tr);
         td(logData.clarity_score, tr, 'score', logData.clarity_label);
         td(logData.immune_score, tr, 'score', logData.immune_label);
         td(logData.physical_readiness_score, tr, 'score', logData.physical_readiness_label);
@@ -403,7 +406,6 @@ function td(content, parent, type = null, label = '') {
         span.className = 'score-bubble';
         span.textContent = label;
         
-        // Add score class based on the numeric score
         const score = parseInt(content);
         if (score <= 2) span.classList.add('score-critical');
         else if (score <= 4) span.classList.add('score-poor');
@@ -446,57 +448,49 @@ function resetUI() {
     spinner.style.display = 'none';
 }
 
-// Rewritten to handle KPI & Sparkline display
 function renderAllCharts(data) {
-    // Update KPIs
-    updateKPI('clarity', data.clarityData);
-    updateKPI('immune', data.immuneData);
-    updateKPI('physical', data.physicalData);
-
-    const sparklineOptions = {
-        plugins: { legend: { display: false }, tooltip: { enabled: false } },
-        scales: { 
-            y: { display: false },
-            x: { display: false } 
+    const commonOptions = {
+        plugins: { 
+            legend: { display: false },
+            tooltip: {
+                enabled: true,
+                mode: 'index',
+                intersect: false,
+            }
         },
-        elements: { point: { radius: 0 } },
+        scales: { 
+            y: { 
+                beginAtZero: true, 
+                max: 10,
+                ticks: {
+                    color: '#9CA3AF',
+                    stepSize: 2,
+                }
+            },
+            x: {
+                grid: { display: false },
+                ticks: { color: '#9CA3AF' }
+            } 
+        },
         maintainAspectRatio: false,
     };
 
-    renderChart('clarityChart', data.labels, data.clarityData, '#38bdf8', sparklineOptions);
-    renderChart('immuneChart', data.labels, data.immuneData, '#facc15', sparklineOptions);
-    renderChart('physicalChart', data.labels, data.physicalData, '#4ade80', sparklineOptions);
+    renderChart('clarityChart', 'Mental Clarity', data.labels, data.clarityData, '#38bdf8', commonOptions);
+    renderChart('immuneChart', 'Immune Risk', data.labels, data.immuneData, '#facc15', commonOptions);
+    renderChart('physicalChart', 'Physical Output', data.labels, data.physicalData, '#4ade80', commonOptions);
 }
 
-function updateKPI(metric, data) {
-    const kpiElement = document.getElementById(`${metric}-kpi`);
-    if (!kpiElement) return;
-
-    const latestScore = data.length > 0 ? data[data.length - 1] : 0;
-    kpiElement.textContent = `${latestScore}/10`;
-
-    // Reset colors
-    kpiElement.style.color = '#F9FAFB';
-
-    // Apply color based on score
-    if (latestScore <= 2) kpiElement.style.color = '#ef4444'; // critical
-    else if (latestScore <= 4) kpiElement.style.color = '#f97316'; // poor
-    else if (latestScore <= 6) kpiElement.style.color = '#eab308'; // moderate
-    else if (latestScore <= 8) kpiElement.style.color = '#22c55e'; // good
-    else if (latestScore > 8) kpiElement.style.color = '#3b82f6'; // optimal
-}
-
-function renderChart(canvasId, labels, data, hexColor, options) {
+function renderChart(canvasId, label, labels, data, hexColor, options) {
     if (charts[canvasId]) {
         charts[canvasId].destroy();
     }
     const ctx = document.getElementById(canvasId).getContext('2d');
 
-    const gradient = ctx.createLinearGradient(0, 0, 0, 50);
+    const gradient = ctx.createLinearGradient(0, 0, 0, 180);
     const r = parseInt(hexColor.slice(1, 3), 16);
     const g = parseInt(hexColor.slice(3, 5), 16);
     const b = parseInt(hexColor.slice(5, 7), 16);
-    gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.3)`);
+    gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.4)`);
     gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
 
     charts[canvasId] = new Chart(ctx, {
@@ -504,14 +498,28 @@ function renderChart(canvasId, labels, data, hexColor, options) {
         data: {
             labels: labels,
             datasets: [{
+                label: label,
                 data: data,
                 backgroundColor: gradient,
                 borderColor: hexColor,
                 borderWidth: 2,
+                pointRadius: 3,
+                pointBackgroundColor: hexColor,
                 fill: true,
                 tension: 0.4
             }]
         },
-        options: options
+        options: {
+            ...options,
+            plugins: {
+                ...options.plugins,
+                title: {
+                    display: true,
+                    text: label,
+                    color: '#9CA3AF',
+                    font: { size: 16, family: 'Inter' }
+                }
+            }
+        }
     });
 }
