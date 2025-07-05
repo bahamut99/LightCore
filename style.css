@@ -57,10 +57,6 @@ body {
   border-color: #3B82F6;
 }
 
-.chart-container {
-  margin-bottom: 1.5rem;
-}
-
 /* === GENERAL & HEADER STYLES === */
 .header-container {
   display: flex;
@@ -283,30 +279,79 @@ td:nth-child(6) {
   margin: 0;
 }
 
-.score-good,
-.score-neutral,
-.score-bad {
-  padding: 2px 8px;
+/* MODIFIED: Replaced with new 5-level color system */
+.score-bubble {
+  padding: 2px 10px;
   border-radius: 99px;
   font-size: 0.8rem;
   font-weight: 500;
   text-align: center;
   display: inline-block;
+  min-width: 60px;
+}
+
+.score-critical {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.score-poor {
+  background-color: rgba(249, 115, 22, 0.1);
+  color: #f97316;
+}
+
+.score-moderate {
+  background-color: rgba(234, 179, 8, 0.1);
+  color: #eab308;
 }
 
 .score-good {
-  background-color: rgba(74, 222, 128, 0.1);
-  color: #4ade80;
+  background-color: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
 }
 
-.score-neutral {
-  background-color: rgba(250, 204, 21, 0.1);
-  color: #facc15;
+.score-optimal {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
 }
 
-.score-bad {
-  background-color: rgba(248, 113, 113, 0.1);
-  color: #f87171;
+/* === KPI & Sparkline Styles === */
+.kpi-module {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #374151;
+}
+
+.left-column .card .kpi-module:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.kpi-main {
+  flex-basis: 40%;
+}
+
+.kpi-value {
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.kpi-label {
+  font-size: 0.8rem;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.25rem;
+}
+
+.sparkline-container {
+  flex-basis: 60%;
+  height: 50px;
 }
 
 /* === UTILITY & MODAL STYLES === */
@@ -454,8 +499,7 @@ td:nth-child(6) {
 }
 
 .health-connect-logo.connected {
-  fill: #4ade80;
-  /* Green color when connected */
+  fill: #22c55e;
 }
 
 p.connected-text {
@@ -466,7 +510,6 @@ p.connected-text {
   color: #9CA3AF;
 }
 
-/* ADDED: New styles for the toggle switch UI */
 .health-connect-container.toggle-style {
   display: flex;
   justify-content: space-between;
@@ -535,10 +578,7 @@ input:checked+.slider:before {
   border-radius: 50%;
 }
 
-/* ========================================= */
-
-
-/* === ADDED: Styles for Footer and About Page === */
+/* === Footer and About Page === */
 .footer {
   text-align: center;
   padding: 2rem 1rem;
@@ -572,5 +612,3 @@ input:checked+.slider:before {
   line-height: 1.7;
   color: #D1D5DB;
 }
-
-/* ============================================ */

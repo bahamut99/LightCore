@@ -9,6 +9,43 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let charts = {};
 
+// --- Helper function to check for and save tokens from URL ---
+async function handleTokenCallback() {
+    if (window.location.hash.includes('access_token')) {
+        const params = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        const expiresIn = params.get('expires_in');
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            alert('You must be logged in to connect your account.');
+            return;
+        }
+
+        const expires_at = new Date(Date.now() + expiresIn * 1000).toISOString();
+
+        const integrationData = {
+            user_id: user.id,
+            provider: 'google-health',
+            access_token: accessToken,
+            refresh_token: refreshToken,
+            expires_at: expires_at,
+        };
+
+        const { error } = await supabase
+            .from('user_integrations')
+            .upsert(integrationData, { onConflict: 'user_id, provider' });
+        
+        if (error) {
+            alert(`Error saving integration: ${error.message}`);
+        } else {
+            window.location.hash = '';
+            checkGoogleHealthConnection();
+        }
+    }
+}
+
 // --- Helper function to check for Google Health integration ---
 async function checkGoogleHealthConnection() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -25,13 +62,13 @@ async function checkGoogleHealthConnection() {
     const connectContainer = document.getElementById('google-health-connect');
     const connectedMessage = document.getElementById('google-health-connected');
 
-    if (data) { // Connection exists
+    if (data) {
         manualInputs.style.display = 'none';
         connectContainer.style.display = 'none';
-        connectedMessage.style.display = 'flex'; // Use flex to align icon and text
-    } else { // No connection
+        connectedMessage.style.display = 'flex';
+    } else {
         manualInputs.style.display = 'block';
-        connectContainer.style.display = 'flex'; // Use flex to align
+        connectContainer.style.display = 'flex';
         connectedMessage.style.display = 'none';
     }
 }
@@ -52,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalOverlay = document.getElementById('logModal');
     const btn7day = document.getElementById('btn7day');
     const btn30day = document.getElementById('btn30day');
-    const googleHealthToggle = document.getElementById('google-health-toggle'); // MODIFIED
+    const googleHealthToggle = document.getElementById('google-health-toggle');
 
     signupForm.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -89,11 +126,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (session) {
             authContainer.style.display = 'none';
             appContainer.style.display = 'block';
-            loadRecentLogs();
-            fetchAndRenderCharts(7);
-            fetchAndDisplayInsight();
-            fetchAndRenderInsightHistory();
-            checkGoogleHealthConnection();
+            
+            handleTokenCallback().then(() => {
+                loadRecentLogs();
+                fetchAndRenderCharts(7);
+                fetchAndDisplayInsight();
+                fetchAndRenderInsightHistory();
+                checkGoogleHealthConnection();
+            });
+
         } else {
             appContainer.style.display = 'none';
             authContainer.style.display = 'block';
@@ -147,7 +188,6 @@ document.addEventListener('DOMContentLoaded', () => {
         btn7day.classList.remove('active');
     });
 
-    // MODIFIED: Use 'change' event on the toggle switch
     if (googleHealthToggle) {
         googleHealthToggle.addEventListener('change', () => {
             if (googleHealthToggle.checked) {
@@ -320,10 +360,11 @@ async function fetchAndRenderInsightHistory() {
 
 
 function displayResults(result) {
-    document.getElementById('clarity').innerText = result.Clarity || 'N/A';
-    document.getElementById('immune').innerText = result.Immune || 'N/A';
-    document.getElementById('physical').innerText = result.PhysicalReadiness || 'N/A';
-    document.getElementById('notes').innerText = result.Notes || 'N/A';
+    // The backend now sends back the full object with new score columns
+    document.getElementById('clarity').innerText = `${result.clarity_score}/10 (${result.clarity_label})`;
+    document.getElementById('immune').innerText = `${result.immune_score}/10 (${result.immune_label})`;
+    document.getElementById('physical').innerText = `${result.physical_readiness_score}/10 (${result.physical_readiness_label})`;
+    document.getElementById('notes').innerText = result.ai_notes || 'N/A';
     document.getElementById('results').style.display = 'block';
     document.getElementById('log').value = '';
     document.getElementById('sleep-hours').value = '';
@@ -344,34 +385,33 @@ function renderLogTable(logs) {
         tr.addEventListener('click', () => openLogModal(logData));
 
         td(new Date(logData.created_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }), tr);
-        td(logData.Log, tr);
-        td(logData.Clarity, tr, 'positive');
-        td(logData.Immune, tr, 'inverse');
-        td(logData.PhysicalReadiness, tr, 'positive');
-        td(logData.Notes, tr);
+        td(logData.log, tr); // Use new snake_case column names
+        td(logData.clarity_score, tr, 'score', logData.clarity_label);
+        td(logData.immune_score, tr, 'score', logData.immune_label);
+        td(logData.physical_readiness_score, tr, 'score', logData.physical_readiness_label);
+        td(logData.ai_notes, tr);
         
         tbody.appendChild(tr);
     });
 }
 
-function td(content, parent, scoreType = null) {
+function td(content, parent, type = null, label = '') {
     const cell = document.createElement('td');
+    
+    if (type === 'score') {
+        const span = document.createElement('span');
+        span.className = 'score-bubble';
+        span.textContent = label;
+        
+        // Add score class based on the numeric score
+        const score = parseInt(content);
+        if (score <= 2) span.classList.add('score-critical');
+        else if (score <= 4) span.classList.add('score-poor');
+        else if (score <= 6) span.classList.add('score-moderate');
+        else if (score <= 8) span.classList.add('score-good');
+        else if (score > 8) span.classList.add('score-optimal');
 
-    if (scoreType) {
-        const bubble = document.createElement('span');
-        bubble.textContent = content;
-        const value = String(content || '').toLowerCase();
-
-        if (scoreType === 'positive') {
-            if (value === 'high') bubble.classList.add('score-good');
-            else if (value === 'medium') bubble.classList.add('score-neutral');
-            else if (value === 'low') bubble.classList.add('score-bad');
-        } else if (scoreType === 'inverse') {
-            if (value === 'high') bubble.classList.add('score-bad');
-            else if (value === 'medium') bubble.classList.add('score-neutral');
-            else if (value === 'low') bubble.classList.add('score-good');
-        }
-        cell.appendChild(bubble);
+        cell.appendChild(span);
     } else {
         cell.textContent = content;
     }
@@ -381,15 +421,15 @@ function td(content, parent, scoreType = null) {
 
 function openLogModal(logData) {
     document.getElementById('modalDate').textContent = new Date(logData.created_at).toLocaleString();
-    document.getElementById('modalLog').textContent = logData.Log;
+    document.getElementById('modalLog').textContent = logData.log;
     
     document.getElementById('modalSleepHours').textContent = logData.sleep_hours || 'N/A';
     document.getElementById('modalSleepQuality').textContent = logData.sleep_quality ? `${logData.sleep_quality} / 5` : 'N/A';
     
-    document.getElementById('modalClarity').textContent = logData.Clarity;
-    document.getElementById('modalImmune').textContent = logData.Immune;
-    document.getElementById('modalPhysical').textContent = logData.PhysicalReadiness;
-    document.getElementById('modalNotes').textContent = logData.Notes;
+    document.getElementById('modalClarity').textContent = `${logData.clarity_score}/10 (${logData.clarity_label})`;
+    document.getElementById('modalImmune').textContent = `${logData.immune_score}/10 (${logData.immune_label})`;
+    document.getElementById('modalPhysical').textContent = `${logData.physical_readiness_score}/10 (${logData.physical_readiness_label})`;
+    document.getElementById('modalNotes').textContent = logData.ai_notes;
     
     document.getElementById('logModal').style.display = 'flex';
 }
@@ -406,54 +446,57 @@ function resetUI() {
     spinner.style.display = 'none';
 }
 
+// Rewritten to handle KPI & Sparkline display
 function renderAllCharts(data) {
-    const commonOptions = {
-        plugins: { 
-            legend: { display: false },
-            title: { display: true, font: { size: 16, family: 'Inter' }, color: '#9CA3AF' }
-        },
+    // Update KPIs
+    updateKPI('clarity', data.clarityData);
+    updateKPI('immune', data.immuneData);
+    updateKPI('physical', data.physicalData);
+
+    const sparklineOptions = {
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
         scales: { 
-            y: { 
-                beginAtZero: true, 
-                max: 4,
-                grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                ticks: {
-                    color: '#9CA3AF',
-                    stepSize: 1,
-                    callback: function(value) {
-                        const labels = ['', 'Low', 'Medium', 'High'];
-                        return labels[value];
-                    }
-                }
-            },
-            x: {
-                grid: { display: false },
-                ticks: { color: '#9CA3AF' }
-            } 
+            y: { display: false },
+            x: { display: false } 
         },
-        elements: { line: { tension: 0.4 } }
+        elements: { point: { radius: 0 } },
+        maintainAspectRatio: false,
     };
 
-    const clarityColor = '#38bdf8';
-    const immuneColor = '#facc15';
-    const physicalColor = '#4ade80';
-
-    renderChart('clarityChart', 'Mental Clarity', data.labels, data.clarityData, clarityColor, commonOptions);
-    renderChart('immuneChart', 'Immune Risk', data.labels, data.immuneData, immuneColor, commonOptions);
-    renderChart('physicalChart', 'Physical Output', data.labels, data.physicalData, physicalColor, commonOptions);
+    renderChart('clarityChart', data.labels, data.clarityData, '#38bdf8', sparklineOptions);
+    renderChart('immuneChart', data.labels, data.immuneData, '#facc15', sparklineOptions);
+    renderChart('physicalChart', data.labels, data.physicalData, '#4ade80', sparklineOptions);
 }
 
-function renderChart(canvasId, label, labels, data, hexColor, options) {
+function updateKPI(metric, data) {
+    const kpiElement = document.getElementById(`${metric}-kpi`);
+    if (!kpiElement) return;
+
+    const latestScore = data.length > 0 ? data[data.length - 1] : 0;
+    kpiElement.textContent = `${latestScore}/10`;
+
+    // Reset colors
+    kpiElement.style.color = '#F9FAFB';
+
+    // Apply color based on score
+    if (latestScore <= 2) kpiElement.style.color = '#ef4444'; // critical
+    else if (latestScore <= 4) kpiElement.style.color = '#f97316'; // poor
+    else if (latestScore <= 6) kpiElement.style.color = '#eab308'; // moderate
+    else if (latestScore <= 8) kpiElement.style.color = '#22c55e'; // good
+    else if (latestScore > 8) kpiElement.style.color = '#3b82f6'; // optimal
+}
+
+function renderChart(canvasId, labels, data, hexColor, options) {
     if (charts[canvasId]) {
         charts[canvasId].destroy();
     }
     const ctx = document.getElementById(canvasId).getContext('2d');
 
-    const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+    const gradient = ctx.createLinearGradient(0, 0, 0, 50);
     const r = parseInt(hexColor.slice(1, 3), 16);
     const g = parseInt(hexColor.slice(3, 5), 16);
     const b = parseInt(hexColor.slice(5, 7), 16);
-    gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.4)`);
+    gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.3)`);
     gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
 
     charts[canvasId] = new Chart(ctx, {
@@ -461,25 +504,14 @@ function renderChart(canvasId, label, labels, data, hexColor, options) {
         data: {
             labels: labels,
             datasets: [{
-                label: label,
                 data: data,
                 backgroundColor: gradient,
                 borderColor: hexColor,
                 borderWidth: 2,
-                pointRadius: 3,
-                pointBackgroundColor: hexColor,
                 fill: true,
+                tension: 0.4
             }]
         },
-        options: {
-            ...options,
-            plugins: { 
-                ...options.plugins,
-                title: { 
-                    ...options.plugins.title,
-                    text: label 
-                } 
-            }
-        }
+        options: options
     });
 }
