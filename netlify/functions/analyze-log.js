@@ -2,48 +2,53 @@ const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
 exports.handler = async (event, context) => {
-    console.log('--- analyze-log function started ---');
+    const token = event.headers.authorization?.split(' ')[1];
+    if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Not authorized.' }) };
+
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+
+    if (userError || !user) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
+    }
+
+    const { log, sleep_hours, sleep_quality } = JSON.parse(event.body);
+
+    let healthDataString = "";
     try {
-        const token = event.headers.authorization?.split(' ')[1];
-        if (!token) {
-            console.error('Auth Error: No token provided.');
-            return { statusCode: 401, body: JSON.stringify({ error: 'Not authorized: No token.' }) };
-        }
-
-        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-
-        if (userError || !user) {
-            console.error('Auth Error: User not found or token invalid.', userError);
-            return { statusCode: 401, body: JSON.stringify({ error: 'User not found or token invalid.' }) };
-        }
-        console.log('Step 1: User authenticated successfully.');
-
-        const { log, sleep_hours, sleep_quality } = JSON.parse(event.body);
-
-        let healthDataString = "";
-        try {
-            console.log('Step 2: Attempting to fetch health data...');
-            const healthResponse = await fetch('https://lightcorehealth.netlify.app/.netlify/functions/fetch-health-data', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            console.log(`Step 2a: Health data fetch response status: ${healthResponse.status}`);
-            
-            if (healthResponse.ok) {
-                const data = await healthResponse.json();
-                if (data && data.steps !== null && data.steps !== undefined) {
-                    healthDataString = `\n---\nAutomated Health Data:\n- Today's Step Count: ${data.steps}\n---`;
-                }
-            }
-        } catch (e) {
-            console.error("Non-critical error: Could not fetch health data.", e);
-        }
+        const healthResponse = await fetch('https://lightcorehealth.netlify.app/.netlify/functions/fetch-health-data', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
         
-        const persona = `You are a holistic health coach...`; // (Content is the same)
-        const prompt = `...User's Written Log: "${log}"\n${healthDataString}`; // (Content is the same)
+        if (healthResponse.ok) {
+            const data = await healthResponse.json();
+            if (data && data.steps !== null && data.steps !== undefined) {
+                healthDataString = `
+---
+Automated Health Data:
+- Today's Step Count: ${data.steps}
+---
+`;
+            }
+        }
+    } catch (e) {
+        console.error("Could not fetch health data:", e.message);
+    }
+    
+    const persona = `You are a holistic health coach with a kind and empathetic "bedside manner."`;
 
-        console.log('Step 3: Calling OpenAI API...');
+    // MODIFIED: The prompt now explicitly asks for JSON, satisfying the API requirement.
+    const prompt = `Based on the user's daily log, provide scores for "Clarity" (mental), "Immune" (risk), and "PhysicalReadiness" (output). Each score must be one of three values: "high", "medium", or "low". Also provide a "Notes" string (2-3 sentences max) summarizing your reasoning in a supportive tone. Return your response in a valid JSON object format.
+
+Here is the user's log and any automated health data available:
+
+User's Written Log: "${log}"
+
+${healthDataString}
+`;
+
+    try {
         const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -52,11 +57,13 @@ exports.handler = async (event, context) => {
             },
             body: JSON.stringify({
                 model: 'gpt-3.5-turbo-1106',
-                messages: [{ role: 'system', content: persona }, { role: 'user', content: prompt }],
+                messages: [
+                    { role: 'system', content: persona },
+                    { role: 'user', content: prompt }
+                ],
                 response_format: { type: "json_object" }
             })
         });
-        console.log(`Step 3a: OpenAI response status: ${aiResponse.status}`);
 
         if (!aiResponse.ok) {
             const errorBody = await aiResponse.text();
@@ -64,7 +71,6 @@ exports.handler = async (event, context) => {
         }
 
         const aiData = await aiResponse.json();
-        console.log('Step 4: AI response received and parsed.');
         const analysis = JSON.parse(aiData.choices[0].message.content);
 
         const logEntry = {
@@ -78,23 +84,24 @@ exports.handler = async (event, context) => {
             sleep_quality
         };
 
-        console.log('Step 5: Inserting new log into database...');
-        const { data: newLog, error: dbError } = await supabase.from('logs').insert(logEntry).select().single();
-        if (dbError) throw dbError;
-        
-        console.log('Step 6: Successfully finished.');
+        const { data: newLog, error } = await supabase
+            .from('logs')
+            .insert(logEntry)
+            .select()
+            .single();
+
+        if (error) throw error;
+
         return {
             statusCode: 200,
             body: JSON.stringify(newLog),
         };
 
     } catch (error) {
-        console.error('--- CRITICAL ERROR in analyze-log ---');
-        console.error('Error Message:', error.message);
-        console.error('Full Error Object:', JSON.stringify(error, null, 2));
+        console.error('Error in analyze-log function:', error);
         return {
             statusCode: 500,
-            body: JSON.stringify({ error: 'A critical error occurred. Check function logs.' }),
+            body: JSON.stringify({ error: error.message }),
         };
     }
 };
