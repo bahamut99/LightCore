@@ -124,3 +124,8 @@ exports.handler = async (event, context) => {
         };
     }
 };
+
+// This exports a config object to override the default timeout
+exports.config = {
+  timeout: 25,
+};

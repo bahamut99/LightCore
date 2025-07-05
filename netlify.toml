@@ -1,8 +1,0 @@
-# This increases the timeout for both the analysis and data-fetching functions.
-# This should resolve the 502 error.
-
-[functions."analyze-log"]
-  timeout = 25 # Increase timeout to 25 seconds
-
-[functions."fetch-health-data"]
-  timeout = 25 # Increase timeout to 25 seconds

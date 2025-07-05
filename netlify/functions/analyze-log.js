@@ -22,13 +22,14 @@ exports.handler = async (event, context) => {
         });
         if (healthResponse.ok) {
             const data = await healthResponse.json();
-            // --- Format the data for the AI prompt ---
-            healthDataString = `
+            if (data.steps !== null) {
+                healthDataString = `
 ---
 Automated Health Data:
-- Today's Step Count: ${data.steps || 'Not available'}
+- Today's Step Count: ${data.steps}
 ---
 `;
+            }
         }
     } catch (e) {
         console.error("Could not fetch health data:", e.message);
@@ -101,4 +102,9 @@ ${healthDataString}
             body: JSON.stringify({ error: error.message }),
         };
     }
+};
+
+// This exports a config object to override the default timeout
+exports.config = {
+  timeout: 25,
 };
