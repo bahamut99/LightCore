@@ -3,7 +3,6 @@ const fetch = require('node-fetch');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-// Helper function to calculate standard deviation
 function getStandardDeviation(numbers) {
     const n = numbers.length;
     if (n < 2) return 0;
@@ -12,7 +11,6 @@ function getStandardDeviation(numbers) {
     return Math.sqrt(variance);
 }
 
-// Helper function to find the trend slope
 function getTrend(scores) {
     if (scores.length < 3) return 0;
     let n = scores.length;
@@ -30,7 +28,9 @@ function getTrend(scores) {
 exports.handler = async (event, context) => {
     console.log("--- Trend Sentinel Activated ---");
     try {
-        const { data: users, error: userError } = await supabase.from('users').select('id');
+        // MODIFIED: Use the correct admin function to list all users
+        const { data: { users }, error: userError } = await supabase.auth.admin.listUsers();
+        
         if (userError) throw new Error(`Error fetching users: ${userError.message}`);
         if (!users || users.length === 0) {
             console.log("No users to process. Exiting.");
@@ -48,30 +48,27 @@ exports.handler = async (event, context) => {
                 .gte('created_at', sevenDaysAgo.toISOString())
                 .order('created_at', { ascending: true });
 
-            if (logError || logs.length < 4) continue;
+            if (logError || !logs || logs.length < 4) continue;
 
             const metrics = {
-                clarity: logs.map(l => l.clarity_score),
-                immune: logs.map(l => l.immune_score),
-                physical: logs.map(l => l.physical_readiness_score),
+                clarity: logs.map(l => l.clarity_score).filter(s => s !== null),
+                immune: logs.map(l => l.immune_score).filter(s => s !== null),
+                physical: logs.map(l => l.physical_readiness_score).filter(s => s !== null),
             };
 
             for (const metricName in metrics) {
                 const scores = metrics[metricName];
+                if (scores.length < 4) continue; // Not enough data points for this specific metric
                 
-                // 1. Calculate the trend
                 const trendSlope = getTrend(scores);
-                
-                // 2. Calculate volatility (standard deviation) for a confidence score
                 const volatility = getStandardDeviation(scores);
 
-                // 3. Only fire a nudge if the trend is clearly negative and the data isn't too noisy
                 const isSignificantTrend = trendSlope < -0.4;
-                const isStableData = volatility < 2.5; // Tunable: a lower number requires more stability
+                const isStableData = volatility < 2.5;
 
                 if (isSignificantTrend && isStableData) { 
-                    const persona = `You are the Trend Sentinel AI...`; // Full persona
-                    const prompt = `A high-confidence downward trend was detected in a user's ${metricName} score...`; // Full prompt
+                    const persona = `You are the Trend Sentinel AI...`;
+                    const prompt = `A high-confidence downward trend was detected...`;
 
                     const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
                     const aiResponse = await fetch(geminiApiUrl, { /* ... */ });
@@ -87,7 +84,7 @@ exports.handler = async (event, context) => {
                     });
 
                     console.log(`Nudge generated for user ${user.id} for metric ${metricName}`);
-                    break; 
+                    break;
                 }
             }
         }
