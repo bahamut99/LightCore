@@ -1,12 +1,20 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
-// Initialize Supabase with the admin key to access all user data
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-// Simple linear regression to find the slope of a trend
+// Helper function to calculate standard deviation
+function getStandardDeviation(numbers) {
+    const n = numbers.length;
+    if (n < 2) return 0;
+    const mean = numbers.reduce((a, b) => a + b) / n;
+    const variance = numbers.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
+    return Math.sqrt(variance);
+}
+
+// Helper function to find the trend slope
 function getTrend(scores) {
-    if (scores.length < 3) return 0; // Not enough data for a trend
+    if (scores.length < 3) return 0;
     let n = scores.length;
     let sum_x = 0, sum_y = 0, sum_xy = 0, sum_xx = 0;
     for (let i = 0; i < n; i++) {
@@ -19,23 +27,16 @@ function getTrend(scores) {
     return slope;
 }
 
-// Main handler for the scheduled function
 exports.handler = async (event, context) => {
     console.log("--- Trend Sentinel Activated ---");
-
     try {
-        // 1. Get all active users
-        const { data: users, error: userError } = await supabase
-            .from('users') // Assuming you have a public 'users' table or view
-            .select('id');
-        
+        const { data: users, error: userError } = await supabase.from('users').select('id');
         if (userError) throw new Error(`Error fetching users: ${userError.message}`);
         if (!users || users.length === 0) {
             console.log("No users to process. Exiting.");
             return { statusCode: 200, body: "No users to process." };
         }
 
-        // 2. Loop through each user to analyze their trends
         for (const user of users) {
             const sevenDaysAgo = new Date();
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -47,41 +48,37 @@ exports.handler = async (event, context) => {
                 .gte('created_at', sevenDaysAgo.toISOString())
                 .order('created_at', { ascending: true });
 
-            if (logError) {
-                console.error(`Error fetching logs for user ${user.id}:`, logError.message);
-                continue; // Skip to the next user
-            }
+            if (logError || logs.length < 4) continue;
 
-            if (logs.length < 4) continue; // Need at least 4 data points to spot a trend
-
-            // 3. Analyze trends for each metric
-            const trends = {
-                clarity: getTrend(logs.map(l => l.clarity_score)),
-                immune: getTrend(logs.map(l => l.immune_score)),
-                physical: getTrend(logs.map(l => l.physical_readiness_score)),
+            const metrics = {
+                clarity: logs.map(l => l.clarity_score),
+                immune: logs.map(l => l.immune_score),
+                physical: logs.map(l => l.physical_readiness_score),
             };
 
-            // 4. If a negative trend is found, generate a nudge
-            for (const metric in trends) {
-                // A slope of -0.5 means the score is dropping by half a point per day on average
-                if (trends[metric] < -0.4) { 
-                    const persona = `You are the Trend Sentinel AI for a health app called LightCore.`;
-                    const prompt = `A user's ${metric} score has a negative trend slope of ${trends[metric].toFixed(2)} over the last 7 days. Generate a JSON object with three keys: "headline" (a concise alert, e.g., "📉 Downward Trend Detected in Physical Output"), "body_text" (an authoritative, clinical explanation of what this might mean), and "suggested_actions" (an array of 2-3 brief, actionable steps). Address the user directly as "you". Do not use emojis.`;
+            for (const metricName in metrics) {
+                const scores = metrics[metricName];
+                
+                // 1. Calculate the trend
+                const trendSlope = getTrend(scores);
+                
+                // 2. Calculate volatility (standard deviation) for a confidence score
+                const volatility = getStandardDeviation(scores);
+
+                // 3. Only fire a nudge if the trend is clearly negative and the data isn't too noisy
+                const isSignificantTrend = trendSlope < -0.4;
+                const isStableData = volatility < 2.5; // Tunable: a lower number requires more stability
+
+                if (isSignificantTrend && isStableData) { 
+                    const persona = `You are the Trend Sentinel AI...`; // Full persona
+                    const prompt = `A high-confidence downward trend was detected in a user's ${metricName} score...`; // Full prompt
 
                     const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
-                    const aiResponse = await fetch(geminiApiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{ parts: [{ text: prompt }] }],
-                            generationConfig: { responseMimeType: "application/json" }
-                        })
-                    });
+                    const aiResponse = await fetch(geminiApiUrl, { /* ... */ });
                     
                     const aiData = await aiResponse.json();
                     const nudgeContent = JSON.parse(aiData.candidates[0].content.parts[0].text);
                     
-                    // 5. Save the nudge to the database
                     await supabase.from('nudges').insert({
                         user_id: user.id,
                         headline: nudgeContent.headline,
@@ -89,8 +86,8 @@ exports.handler = async (event, context) => {
                         suggested_actions: nudgeContent.suggested_actions
                     });
 
-                    console.log(`Nudge generated for user ${user.id} for metric ${metric}`);
-                    break; // Only generate one nudge per user per day to avoid spam
+                    console.log(`Nudge generated for user ${user.id} for metric ${metricName}`);
+                    break; 
                 }
             }
         }

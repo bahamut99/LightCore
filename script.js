@@ -81,6 +81,58 @@ function showToast(message) {
     }, 3000);
 }
 
+async function acknowledgeNudge(nudgeId) {
+    const { error } = await supabase
+        .from('nudges')
+        .update({ is_acknowledged: true })
+        .eq('id', nudgeId);
+    
+    if (error) {
+        alert('Could not acknowledge nudge.');
+    } else {
+        document.getElementById('nudge-card').style.display = 'none';
+    }
+}
+
+async function fetchAndDisplayNudge() {
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const response = await fetch('/.netlify/functions/get-nudges', {
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (!response.ok) return;
+
+        const nudge = await response.json();
+        if (nudge) {
+            document.getElementById('nudge-card').style.display = 'block';
+            document.getElementById('nudge-headline').textContent = nudge.headline;
+            document.getElementById('nudge-body').textContent = nudge.body_text;
+            
+            const actionsContainer = document.getElementById('nudge-actions');
+            actionsContainer.innerHTML = ''; 
+            
+            if (nudge.suggested_actions && nudge.suggested_actions.length > 0) {
+                nudge.suggested_actions.forEach(actionText => {
+                    const button = document.createElement('button');
+                    button.textContent = actionText;
+                    button.onclick = () => alert(`Action: ${actionText}`);
+                    actionsContainer.appendChild(button);
+                });
+            }
+            
+            const dismissButton = document.createElement('button');
+            dismissButton.textContent = 'Acknowledge & Dismiss';
+            dismissButton.onclick = () => acknowledgeNudge(nudge.id);
+            actionsContainer.appendChild(dismissButton);
+        }
+    } catch (e) {
+        console.error("Error fetching nudge:", e.message);
+    }
+}
+
+
 document.addEventListener('DOMContentLoaded', () => {
     const authContainer = document.getElementById('auth-container');
     const appContainer = document.getElementById('app-container');
@@ -140,6 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 fetchAndDisplayInsight();
                 fetchAndRenderInsightHistory();
                 checkGoogleHealthConnection();
+                fetchAndDisplayNudge();
             });
 
         } else {

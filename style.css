@@ -581,3 +581,34 @@ input:checked+.slider:before {
   visibility: visible;
   opacity: 1;
 }
+
+/* === Styles for Nudge Card === */
+.nudge-card {
+  border-color: rgba(249, 115, 22, 0.4);
+  border-width: 1px;
+}
+
+.nudge-card h2 {
+  color: #f97316;
+  font-size: 1.2rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.nudge-card p {
+  margin: 0.5rem 0 1rem 0;
+  line-height: 1.6;
+}
+
+#nudge-actions button {
+  background-color: #374151;
+  border: 1px solid #4B5563;
+  width: auto;
+  padding: 0.5rem 1rem;
+  margin-right: 0.5rem;
+  font-size: 0.8rem;
+}
+
+#nudge-actions button:hover {
+  background-color: #4B5563;
+}
