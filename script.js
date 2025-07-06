@@ -111,7 +111,7 @@ async function fetchAndDisplayNudge() {
             document.getElementById('nudge-body').textContent = nudge.body_text;
             
             const actionsContainer = document.getElementById('nudge-actions');
-            actionsContainer.innerHTML = ''; 
+            actionsContainer.innerHTML = '';
 
             if (nudge.suggested_actions && nudge.suggested_actions.length > 0) {
                 nudge.suggested_actions.forEach(actionText => {
