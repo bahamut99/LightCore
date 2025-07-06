@@ -1,109 +1,45 @@
-const { createClient } = require('@supabase/supabase-js');
-
-// Helper function to calculate standard deviation for volatility
-function getStandardDeviation(numbers) {
-    const n = numbers.length;
-    if (n < 2) return 0;
-    const mean = numbers.reduce((a, b) => a + b) / n;
-    const variance = numbers.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
-    return Math.sqrt(variance);
-}
-
-// Helper function to find the trend slope using linear regression
-function getTrend(scores) {
-    if (scores.length < 3) return 0;
-    let n = scores.length;
-    let sum_x = 0, sum_y = 0, sum_xy = 0, sum_xx = 0;
-    for (let i = 0; i < n; i++) {
-        sum_x += i;
-        sum_y += scores[i];
-        sum_xy += (i * scores[i]);
-        sum_xx += (i * i);
-    }
-    const slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x * sum_x);
-    return isNaN(slope) ? 0 : slope;
-}
-
-// Main handler for the scheduled function
 exports.handler = async (event, context) => {
-    console.log("--- Trend Sentinel Activated ---");
+    console.log("--- Starting Gemini API Connection Test ---");
     try {
-        const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+        const geminiKey = process.env.GEMINI_API_KEY;
 
-        const { data: { users }, error: userError } = await supabaseAdmin.auth.admin.listUsers();
-        if (userError) throw new Error(`Error fetching users: ${userError.message}`);
-        if (!users || users.length === 0) {
-            console.log("No users to process. Exiting.");
-            return { statusCode: 200, body: "No users to process." };
+        if (!geminiKey) {
+            throw new Error("TEST FAILED: GEMINI_API_KEY environment variable is missing.");
+        }
+        console.log("Step 1: GEMINI_API_KEY found.");
+
+        const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+        const testPrompt = "Briefly, what is the function of mitochondria?";
+
+        console.log("Step 2: Calling Gemini API...");
+        const aiResponse = await fetch(geminiApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: testPrompt }] }]
+            })
+        });
+
+        if (!aiResponse.ok) {
+            const errorBody = await aiResponse.text();
+            throw new Error(`TEST FAILED: Gemini API returned an error. Status: ${aiResponse.status}. Body: ${errorBody}`);
         }
 
-        for (const user of users) {
-            const sevenDaysAgo = new Date();
-            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        console.log("Step 3: Gemini API call successful.");
+        const aiData = await aiResponse.json();
+        const responseText = aiData.candidates[0].content.parts[0].text;
 
-            const { data: logs, error: logError } = await supabaseAdmin
-                .from('daily_logs')
-                .select('clarity_score, immune_score, physical_readiness_score')
-                .eq('user_id', user.id)
-                .gte('created_at', sevenDaysAgo.toISOString())
-                .order('created_at', { ascending: true });
-
-            if (logError || !logs || logs.length < 4) continue;
-
-            const metrics = {
-                Clarity: logs.map(l => l.clarity_score).filter(s => s !== null),
-                Immune: logs.map(l => l.immune_score).filter(s => s !== null),
-                Physical: logs.map(l => l.physical_readiness_score).filter(s => s !== null),
-            };
-
-            for (const metricName in metrics) {
-                const scores = metrics[metricName];
-                if (scores.length < 4) continue;
-                
-                const trendSlope = getTrend(scores);
-                const volatility = getStandardDeviation(scores);
-
-                const isSignificantTrend = trendSlope < -0.4;
-                const isStableData = volatility < 2.5;
-
-                if (isSignificantTrend && isStableData) { 
-                    const persona = `You are the Trend Sentinel AI...`;
-                    const prompt = `A high-confidence downward trend was detected...`;
-
-                    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
-                    
-                    const aiResponse = await fetch(geminiApiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{ parts: [{ text: prompt }] }],
-                            generationConfig: { responseMimeType: "application/json" }
-                        })
-                    });
-                    
-                    if (!aiResponse.ok) continue;
-                    
-                    const aiData = await aiResponse.json();
-                    const nudgeContent = JSON.parse(aiData.candidates[0].content.parts[0].text);
-                    
-                    await supabaseAdmin.from('nudges').insert({
-                        user_id: user.id,
-                        headline: nudgeContent.headline,
-                        body_text: nudgeContent.body_text,
-                        suggested_actions: nudgeContent.suggested_actions
-                    });
-
-                    console.log(`Nudge generated for user ${user.id} for metric ${metricName}`);
-                    break; 
-                }
-            }
-        }
-        
-        console.log("--- Trend Sentinel run complete ---");
-        return { statusCode: 200, body: "Trend Sentinel run complete." };
+        return {
+            statusCode: 200,
+            body: `SUCCESS: Connection to Gemini API worked. It responded with: "${responseText}"`
+        };
 
     } catch (error) {
-        console.error("CRITICAL ERROR in Trend Sentinel:", error.message, error.stack);
-        return { statusCode: 500, body: `Error: ${error.message}` };
+        console.error("--- TEST FAILED ---");
+        console.error(error);
+        return {
+            statusCode: 500,
+            body: `Error during Gemini API test: ${error.message}`
+        };
     }
 };
