@@ -12,17 +12,20 @@ exports.handler = async (event, context) => {
         const { data, error } = await supabase
             .from('daily_logs')
             .select('created_at, ai_notes')
-            .not('ai_notes', 'is', null)
+            // .not('ai_notes', 'is', null) // Temporarily removed to ensure all notes are fetched
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
             .limit(20);
 
         if (error) throw new Error(`Supabase fetch error: ${error.message}`);
         
-        const insights = data.map(item => ({
-            created_at: item.created_at,
-            insight_text: item.ai_notes 
-        }));
+        // Filter out logs that genuinely have no notes, then map the rest
+        const insights = data
+            .filter(item => item.ai_notes)
+            .map(item => ({
+                created_at: item.created_at,
+                insight_text: item.ai_notes 
+            }));
 
         return {
             statusCode: 200,
