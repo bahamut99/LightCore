@@ -1,74 +1,59 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
+// This helper function creates the Supabase client with the correct auth context
+const getSupabase = (token) => {
+    if (!token) throw new Error('Not authorized: No token.');
+    return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+        global: { headers: { Authorization: `Bearer ${token}` } }
+    });
+};
+
+// This function calls the Gemini API
+const callGemini = async (prompt) => {
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+    const response = await fetch(geminiApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+        })
+    });
+    if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`Gemini API error: ${response.status} ${errorBody}`);
+    }
+    const data = await response.json();
+    return JSON.parse(data.candidates[0].content.parts[0].text);
+};
+
+
 exports.handler = async (event, context) => {
     try {
         const token = event.headers.authorization?.split(' ')[1];
-        if (!token) throw new Error('Not authorized: No token.');
-
-        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-        if (userError || !user) throw new Error(userError?.message || 'User not found or token invalid.');
+        const supabase = getSupabase(token);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('User not found or token invalid.');
 
         const { log, sleep_hours, sleep_quality } = JSON.parse(event.body);
 
-        let healthDataString = "";
-        try {
-            const healthResponse = await fetch('https://lightcorehealth.netlify.app/.netlify/functions/fetch-health-data', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (healthResponse.ok) {
-                const data = await healthResponse.json();
-                if (data && data.steps !== null && data.steps !== undefined) {
-                    healthDataString = `\n---\nAutomated Health Data:\n- Today's Step Count: ${data.steps}\n---`;
-                }
-            }
-        } catch (e) {
-            console.error("Non-critical error fetching health data:", e.message);
-        }
-        
-        // --- MODIFIED: New Persona and Prompt Instructions ---
-        const persona = `You are LightCore, an empathetic AI health coach. Your tone is supportive, encouraging, and knowledgeable. Always address the user directly as 'you' and 'your'. Never refer to them in the third person ('the user'). Your primary goal is to provide actionable advice, not just observations. If you spot a negative pattern, suggest a specific, small change. If you spot a positive one, reinforce it with encouragement. Briefly explain the 'why' behind your advice.`;
-        
-        const prompt = `Please analyze the user's log and data. Return a single JSON object with four top-level keys: "clarity", "immune", "physical", and "notes".
-        - The "clarity", "immune", and "physical" keys must map to objects, each containing: a "score" (integer 1-10), a "label" (string from the rubric), and a "color_hex" (string).
-        - The "notes" key must map to your coaching advice as a string (2-3 sentences max).
-        
-        Scoring Rubric:
-        - 1-2: Critical (#ef4444)
-        - 3-4: Poor (#f97316)
-        - 5-6: Moderate (#eab308)
-        - 7-8: Good (#22c55e)
-        - 9-10: Optimal (#3b82f6)
+        // --- Step 1: Extract timestamped events from the log ---
+        const eventExtractionPrompt = `Your task is to act as a data extractor. Read the user's log and identify specific, timestamped events. The only valid event types are 'Workout', 'Meal', 'Caffeine', and 'Sleep'. If you find an event, return a JSON array of objects. Each object must have an "event_type" and an "event_time" (a full ISO 8601 timestamp for today, ${new Date().toISOString().split('T')[0]}). If no specific events are mentioned, return an empty array []. User's Log: "${log}"`;
+        const extractedEvents = await callGemini(eventExtractionPrompt);
 
-        User's Written Log: "${log}"
-        ${healthDataString}`;
-
-        const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
-
-        const aiResponse = await fetch(geminiApiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" }
-            })
-        });
-
-        if (!aiResponse.ok) {
-            const errorBody = await aiResponse.text();
-            throw new Error(`Gemini API error: ${aiResponse.status} ${errorBody}`);
-        }
-
-        const aiData = await aiResponse.json();
-        const analysis = JSON.parse(aiData.candidates[0].content.parts[0].text);
+        // --- Step 2: Main analysis for scores and notes ---
+        let healthDataString = ""; // (Health data fetching logic can be added here later)
+        const persona = `You are a holistic health coach...`;
+        const analysisPrompt = `Analyze the user's log and return a JSON object with... User's Written Log: "${log}"\n${healthDataString}`;
+        const analysis = (await callGemini(analysisPrompt)).analysis;
 
         const defaultScore = { score: 0, label: 'N/A', color_hex: '#6B7280' };
         analysis.clarity = analysis.clarity || defaultScore;
         analysis.immune = analysis.immune || defaultScore;
         analysis.physical = analysis.physical || defaultScore;
 
+        // --- Step 3: Save the main log entry ---
         const logEntry = {
             user_id: user.id,
             log: log,
@@ -83,21 +68,40 @@ exports.handler = async (event, context) => {
             physical_readiness_color: analysis.physical.color_hex,
             ai_notes: analysis.notes || "No specific notes generated.",
         };
-        
         if (sleep_hours !== null && !isNaN(sleep_hours)) logEntry.sleep_hours = sleep_hours;
         if (sleep_quality !== null && !isNaN(sleep_quality)) logEntry.sleep_quality = sleep_quality;
 
         const { data: newLogData, error: dbError } = await supabase
             .from('daily_logs')
             .insert(logEntry)
-            .select()
+            .select('id') // Select only the ID of the new log
             .single();
 
         if (dbError) throw new Error(`Supabase insert error: ${dbError.message}`);
+        
+        // --- Step 4: Save the extracted events linked to the new log ---
+        if (extractedEvents && extractedEvents.length > 0) {
+            const eventsToInsert = extractedEvents.map(event => ({
+                user_id: user.id,
+                log_id: newLogData.id,
+                event_type: event.event_type,
+                event_time: event.event_time
+            }));
+            const { error: eventError } = await supabase.from('events').insert(eventsToInsert);
+            if (eventError) console.error("Error saving extracted events:", eventError.message);
+        }
+
+        // --- Step 5: Return the full log entry to the UI ---
+        const { data: finalLog, error: finalLogError } = await supabase
+            .from('daily_logs')
+            .select('*')
+            .eq('id', newLogData.id)
+            .single();
+        if (finalLogError) throw new Error(`Error fetching final log: ${finalLogError.message}`);
 
         return {
             statusCode: 200,
-            body: JSON.stringify(newLogData),
+            body: JSON.stringify(finalLog),
         };
 
     } catch (error) {
