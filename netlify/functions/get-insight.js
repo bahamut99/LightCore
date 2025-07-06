@@ -18,11 +18,16 @@ exports.handler = async (event, context) => {
             .limit(15);
 
         if (error) throw new Error(`Supabase fetch error: ${error.message}`);
-        if (logs.length < 3) return { statusCode: 200, body: JSON.stringify({ insight: 'Log a few more entries to unlock new insights.' }) };
+        if (!logs || logs.length < 3) {
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ insight: 'Log a few more entries to unlock new insights.' }),
+            };
+        }
 
-        const prompt = `Analyze these logs and find one new insight...\n\n${JSON.stringify(logs, null, 2)}`;
-
-        // MODIFIED: Using the correct gemini-1.5-flash model
+        const persona = `You are a health data analyst. Your job is to find a single, actionable correlation in the provided health data logs.`;
+        const prompt = `Analyze the following user health logs to find one new, interesting, and actionable correlation. Present it as a concise insight, starting with "I've noticed a pattern:" or "It's interesting that...". Be encouraging and brief. The data is an array of JSON objects:\n\n${JSON.stringify(logs, null, 2)}`;
+        
         const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
         const aiResponse = await fetch(geminiApiUrl, {
@@ -40,11 +45,12 @@ exports.handler = async (event, context) => {
 
         const aiData = await aiResponse.json();
         const insight = aiData.candidates[0].content.parts[0].text;
-        
+
         return {
             statusCode: 200,
             body: JSON.stringify({ insight }),
         };
+
     } catch (error) {
         console.error('Error in get-insight function:', error.message);
         return {
