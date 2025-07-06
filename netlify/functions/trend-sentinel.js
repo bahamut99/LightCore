@@ -1,7 +1,17 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+// This helper function creates a dedicated admin client
+// This is the correct way to perform administrative tasks in a serverless function
+const createAdminClient = () => {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+        throw new Error('Supabase URL or Service Role Key is not set in environment variables.');
+    }
+    return createClient(supabaseUrl, serviceRoleKey);
+};
 
 // Helper function to calculate standard deviation for volatility
 function getStandardDeviation(numbers) {
@@ -31,11 +41,10 @@ function getTrend(scores) {
 exports.handler = async (event, context) => {
     console.log("--- Trend Sentinel Activated ---");
     try {
-        if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-            throw new Error("Critical Error: SUPABASE_SERVICE_ROLE_KEY is not set in environment variables.");
-        }
+        const supabaseAdmin = createAdminClient();
 
-        const { data: { users }, error: userError } = await supabase.auth.admin.listUsers();
+        const { data: { users }, error: userError } = await supabaseAdmin.auth.admin.listUsers();
+        
         if (userError) throw new Error(`Error fetching users: ${userError.message}`);
         if (!users || users.length === 0) {
             console.log("No users to process. Exiting.");
@@ -46,7 +55,7 @@ exports.handler = async (event, context) => {
             const sevenDaysAgo = new Date();
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-            const { data: logs, error: logError } = await supabase
+            const { data: logs, error: logError } = await supabaseAdmin
                 .from('daily_logs')
                 .select('clarity_score, immune_score, physical_readiness_score')
                 .eq('user_id', user.id)
@@ -55,7 +64,7 @@ exports.handler = async (event, context) => {
 
             if (logError) {
                 console.error(`Error fetching logs for user ${user.id}:`, logError.message);
-                continue; // Skip to the next user
+                continue;
             }
 
             if (!logs || logs.length < 4) continue;
@@ -99,7 +108,7 @@ exports.handler = async (event, context) => {
                     const aiData = await aiResponse.json();
                     const nudgeContent = JSON.parse(aiData.candidates[0].content.parts[0].text);
                     
-                    await supabase.from('nudges').insert({
+                    await supabaseAdmin.from('nudges').insert({
                         user_id: user.id,
                         headline: nudgeContent.headline,
                         body_text: nudgeContent.body_text,
@@ -107,7 +116,7 @@ exports.handler = async (event, context) => {
                     });
 
                     console.log(`Nudge generated for user ${user.id} for metric ${metricName}`);
-                    break; // Only generate one nudge per user per day
+                    break; 
                 }
             }
         }
