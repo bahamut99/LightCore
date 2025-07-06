@@ -13,12 +13,15 @@ exports.handler = async (event, context) => {
             .from('daily_logs')
             .select('created_at, ai_notes')
             .eq('user_id', user.id)
+            .not('ai_notes', 'is', null)
             .order('created_at', { ascending: false })
-            .limit(30);
+            .limit(20);
 
-        if (error) throw new Error(`Supabase fetch error: ${error.message}`);
-        
-        // Filter out logs that genuinely have no notes in the code, which is more reliable.
+        if (error) {
+            console.error('Supabase error in get-past-insights:', error);
+            throw new Error(`Supabase fetch error: ${error.message}`);
+        }
+
         const insights = data
             .filter(item => item.ai_notes)
             .map(item => ({
@@ -31,6 +34,7 @@ exports.handler = async (event, context) => {
             body: JSON.stringify(insights),
         };
     } catch (error) {
+        console.error('Error in get-past-insights function:', error);
         return {
             statusCode: 500,
             body: JSON.stringify({ error: error.message }),
