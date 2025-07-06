@@ -363,9 +363,9 @@ async function fetchAndRenderInsightHistory() {
 
 
 function displayResults(result) {
-    document.getElementById('clarity').innerText = `${result.clarity_score}/10 (${result.clarity_label})`;
-    document.getElementById('immune').innerText = `${result.immune_score}/10 (${result.immune_label})`;
-    document.getElementById('physical').innerText = `${result.physical_readiness_score}/10 (${result.physical_readiness_label})`;
+    document.getElementById('clarity').innerText = `${result.clarity_score}/10 (${result.clarity_label || 'N/A'})`;
+    document.getElementById('immune').innerText = `${result.immune_score}/10 (${result.immune_label || 'N/A'})`;
+    document.getElementById('physical').innerText = `${result.physical_readiness_score}/10 (${result.physical_readiness_label || 'N/A'})`;
     document.getElementById('notes').innerText = result.ai_notes || 'N/A';
     document.getElementById('results').style.display = 'block';
     document.getElementById('log').value = '';
@@ -406,12 +406,14 @@ function td(content, parent, type = null, color = '') {
         span.textContent = content || 'N/A';
         
         if (color) {
-            const rgb = color.match(/\d+/g);
-            if (rgb) {
-                span.style.backgroundColor = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.1)`;
-            }
             span.style.color = color;
+            // Create RGBA from hex color for the background
+            const r = parseInt(color.slice(1, 3), 16);
+            const g = parseInt(color.slice(3, 5), 16);
+            const b = parseInt(color.slice(5, 7), 16);
+            span.style.backgroundColor = `rgba(${r}, ${g}, ${b}, 0.1)`;
         } else {
+             // Default style for N/A scores
              span.style.backgroundColor = 'rgba(107, 114, 128, 0.1)';
              span.style.color = '#6B7280';
         }
@@ -431,9 +433,9 @@ function openLogModal(logData) {
     document.getElementById('modalSleepHours').textContent = logData.sleep_hours || 'N/A';
     document.getElementById('modalSleepQuality').textContent = logData.sleep_quality ? `${logData.sleep_quality} / 5` : 'N/A';
     
-    document.getElementById('modalClarity').textContent = `${logData.clarity_score}/10 (${logData.clarity_label})`;
-    document.getElementById('modalImmune').textContent = `${logData.immune_score}/10 (${logData.immune_label})`;
-    document.getElementById('modalPhysical').textContent = `${logData.physical_readiness_score}/10 (${logData.physical_readiness_label})`;
+    document.getElementById('modalClarity').textContent = `${logData.clarity_score}/10 (${logData.clarity_label || 'N/A'})`;
+    document.getElementById('modalImmune').textContent = `${logData.immune_score}/10 (${logData.immune_label || 'N/A'})`;
+    document.getElementById('modalPhysical').textContent = `${logData.physical_readiness_score}/10 (${logData.physical_readiness_label || 'N/A'})`;
     document.getElementById('modalNotes').textContent = logData.ai_notes;
     
     document.getElementById('logModal').style.display = 'flex';
