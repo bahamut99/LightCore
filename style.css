@@ -3,125 +3,121 @@
 body {
   font-family: 'Inter', sans-serif;
   background: #111827;
-  color: #D1D5DB;
+  color: #d1d5db;
   padding: 1rem;
-  margin: auto;
+  margin: auto
 }
 
 #auth-container {
   max-width: 450px;
-  margin: 4rem auto;
+  margin: 4rem auto
 }
 
-/* === LAYOUT STYLES === */
 .main-container {
   display: flex;
   flex-wrap: wrap;
   gap: 2rem;
   align-items: flex-start;
   max-width: 1800px;
-  margin: auto;
+  margin: auto
 }
 
 .left-column {
   flex: 2;
-  min-width: 350px;
+  min-width: 350px
 }
 
 .center-column {
   flex: 3;
-  min-width: 400px;
+  min-width: 400px
 }
 
 .right-column {
   flex: 1.5;
-  min-width: 320px;
+  min-width: 320px
 }
 
 .toggle-buttons {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: .5rem;
+  margin-bottom: 1rem
 }
 
 .toggle-buttons button {
   flex-grow: 1;
   background-color: #374151;
-  color: #D1D5DB;
-  border: 1px solid #4B5563;
+  color: #d1d5db;
+  border: 1px solid #4b5563
 }
 
 .toggle-buttons button.active {
-  background-color: #3B82F6;
-  color: white;
-  border-color: #3B82F6;
+  background-color: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6
 }
 
 .chart-container {
   margin-bottom: 1.5rem;
-  height: 180px;
+  height: 180px
 }
 
 .left-column .card .chart-container:last-of-type {
-  margin-bottom: 0;
+  margin-bottom: 0
 }
 
-
-/* === GENERAL & HEADER STYLES === */
 .header-container {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 2rem;
+  margin-bottom: 2rem
 }
 
 h1 {
-  color: #F9FAFB;
+  color: #f9fafb;
   text-align: left;
   font-size: 1.75rem;
   margin: 0;
-  font-weight: 700;
+  font-weight: 700
 }
 
 h2 {
   font-size: 1.1rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #9CA3AF;
-  margin-bottom: 1rem;
+  letter-spacing: .05em;
+  color: #9ca3af;
+  margin-bottom: 1rem
 }
 
 .card {
-  background: #1F2937;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: #1f2937;
+  border: 1px solid rgba(255, 255, 255, .05);
   border-radius: 1rem;
   padding: 1.5rem;
   margin-bottom: 1.5rem;
-  box-shadow: 0 0 25px rgba(0, 0, 0, 0.2), 0 4px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 25px rgba(0, 0, 0, .2), 0 4px 8px rgba(0, 0, 0, .3)
 }
 
 .card-glass {
-  background: rgba(31, 41, 55, 0.5);
-  backdrop-filter: blur(10px);
+  background: rgba(31, 41, 55, .5);
   -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, .1)
 }
 
-/* === FORM & BUTTON STYLES === */
 textarea,
 button,
-input[type="email"],
-input[type="password"],
-input[type="number"] {
+input[type=email],
+input[type=password],
+input[type=number] {
   background: #374151;
-  color: #F9FAFB;
-  border: 1px solid #4B5563;
+  color: #f9fafb;
+  border: 1px solid #4b5563;
   width: 100%;
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  margin-top: 0.5rem;
+  padding: .75rem;
+  border-radius: .5rem;
+  margin-top: .5rem;
   font-size: 1rem;
-  box-sizing: border-box;
+  box-sizing: border-box
 }
 
 form label,
@@ -129,128 +125,126 @@ form label,
   display: block;
   margin-top: 1rem;
   font-weight: 500;
-  color: #9CA3AF;
+  color: #9ca3af
 }
 
 .card label:first-of-type {
-  margin-top: 0;
+  margin-top: 0
 }
 
 button {
-  background-color: #3B82F6;
-  color: white;
-  font-weight: bold;
+  background-color: #3b82f6;
+  color: #fff;
+  font-weight: 700;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color .2s
 }
 
 button:hover {
-  background-color: #2563EB;
+  background-color: #2563eb
 }
 
 button:disabled {
-  background-color: #1E40AF;
-  color: #9CA3AF;
-  cursor: not-allowed;
+  background-color: #1e40af;
+  color: #9ca3af;
+  cursor: not-allowed
 }
 
 .logout-btn {
   background-color: #374151;
-  color: #D1D5DB;
-  border: 1px solid #4B5563;
+  color: #d1d5db;
+  border: 1px solid #4b5563;
   margin-left: auto;
   width: auto;
-  padding: 0.5rem 1rem;
+  padding: .5rem 1rem
 }
 
 .logout-btn:hover {
-  background-color: #4B5563;
+  background-color: #4b5563
 }
 
 .auth-toggle {
   text-align: center;
-  margin-top: 1.5rem;
+  margin-top: 1.5rem
 }
 
 .auth-toggle a {
-  color: #3B82F6;
+  color: #3b82f6;
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 500
 }
 
 .auth-toggle a:hover {
-  text-decoration: underline;
+  text-decoration: underline
 }
 
 .error-message {
   color: #f87171;
   margin-top: 1rem;
-  text-align: center;
+  text-align: center
 }
 
-/* === SCORE & TABLE STYLES === */
 .score {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.5rem 0;
+  padding: .5rem 0
 }
 
 .label {
   font-weight: 500;
-  color: #D1D5DB;
+  color: #d1d5db
 }
 
 .notes-section {
   border-top: 1px solid #374151;
   margin-top: 1rem;
-  padding-top: 1rem;
+  padding-top: 1rem
 }
 
 .notes-section p {
-  margin: 0.5rem 0 0 0;
+  margin: .5rem 0 0;
   line-height: 1.5;
-  color: #D1D5DB;
+  color: #d1d5db
 }
 
 .table-container {
   overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
+  -webkit-overflow-scrolling: touch
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
   margin: 1rem auto;
-  table-layout: fixed;
+  table-layout: fixed
 }
 
 tbody tr {
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color .2s
 }
 
 tbody tr:hover {
-  background-color: #374151;
+  background-color: #374151
 }
 
 th,
 td {
   text-align: left;
-  padding: 0.75rem;
+  padding: .75rem;
   border-bottom: 1px solid #374151;
-  vertical-align: middle;
+  vertical-align: middle
 }
 
 th {
-  background-color: rgba(59, 130, 246, 0.1);
-  color: #60A5FA;
+  background-color: rgba(59, 130, 246, .1);
+  color: #60a5fa
 }
 
-/* === TABLE COLUMN STYLES === */
-th:nth-child(1),
-td:nth-child(1) {
-  width: 8%;
+th:first-child,
+td:first-child {
+  width: 8%
 }
 
 th:nth-child(2),
@@ -258,7 +252,7 @@ td:nth-child(2) {
   width: 26.5%;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: ellipsis
 }
 
 th:nth-child(3),
@@ -268,7 +262,7 @@ td:nth-child(4),
 th:nth-child(5),
 td:nth-child(5) {
   text-align: center;
-  width: 13%;
+  width: 13%
 }
 
 th:nth-child(6),
@@ -276,42 +270,39 @@ td:nth-child(6) {
   width: 26.5%;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: ellipsis
 }
 
-/* ========================= */
-
 .subtle-text {
-  font-size: 0.8rem;
-  color: #6B7280;
+  font-size: .8rem;
+  color: #6b7280;
   text-align: center;
-  padding: 0.5rem 0;
-  margin: 0;
+  padding: .5rem 0;
+  margin: 0
 }
 
 .score-bubble {
   padding: 2px 10px;
   border-radius: 99px;
-  font-size: 0.8rem;
+  font-size: .8rem;
   font-weight: 500;
   text-align: center;
   display: inline-block;
-  min-width: 60px;
+  min-width: 60px
 }
 
-/* === UTILITY & MODAL STYLES === */
 .loader {
   width: 18px;
   height: 18px;
-  border: 3px solid #1E40AF;
-  border-top: 3px solid #60A5FA;
+  border: 3px solid #1e40af;
+  border-top: 3px solid #60a5fa;
   border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  animation: spin .6s linear infinite
 }
 
 @keyframes spin {
   to {
-    transform: rotate(360deg);
+    transform: rotate(360deg)
   }
 }
 
@@ -323,162 +314,160 @@ td:nth-child(6) {
   width: 100%;
   height: 100%;
   overflow: auto;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: rgba(0, 0, 0, .7);
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: center
 }
 
 .modal-content {
-  background-color: #1F2937;
+  background-color: #1f2937;
   padding: 2rem;
   border-radius: 1rem;
   width: 90%;
   max-width: 600px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, .3);
   position: relative;
-  animation: fadeIn 0.3s;
-  border: 1px solid #374151;
+  animation: fadeIn .3s;
+  border: 1px solid #374151
 }
 
 .modal-close-btn {
-  color: #9CA3AF;
+  color: #9ca3af;
   position: absolute;
   top: 10px;
   right: 20px;
   font-size: 28px;
-  font-weight: bold;
-  background: none;
+  font-weight: 700;
+  background: 0 0;
   border: none;
-  width: auto;
+  width: auto
 }
 
-.modal-close-btn:hover,
-.modal-close-btn:focus {
-  color: white;
+.modal-close-btn:focus,
+.modal-close-btn:hover {
+  color: #fff;
   text-decoration: none;
-  cursor: pointer;
+  cursor: pointer
 }
 
 .modal-scores {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: .5rem;
+  margin-bottom: 1rem
 }
 
 .modal-content h4 {
   margin-top: 1.5rem;
-  color: #9CA3AF;
+  color: #9ca3af
 }
 
 .modal-content p {
   line-height: 1.6;
-  margin-top: 0.5rem;
+  margin-top: .5rem
 }
 
 .modal-content hr {
   border: none;
   border-top: 1px solid #374151;
-  margin: 1.5rem 0;
+  margin: 1.5rem 0
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: scale(0.95);
+    transform: scale(.95)
   }
 
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1)
   }
 }
 
-/* === INSIGHT HISTORY STYLES === */
 #insight-history-container {
   max-height: 250px;
   overflow-y: auto;
-  padding-right: 10px;
+  padding-right: 10px
 }
 
 .insight-item {
   border-bottom: 1px solid #374151;
-  padding: 0.75rem 0;
+  padding: .75rem 0
 }
 
 .insight-item:last-child {
   border-bottom: none;
-  padding-bottom: 0;
+  padding-bottom: 0
 }
 
 .insight-item:first-child {
-  padding-top: 0;
+  padding-top: 0
 }
 
 .insight-item summary {
   cursor: pointer;
-  font-weight: 500;
+  font-weight: 500
 }
 
 .insight-item p {
-  margin-top: 0.75rem;
+  margin-top: .75rem;
   padding-left: 1rem;
-  color: #9CA3AF;
+  color: #9ca3af;
   line-height: 1.5;
-  border-left: 2px solid #4B5563;
+  border-left: 2px solid #4b5563
 }
 
-/* === Google Health Connect Styles === */
 .health-connect-container {
   border-top: 1px solid #374151;
   margin-top: 1.5rem;
   padding-top: 1.5rem;
-  text-align: center;
+  text-align: center
 }
 
 .health-connect-logo {
   width: 1.25rem;
   height: 1.25rem;
-  fill: #D1D5DB;
+  fill: #d1d5db
 }
 
 .health-connect-logo.connected {
-  fill: #22c55e;
+  fill: #22c55e
 }
 
 p.connected-text {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  color: #9CA3AF;
+  gap: .5rem;
+  color: #9ca3af
 }
 
 .health-connect-container.toggle-style {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  text-align: left;
+  text-align: left
 }
 
 .health-connect-container.toggle-style span {
-  font-size: 0.9rem;
+  font-size: .9rem;
   font-weight: 500;
-  margin-left: 0.5rem;
+  margin-left: .5rem
 }
 
 .switch {
   position: relative;
   display: inline-block;
   width: 50px;
-  height: 28px;
+  height: 28px
 }
 
 .switch input {
   opacity: 0;
   width: 0;
-  height: 0;
+  height: 0
 }
 
 .slider {
@@ -489,7 +478,7 @@ p.connected-text {
   right: 0;
   bottom: 0;
   background-color: #374151;
-  transition: .4s;
+  transition: .4s
 }
 
 .slider:before {
@@ -499,63 +488,62 @@ p.connected-text {
   width: 20px;
   left: 4px;
   bottom: 4px;
-  background-color: white;
-  transition: .4s;
+  background-color: #fff;
+  transition: .4s
 }
 
 input:checked+.slider {
-  background-color: #2563EB;
+  background-color: #2563eb
 }
 
 input:focus+.slider {
-  box-shadow: 0 0 1px #2563EB;
+  box-shadow: 0 0 1px #2563eb
 }
 
 input:checked+.slider:before {
-  transform: translateX(22px);
+  transform: translateX(22px)
 }
 
 .slider.round {
-  border-radius: 34px;
+  border-radius: 34px
 }
 
 .slider.round:before {
-  border-radius: 50%;
+  border-radius: 50%
 }
 
-/* === Footer and About Page === */
 .footer {
   text-align: center;
-  padding: 2rem 1rem;
+  padding: 2rem 1rem
 }
 
 .footer-link {
-  font-size: 0.8rem;
-  color: #6B7280;
+  font-size: .8rem;
+  color: #6b7280;
   text-decoration: none;
-  transition: color 0.2s;
+  transition: color .2s
 }
 
 .footer-link:hover {
-  color: #9CA3AF;
-  text-decoration: underline;
+  color: #9ca3af;
+  text-decoration: underline
 }
 
 .about-container {
   max-width: 800px;
   margin: 2rem auto;
-  padding: 1rem;
+  padding: 1rem
 }
 
 .about-container h4 {
   margin-top: 1.5rem;
-  margin-bottom: 0.5rem;
-  color: #9CA3AF;
+  margin-bottom: .5rem;
+  color: #9ca3af
 }
 
 .about-container p {
   line-height: 1.7;
-  color: #D1D5DB;
+  color: #d1d5db
 }
 
 .toast {
@@ -564,57 +552,57 @@ input:checked+.slider:before {
   background-color: #374151;
   color: #fff;
   text-align: center;
-  border-radius: 0.5rem;
+  border-radius: .5rem;
   padding: 1rem;
   position: fixed;
   z-index: 200;
   left: 50%;
   transform: translateX(-50%);
   bottom: 30px;
-  font-size: 0.9rem;
+  font-size: .9rem;
   opacity: 0;
-  transition: visibility 0.5s, opacity 0.5s linear;
-  border: 1px solid #4B5563;
+  transition: visibility .5s, opacity .5s linear;
+  border: 1px solid #4B5563
 }
 
 .toast.show {
   visibility: visible;
-  opacity: 1;
+  opacity: 1
 }
 
 .nudge-card {
-  border-color: rgba(249, 115, 22, 0.4);
-  border-width: 1px;
+  border-color: rgba(249, 115, 22, .4);
+  border-width: 1px
 }
 
 .nudge-card h2 {
   color: #f97316;
   font-size: 1.2rem;
   text-transform: none;
-  letter-spacing: 0;
+  letter-spacing: 0
 }
 
 .nudge-card p {
-  margin: 0.5rem 0 1rem 0;
-  line-height: 1.6;
+  margin: .5rem 0 1rem;
+  line-height: 1.6
 }
 
 .nudge-actions-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: .5rem
 }
 
 .nudge-actions-container button {
   background-color: #374151;
-  border: 1px solid #4B5563;
+  border: 1px solid #4b5563;
   width: auto;
   flex-grow: 1;
-  padding: 0.5rem 1rem;
+  padding: .5rem 1rem;
   margin: 0;
-  font-size: 0.8rem;
+  font-size: .8rem
 }
 
 .nudge-actions-container button:hover {
-  background-color: #4B5563;
+  background-color: #4b5563
 }

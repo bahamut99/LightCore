@@ -118,13 +118,13 @@ async function fetchAndDisplayNudge() {
             document.getElementById('nudge-body').textContent = nudge.body_text;
             
             const actionsContainer = document.getElementById('nudge-actions');
-            actionsContainer.innerHTML = ''; 
+            actionsContainer.innerHTML = '';
 
             if (nudge.suggested_actions && nudge.suggested_actions.length > 0) {
                 nudge.suggested_actions.forEach(actionText => {
                     const button = document.createElement('button');
                     button.textContent = actionText;
-                    button.onclick = () => alert(`Actionable suggestion: ${actionText}`);
+                    button.onclick = () => alert(`Action: ${actionText}`);
                     actionsContainer.appendChild(button);
                 });
             }
@@ -134,7 +134,7 @@ async function fetchAndDisplayNudge() {
             dismissButton.onclick = () => acknowledgeNudge(nudge.id);
             actionsContainer.appendChild(dismissButton);
         } else {
-            nudgeCard.style.display = 'none';
+            if (nudgeCard) nudgeCard.style.display = 'none';
         }
     } catch (e) {
         console.error("Error fetching nudge:", e.message);
