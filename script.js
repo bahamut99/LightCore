@@ -71,6 +71,16 @@ async function checkGoogleHealthConnection() {
     }
 }
 
+function showToast(message) {
+    const toast = document.getElementById('toast-notification');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const authContainer = document.getElementById('auth-container');
     const appContainer = document.getElementById('app-container');
@@ -204,6 +214,10 @@ async function submitLog() {
     if (!entryText) {
         alert("Please enter a log entry.");
         return;
+    }
+
+    if (entryText.length < 50) {
+        showToast("For best results, try adding a bit more detail to your log.");
     }
 
     button.disabled = true;
@@ -407,13 +421,11 @@ function td(content, parent, type = null, color = '') {
         
         if (color) {
             span.style.color = color;
-            // Create RGBA from hex color for the background
             const r = parseInt(color.slice(1, 3), 16);
             const g = parseInt(color.slice(3, 5), 16);
             const b = parseInt(color.slice(5, 7), 16);
             span.style.backgroundColor = `rgba(${r}, ${g}, ${b}, 0.1)`;
         } else {
-             // Default style for N/A scores
              span.style.backgroundColor = 'rgba(107, 114, 128, 0.1)';
              span.style.color = '#6B7280';
         }

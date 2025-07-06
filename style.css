@@ -60,7 +60,6 @@ body {
 .chart-container {
   margin-bottom: 1.5rem;
   height: 180px;
-  /* Give charts a consistent height */
 }
 
 .left-column .card .chart-container:last-of-type {
@@ -299,32 +298,6 @@ td:nth-child(6) {
   display: inline-block;
   min-width: 60px;
 }
-
-.score-critical {
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-}
-
-.score-poor {
-  background-color: rgba(249, 115, 22, 0.1);
-  color: #f97316;
-}
-
-.score-moderate {
-  background-color: rgba(234, 179, 8, 0.1);
-  color: #eab308;
-}
-
-.score-good {
-  background-color: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
-}
-
-.score-optimal {
-  background-color: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
-}
-
 
 /* === UTILITY & MODAL STYLES === */
 .loader {
@@ -583,4 +556,28 @@ input:checked+.slider:before {
 .about-container p {
   line-height: 1.7;
   color: #D1D5DB;
+}
+
+.toast {
+  visibility: hidden;
+  min-width: 250px;
+  background-color: #374151;
+  color: #fff;
+  text-align: center;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  position: fixed;
+  z-index: 200;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 30px;
+  font-size: 0.9rem;
+  opacity: 0;
+  transition: visibility 0.5s, opacity 0.5s linear;
+  border: 1px solid #4B5563;
+}
+
+.toast.show {
+  visibility: visible;
+  opacity: 1;
 }
