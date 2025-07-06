@@ -82,13 +82,18 @@ function showToast(message) {
 }
 
 async function acknowledgeNudge(nudgeId) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
     const { error } = await supabase
         .from('nudges')
         .update({ is_acknowledged: true })
-        .eq('id', nudgeId);
+        .eq('id', nudgeId)
+        .eq('user_id', session.user.id);
     
     if (error) {
         alert('Could not acknowledge nudge.');
+        console.error('Error acknowledging nudge:', error);
     } else {
         document.getElementById('nudge-card').style.display = 'none';
     }
@@ -105,19 +110,21 @@ async function fetchAndDisplayNudge() {
         if (!response.ok) return;
 
         const nudge = await response.json();
+        const nudgeCard = document.getElementById('nudge-card');
+
         if (nudge) {
-            document.getElementById('nudge-card').style.display = 'block';
+            nudgeCard.style.display = 'block';
             document.getElementById('nudge-headline').textContent = nudge.headline;
             document.getElementById('nudge-body').textContent = nudge.body_text;
             
             const actionsContainer = document.getElementById('nudge-actions');
-            actionsContainer.innerHTML = '';
+            actionsContainer.innerHTML = ''; 
 
             if (nudge.suggested_actions && nudge.suggested_actions.length > 0) {
                 nudge.suggested_actions.forEach(actionText => {
                     const button = document.createElement('button');
                     button.textContent = actionText;
-                    button.onclick = () => alert(`Action: ${actionText}`);
+                    button.onclick = () => alert(`Actionable suggestion: ${actionText}`);
                     actionsContainer.appendChild(button);
                 });
             }
@@ -126,6 +133,8 @@ async function fetchAndDisplayNudge() {
             dismissButton.textContent = 'Acknowledge & Dismiss';
             dismissButton.onclick = () => acknowledgeNudge(nudge.id);
             actionsContainer.appendChild(dismissButton);
+        } else {
+            nudgeCard.style.display = 'none';
         }
     } catch (e) {
         console.error("Error fetching nudge:", e.message);
@@ -304,6 +313,7 @@ async function submitLog() {
         await fetchAndRenderCharts(7);
         await fetchAndDisplayInsight();
         await fetchAndRenderInsightHistory();
+        await fetchAndDisplayNudge();
         document.querySelector('#btn7day').classList.add('active');
         document.querySelector('#btn30day').classList.remove('active');
 
