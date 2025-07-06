@@ -112,7 +112,7 @@ async function fetchAndDisplayNudge() {
             
             const actionsContainer = document.getElementById('nudge-actions');
             actionsContainer.innerHTML = ''; 
-            
+
             if (nudge.suggested_actions && nudge.suggested_actions.length > 0) {
                 nudge.suggested_actions.forEach(actionText => {
                     const button = document.createElement('button');
@@ -131,7 +131,6 @@ async function fetchAndDisplayNudge() {
         console.error("Error fetching nudge:", e.message);
     }
 }
-
 
 document.addEventListener('DOMContentLoaded', () => {
     const authContainer = document.getElementById('auth-container');
