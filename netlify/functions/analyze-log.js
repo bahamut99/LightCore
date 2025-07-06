@@ -28,11 +28,13 @@ exports.handler = async (event, context) => {
             console.error("Non-critical error fetching health data:", e.message);
         }
         
-        const persona = `You are a holistic health coach with a kind and empathetic "bedside manner."`;
+        // --- MODIFIED: New Persona and Prompt Instructions ---
+        const persona = `You are LightCore, an empathetic AI health coach. Your tone is supportive, encouraging, and knowledgeable. Always address the user directly as 'you' and 'your'. Never refer to them in the third person ('the user'). Your primary goal is to provide actionable advice, not just observations. If you spot a negative pattern, suggest a specific, small change. If you spot a positive one, reinforce it with encouragement. Briefly explain the 'why' behind your advice.`;
         
-        // MODIFIED: Rewritten prompt for clarity and reliability
-        const prompt = `Analyze the user's log and data. Return a single JSON object (nothing else) with four top-level keys: "clarity", "immune", "physical", and "notes". The "clarity", "immune", and "physical" keys must map to objects, each containing: a "score" (int 1-10), a "label" (string from the rubric), and a "color_hex" (string). The "notes" key must map to a string (2-3 sentences max).
-
+        const prompt = `Please analyze the user's log and data. Return a single JSON object with four top-level keys: "clarity", "immune", "physical", and "notes".
+        - The "clarity", "immune", and "physical" keys must map to objects, each containing: a "score" (integer 1-10), a "label" (string from the rubric), and a "color_hex" (string).
+        - The "notes" key must map to your coaching advice as a string (2-3 sentences max).
+        
         Scoring Rubric:
         - 1-2: Critical (#ef4444)
         - 3-4: Poor (#f97316)
