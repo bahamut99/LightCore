@@ -3,6 +3,7 @@ const fetch = require('node-fetch');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+// Helper function to calculate standard deviation for volatility
 function getStandardDeviation(numbers) {
     const n = numbers.length;
     if (n < 2) return 0;
@@ -11,6 +12,7 @@ function getStandardDeviation(numbers) {
     return Math.sqrt(variance);
 }
 
+// Helper function to find the trend slope using linear regression
 function getTrend(scores) {
     if (scores.length < 3) return 0;
     let n = scores.length;
@@ -22,15 +24,18 @@ function getTrend(scores) {
         sum_xx += (i * i);
     }
     const slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x * sum_x);
-    return slope;
+    return isNaN(slope) ? 0 : slope;
 }
 
+// Main handler for the scheduled function
 exports.handler = async (event, context) => {
     console.log("--- Trend Sentinel Activated ---");
     try {
-        // MODIFIED: Use the correct admin function to list all users
+        if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+            throw new Error("Critical Error: SUPABASE_SERVICE_ROLE_KEY is not set in environment variables.");
+        }
+
         const { data: { users }, error: userError } = await supabase.auth.admin.listUsers();
-        
         if (userError) throw new Error(`Error fetching users: ${userError.message}`);
         if (!users || users.length === 0) {
             console.log("No users to process. Exiting.");
@@ -48,17 +53,22 @@ exports.handler = async (event, context) => {
                 .gte('created_at', sevenDaysAgo.toISOString())
                 .order('created_at', { ascending: true });
 
-            if (logError || !logs || logs.length < 4) continue;
+            if (logError) {
+                console.error(`Error fetching logs for user ${user.id}:`, logError.message);
+                continue; // Skip to the next user
+            }
+
+            if (!logs || logs.length < 4) continue;
 
             const metrics = {
-                clarity: logs.map(l => l.clarity_score).filter(s => s !== null),
-                immune: logs.map(l => l.immune_score).filter(s => s !== null),
-                physical: logs.map(l => l.physical_readiness_score).filter(s => s !== null),
+                Clarity: logs.map(l => l.clarity_score).filter(s => s !== null && s !== undefined),
+                Immune: logs.map(l => l.immune_score).filter(s => s !== null && s !== undefined),
+                Physical: logs.map(l => l.physical_readiness_score).filter(s => s !== null && s !== undefined),
             };
 
             for (const metricName in metrics) {
                 const scores = metrics[metricName];
-                if (scores.length < 4) continue; // Not enough data points for this specific metric
+                if (scores.length < 4) continue;
                 
                 const trendSlope = getTrend(scores);
                 const volatility = getStandardDeviation(scores);
@@ -67,11 +77,24 @@ exports.handler = async (event, context) => {
                 const isStableData = volatility < 2.5;
 
                 if (isSignificantTrend && isStableData) { 
-                    const persona = `You are the Trend Sentinel AI...`;
-                    const prompt = `A high-confidence downward trend was detected...`;
+                    const persona = `You are the Trend Sentinel AI for a health app called LightCore. You detect negative trends and report them with a clinical, authoritative, and confident tone.`;
+                    const prompt = `A high-confidence downward trend was detected in a user's ${metricName} score, with a slope of ${trendSlope.toFixed(2)} over the last 7 days. Generate a JSON object with three keys: "headline" (a concise alert, e.g., "📉 Trend Alert: Downward Shift in Physical Readiness"), "body_text" (an authoritative, clinical explanation of what this might mean, without using emotional language), and "suggested_actions" (an array of 2-3 brief, actionable steps like a doctor would provide). Address the user directly as "you". Do not use emojis.`;
 
                     const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
-                    const aiResponse = await fetch(geminiApiUrl, { /* ... */ });
+                    
+                    const aiResponse = await fetch(geminiApiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            generationConfig: { responseMimeType: "application/json" }
+                        })
+                    });
+                    
+                    if (!aiResponse.ok) {
+                        console.error(`Gemini API error for user ${user.id}:`, await aiResponse.text());
+                        continue;
+                    }
                     
                     const aiData = await aiResponse.json();
                     const nudgeContent = JSON.parse(aiData.candidates[0].content.parts[0].text);
@@ -84,7 +107,7 @@ exports.handler = async (event, context) => {
                     });
 
                     console.log(`Nudge generated for user ${user.id} for metric ${metricName}`);
-                    break;
+                    break; // Only generate one nudge per user per day
                 }
             }
         }
@@ -93,7 +116,7 @@ exports.handler = async (event, context) => {
         return { statusCode: 200, body: "Trend Sentinel run complete." };
 
     } catch (error) {
-        console.error("CRITICAL ERROR in Trend Sentinel:", error.message);
+        console.error("CRITICAL ERROR in Trend Sentinel:", error.message, error.stack);
         return { statusCode: 500, body: `Error: ${error.message}` };
     }
 };
