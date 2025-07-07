@@ -9,10 +9,9 @@ exports.handler = async (event, context) => {
     if (userError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
 
     try {
-        // MODIFIED: Select only the specific, correct snake_case columns
         const { data, error } = await supabase
             .from('daily_logs')
-            .select('id, created_at, log, clarity_label, clarity_color, immune_label, immune_color, physical_readiness_label, physical_readiness_color, ai_notes, sleep_hours, sleep_quality, clarity_score, immune_score, physical_readiness_score')
+            .select('id, created_at, log, clarity_label, clarity_color, clarity_score, immune_label, immune_color, immune_score, physical_readiness_label, physical_readiness_color, physical_readiness_score, ai_notes, sleep_hours, sleep_quality')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
             .limit(10);
