@@ -12,7 +12,7 @@ const createAdminClient = () => {
     return createClient(supabaseUrl, serviceRoleKey);
 };
 
-// Helper functions for stats
+// Helper function to calculate standard deviation for volatility
 function getStandardDeviation(numbers) {
     const n = numbers.length;
     if (n < 2) return 0;
@@ -21,6 +21,7 @@ function getStandardDeviation(numbers) {
     return Math.sqrt(variance);
 }
 
+// Helper function to find the trend slope using linear regression
 function getTrend(scores) {
     if (scores.length < 3) return 0;
     let n = scores.length;
@@ -41,30 +42,43 @@ exports.handler = async (event, context) => {
     try {
         const supabaseAdmin = createAdminClient();
 
-        const { data: { users }, error: userError } = await supabaseAdmin.auth.admin.listUsers();
-        if (userError) throw new Error(`Error fetching users: ${userError.message}`);
-        if (!users || users.length === 0) {
-            console.log("No users to process. Exiting.");
-            return { statusCode: 200, body: "No users to process." };
+        // Fetch all user profiles to process
+        const { data: profiles, error: profileError } = await supabaseAdmin
+            .from('profiles')
+            .select('id');
+        
+        if (profileError) throw new Error(`Error fetching profiles: ${profileError.message}`);
+        if (!profiles || profiles.length === 0) {
+            console.log("No profiles to process. Exiting.");
+            return { statusCode: 200, body: "No profiles to process." };
         }
 
-        for (const user of users) {
+        for (const profile of profiles) {
+            const userId = profile.id;
             const sevenDaysAgo = new Date();
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
             const { data: logs, error: logError } = await supabaseAdmin
                 .from('daily_logs')
                 .select('clarity_score, immune_score, physical_readiness_score')
-                .eq('user_id', user.id)
+                .eq('user_id', userId)
                 .gte('created_at', sevenDaysAgo.toISOString())
                 .order('created_at', { ascending: true });
 
-            if (logError || !logs || logs.length < 4) continue;
+            if (logError) {
+                console.error(`Error fetching logs for user ${userId}:`, logError.message);
+                continue; // Skip to the next user
+            }
+
+            if (!logs || logs.length < 4) {
+                console.log(`Skipping user ${userId}: Not enough logs for trend analysis.`);
+                continue;
+            }
 
             const metrics = {
-                Clarity: logs.map(l => l.clarity_score).filter(s => s !== null),
-                Immune: logs.map(l => l.immune_score).filter(s => s !== null),
-                Physical: logs.map(l => l.physical_readiness_score).filter(s => s !== null),
+                Clarity: logs.map(l => l.clarity_score).filter(s => s !== null && s !== undefined),
+                Immune: logs.map(l => l.immune_score).filter(s => s !== null && s !== undefined),
+                Physical: logs.map(l => l.physical_readiness_score).filter(s => s !== null && s !== undefined),
             };
 
             for (const metricName in metrics) {
@@ -79,7 +93,7 @@ exports.handler = async (event, context) => {
 
                 if (isSignificantTrend && isStableData) { 
                     const persona = `You are the Trend Sentinel AI for a health app called LightCore. You detect negative trends and report them with a clinical, authoritative, and confident tone.`;
-                    const prompt = `A high-confidence downward trend was detected in a user's ${metricName} score, with a slope of ${trendSlope.toFixed(2)} over the last 7 days. Generate a JSON object with three keys: "headline", "body_text", and "suggested_actions" (an array of 2-3 brief, actionable steps). Address the user directly as "you". Do not use emojis.`;
+                    const prompt = `A high-confidence downward trend was detected in a user's ${metricName} score, with a slope of ${trendSlope.toFixed(2)} over the last 7 days. Generate a JSON object with three keys: "headline" (a concise alert, e.g., "📉 Trend Alert: Downward Shift in Physical Readiness"), "body_text" (an authoritative, clinical explanation of what this might mean, without using emotional language), and "suggested_actions" (an array of 2-3 brief, actionable steps like a doctor would provide). Address the user directly as "you". Do not use emojis.`;
 
                     const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
                     
@@ -92,20 +106,23 @@ exports.handler = async (event, context) => {
                         })
                     });
                     
-                    if (!aiResponse.ok) continue;
+                    if (!aiResponse.ok) {
+                        console.error(`Gemini API error for user ${userId}:`, await aiResponse.text());
+                        continue;
+                    }
                     
                     const aiData = await aiResponse.json();
                     const nudgeContent = JSON.parse(aiData.candidates[0].content.parts[0].text);
                     
                     await supabaseAdmin.from('nudges').insert({
-                        user_id: user.id,
+                        user_id: userId,
                         headline: nudgeContent.headline,
                         body_text: nudgeContent.body_text,
                         suggested_actions: nudgeContent.suggested_actions
                     });
 
-                    console.log(`Nudge generated for user ${user.id} for metric ${metricName}`);
-                    break;
+                    console.log(`Nudge generated for user ${userId} for metric ${metricName}`);
+                    break; // Only generate one nudge per user per day
                 }
             }
         }
