@@ -1,6 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
+const fetch = require('node-fetch'); // Re-added this critical dependency
 
-// Helper function to create a dedicated admin client
 const createAdminClient = () => {
     const supabaseUrl = process.env.SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -11,7 +11,6 @@ const createAdminClient = () => {
     return createClient(supabaseUrl, serviceRoleKey);
 };
 
-// Helper functions for stats
 function getStandardDeviation(numbers) {
     const n = numbers.length;
     if (n < 2) return 0;
@@ -45,12 +44,28 @@ exports.handler = async (event, context) => {
         
         if (profileError) throw new Error(`Error fetching profiles: ${profileError.message}`);
         if (!profiles || profiles.length === 0) {
-            console.log("No profiles to process. Exiting.");
-            return { statusCode: 200, body: "No profiles to process." };
+            return { statusCode: 200, body: JSON.stringify({ message: "No profiles to process." }) };
         }
 
         for (const profile of profiles) {
             const userId = profile.id;
+            
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const { data: recentNudges, error: nudgeError } = await supabaseAdmin
+                .from('nudges')
+                .select('id', { count: 'exact' })
+                .eq('user_id', userId)
+                .gte('created_at', twentyFourHoursAgo);
+
+            if (nudgeError) {
+                console.error(`Error checking recent nudges for user ${userId}:`, nudgeError.message);
+                continue;
+            }
+            if (recentNudges.length > 0) {
+                console.log(`Skipping user ${userId}: Nudge already sent within 24 hours.`);
+                continue;
+            }
+
             const sevenDaysAgo = new Date();
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -61,17 +76,12 @@ exports.handler = async (event, context) => {
                 .gte('created_at', sevenDaysAgo.toISOString())
                 .order('created_at', { ascending: true });
 
-            if (logError) {
-                console.error(`Error fetching logs for user ${userId}:`, logError.message);
-                continue;
-            }
-
-            if (!logs || logs.length < 4) continue;
+            if (logError || !logs || logs.length < 4) continue;
 
             const metrics = {
-                Clarity: logs.map(l => l.clarity_score).filter(s => s !== null),
-                Immune: logs.map(l => l.immune_score).filter(s => s !== null),
-                Physical: logs.map(l => l.physical_readiness_score).filter(s => s !== null),
+                Clarity: logs.map(l => l.clarity_score).filter(s => s != null),
+                Immune: logs.map(l => l.immune_score).filter(s => s != null),
+                Physical: logs.map(l => l.physical_readiness_score).filter(s => s != null),
             };
 
             for (const metricName in metrics) {
@@ -81,11 +91,13 @@ exports.handler = async (event, context) => {
                 const trendSlope = getTrend(scores);
                 const volatility = getStandardDeviation(scores);
 
+                console.log(`User ${userId}, Metric: ${metricName}, Slope: ${trendSlope.toFixed(2)}, Volatility: ${volatility.toFixed(2)}`);
+
                 const isSignificantTrend = trendSlope < -0.4;
                 const isStableData = volatility < 2.5;
 
                 if (isSignificantTrend && isStableData) { 
-                    const persona = `You are the Trend Sentinel AI for a health app called LightCore...`;
+                    const persona = `You are the Trend Sentinel AI...`;
                     const prompt = `A high-confidence downward trend was detected...`;
                     const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
                     
@@ -98,26 +110,42 @@ exports.handler = async (event, context) => {
                         })
                     });
                     
-                    if (!aiResponse.ok) continue;
+                    if (!aiResponse.ok) {
+                        console.warn(`Gemini API error for user ${userId}:`, await aiResponse.text());
+                        continue;
+                    }
                     
                     const aiData = await aiResponse.json();
-                    const nudgeContent = JSON.parse(aiData.candidates[0].content.parts[0].text);
+                    let nudgeContent;
+                    try {
+                        const aiText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+                        if (!aiText) {
+                           console.warn("Gemini response missing expected format for user:", userId);
+                           continue;
+                        }
+                        nudgeContent = JSON.parse(aiText);
+                    } catch (e) {
+                        console.warn(`Failed to parse Gemini output for user ${userId}:`, e);
+                        continue;
+                    }
                     
                     await supabaseAdmin.from('nudges').insert({
                         user_id: userId,
-                        headline: nudgeContent.headline,
-                        body_text: nudgeContent.body_text,
-                        suggested_actions: nudgeContent.suggested_actions
+                        headline: nudgeContent.headline || "Trend Alert",
+                        body_text: nudgeContent.body_text || "A trend was detected in your health data.",
+                        suggested_actions: Array.isArray(nudgeContent.suggested_actions) ? nudgeContent.suggested_actions : []
                     });
 
                     console.log(`Nudge generated for user ${userId} for metric ${metricName}`);
-                    break;
+                    break; 
                 }
             }
         }
         
-        console.log("--- Trend Sentinel run complete ---");
-        return { statusCode: 200, body: "Trend Sentinel run complete." };
+        return {
+            statusCode: 200,
+            body: JSON.stringify({ message: "Trend Sentinel run complete." })
+        };
 
     } catch (error) {
         console.error("CRITICAL ERROR in Trend Sentinel:", error.message, error.stack);
