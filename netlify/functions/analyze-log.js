@@ -1,6 +1,17 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
+// Helper function to ensure every field has a safe default value.
+function ensureField(field) {
+    const defaultValue = { score: 0, label: 'N/A', color_hex: '#6B7280' };
+    if (!field) return defaultValue;
+    return {
+        score: field.score ?? defaultValue.score,
+        label: field.label ?? defaultValue.label,
+        color_hex: field.color_hex ?? defaultValue.color_hex
+    };
+}
+
 exports.handler = async (event, context) => {
     try {
         const token = event.headers.authorization?.split(' ')[1];
@@ -13,6 +24,7 @@ exports.handler = async (event, context) => {
         const { log, sleep_hours, sleep_quality } = JSON.parse(event.body);
 
         let healthDataString = "Not available";
+        // This try/catch is for a non-critical feature, so we let it fail silently if needed.
         try {
             const healthResponse = await fetch('https://lightcorehealth.netlify.app/.netlify/functions/fetch-health-data', {
                 method: 'POST',
@@ -28,10 +40,28 @@ exports.handler = async (event, context) => {
             console.error("Non-critical error fetching health data:", e.message);
         }
         
-        const prompt = `You are an AI health analyst... User Log: "${log}" Health Data: ${healthDataString}`;
+        // A "bulletproof" prompt that is extremely explicit about the desired output.
+        const prompt = `
+        You are an AI health analyst. Your response MUST be a single, valid JSON object and nothing else. Do not include conversational text or markdown formatting.
+        The JSON object must contain four top-level keys: "clarity", "immune", "physical", and "notes".
+        - Each of the "clarity", "immune", and "physical" keys must map to a valid JSON object containing: a "score" (integer 1-10), a "label" (string from the rubric), and a "color_hex" (string).
+        - The "notes" key must be a string of empathetic coaching advice (2-3 sentences max) addressed directly to the user as "you".
+
+        Scoring Rubric:
+        - 1-2: Critical (#ef4444)
+        - 3-4: Poor (#f97316)
+        - 5-6: Moderate (#eab308)
+        - 7-8: Good (#22c55e)
+        - 9-10: Optimal (#3b82f6)
+
+        Analyze the following data to generate the JSON response:
+        ---
+        User Log: "${log}"
+        Automated Health Data: ${healthDataString}
+        ---
+        `;
 
         const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
-
         const aiResponse = await fetch(geminiApiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -48,46 +78,29 @@ exports.handler = async (event, context) => {
 
         const aiData = await aiResponse.json();
         
-        // --- MODIFIED: Robust JSON parsing ---
-        let analysis;
-        try {
-            const rawText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!rawText) {
-                throw new Error("AI returned an empty or invalid response structure.");
-            }
-            
-            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-            if (!jsonMatch) {
-                console.error("Raw AI response did not contain a JSON object:", rawText);
-                throw new Error("AI did not return a valid JSON object.");
-            }
-            
-            analysis = JSON.parse(jsonMatch[0]);
-
-        } catch (parseError) {
-            console.error("Failed to parse JSON from AI response:", parseError);
-            console.error("Raw AI response text that failed parsing:", aiData?.candidates?.[0]?.content?.parts?.[0]?.text || "Not available");
-            throw new Error("Failed to parse AI response.");
+        // More robust parsing and validation
+        if (!aiData?.candidates?.[0]?.content?.parts?.[0]?.text) {
+            throw new Error("AI returned an empty or invalid response structure.");
         }
-        // --- End of modification ---
+        const analysis = JSON.parse(aiData.candidates[0].content.parts[0].text);
 
-        const defaultScore = { score: 0, label: 'N/A', color_hex: '#6B7280' };
-        analysis.clarity = analysis.clarity || defaultScore;
-        analysis.immune = analysis.immune || defaultScore;
-        analysis.physical = analysis.physical || defaultScore;
+        // Ensure every field and sub-field is valid before creating the log entry
+        const clarity = ensureField(analysis.clarity);
+        const immune = ensureField(analysis.immune);
+        const physical = ensureField(analysis.physical);
 
         const logEntry = {
             user_id: user.id,
             log: log,
-            clarity_score: analysis.clarity.score,
-            clarity_label: analysis.clarity.label,
-            clarity_color: analysis.clarity.color_hex,
-            immune_score: analysis.immune.score,
-            immune_label: analysis.immune.label,
-            immune_color: analysis.immune.color_hex,
-            physical_readiness_score: analysis.physical.score,
-            physical_readiness_label: analysis.physical.label,
-            physical_readiness_color: analysis.physical.color_hex,
+            clarity_score: clarity.score,
+            clarity_label: clarity.label,
+            clarity_color: clarity.color_hex,
+            immune_score: immune.score,
+            immune_label: immune.label,
+            immune_color: immune.color_hex,
+            physical_readiness_score: physical.score,
+            physical_readiness_label: physical.label,
+            physical_readiness_color: physical.color_hex,
             ai_notes: analysis.notes || "No specific notes generated.",
         };
         
