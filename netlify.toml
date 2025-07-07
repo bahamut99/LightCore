@@ -1,3 +1,5 @@
+[functions]
+  directory = "netlify/functions"
+
 [functions."trend-sentinel"]
-  # This runs the function at 00:00 UTC (Coordinated Universal Time) every day.
   schedule = "0 0 * * *"
