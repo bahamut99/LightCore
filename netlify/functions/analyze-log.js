@@ -28,11 +28,10 @@ exports.handler = async (event, context) => {
             console.error("Non-critical error fetching health data:", e.message);
         }
         
-        const prompt = `You are an AI health analyst... Your response MUST be a single, valid JSON object... Analyze the following data...
-        User Log: "${log}"
-        Health Data: ${healthDataString}`;
+        const prompt = `You are an AI health analyst... User Log: "${log}" Health Data: ${healthDataString}`;
 
         const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+
         const aiResponse = await fetch(geminiApiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -48,11 +47,29 @@ exports.handler = async (event, context) => {
         }
 
         const aiData = await aiResponse.json();
-        const rawText = aiData.candidates[0].content.parts[0].text;
-        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error("AI did not return a valid JSON object.");
         
-        const analysis = JSON.parse(jsonMatch[0]);
+        // --- MODIFIED: Robust JSON parsing ---
+        let analysis;
+        try {
+            const rawText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!rawText) {
+                throw new Error("AI returned an empty or invalid response structure.");
+            }
+            
+            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                console.error("Raw AI response did not contain a JSON object:", rawText);
+                throw new Error("AI did not return a valid JSON object.");
+            }
+            
+            analysis = JSON.parse(jsonMatch[0]);
+
+        } catch (parseError) {
+            console.error("Failed to parse JSON from AI response:", parseError);
+            console.error("Raw AI response text that failed parsing:", aiData?.candidates?.[0]?.content?.parts?.[0]?.text || "Not available");
+            throw new Error("Failed to parse AI response.");
+        }
+        // --- End of modification ---
 
         const defaultScore = { score: 0, label: 'N/A', color_hex: '#6B7280' };
         analysis.clarity = analysis.clarity || defaultScore;
@@ -89,6 +106,7 @@ exports.handler = async (event, context) => {
             statusCode: 200,
             body: JSON.stringify(newLogData),
         };
+
     } catch (error) {
         console.error('CRITICAL ERROR in analyze-log:', error.message);
         return {
@@ -97,4 +115,7 @@ exports.handler = async (event, context) => {
         };
     }
 };
-module.exports.config = { timeout: 25 };
+
+module.exports.config = {
+  timeout: 25,
+};
