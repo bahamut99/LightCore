@@ -20,7 +20,7 @@ exports.handler = async (event, context) => {
             .order('event_time', { ascending: true });
 
         if (error) throw new Error(`Supabase select error: ${error.message}`);
-        
+
         return {
             statusCode: 200,
             body: JSON.stringify(data),

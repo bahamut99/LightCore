@@ -5,6 +5,7 @@
     <title>LightCore - Your Health Dashboard</title>
     <link rel="stylesheet" href="style.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <link rel="icon" type="image/png" href="https://i.imgur.com/d5N9dkk.png" />
   </head>
   <body>
@@ -79,9 +80,6 @@
         <div class="left-column">
           <div class="card">
             <h2>📊 Trends</h2>
-            <p class="trend-sentinel-status">
-              🛰️ <strong>Trend Sentinel:</strong> Online & Monitoring
-            </p>
             <div class="toggle-buttons">
               <button id="btn7day" class="active">7 Day</button>
               <button id="btn30day">30 Day</button>
@@ -94,6 +92,12 @@
             </div>
             <div class="chart-container">
               <canvas id="physicalChart"></canvas>
+            </div>
+          </div>
+          <div class="card" id="chronodeck-card">
+            <h2>🕰️ ChronoDeck</h2>
+            <div class="chart-container" style="height: 250px">
+              <canvas id="chronoChart"></canvas>
             </div>
           </div>
         </div>
@@ -124,8 +128,7 @@
               <span id="clarity"></span>
             </div>
             <div class="score">
-              <span class="label">Immune Risk:</span>
-              <span id="immune"></span>
+              <span class="label">Immune Risk:</span> <span id="immune"></span>
             </div>
             <div class="score">
               <span class="label">Physical Output:</span>
@@ -136,7 +139,6 @@
               <p id="notes"></p>
             </div>
           </div>
-
           <div class="card">
             <h2>🕓 Recent Entries</h2>
             <p class="subtle-text">Click on a row to see full details.</p>
@@ -205,14 +207,12 @@
               </p>
             </div>
           </div>
-
           <div class="card card-glass">
             <h2>💡 AI Insight</h2>
             <p id="ai-insight-text" class="subtle-text">
               Analyzing your data for new patterns...
             </p>
           </div>
-
           <div class="card">
             <h2>📖 Insight History</h2>
             <div id="insight-history-container">
@@ -267,6 +267,7 @@
     </div>
 
     <div id="toast-notification" class="toast"></div>
+
     <script src="script.js" type="module"></script>
   </body>
 </html>

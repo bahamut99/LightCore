@@ -483,6 +483,7 @@ function td(content, parent, type = null, color = '') {
         
         if (color) {
             span.style.color = color;
+            // Create RGBA from hex color for the background
             const r = parseInt(color.slice(1, 3), 16);
             const g = parseInt(color.slice(3, 5), 16);
             const b = parseInt(color.slice(5, 7), 16);
