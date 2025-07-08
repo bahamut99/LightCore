@@ -302,32 +302,6 @@ td:nth-child(6) {
   min-width: 60px;
 }
 
-.score-critical {
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-}
-
-.score-poor {
-  background-color: rgba(249, 115, 22, 0.1);
-  color: #f97316;
-}
-
-.score-moderate {
-  background-color: rgba(234, 179, 8, 0.1);
-  color: #eab308;
-}
-
-.score-good {
-  background-color: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
-}
-
-.score-optimal {
-  background-color: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
-}
-
-
 /* === UTILITY & MODAL STYLES === */
 .loader {
   width: 18px;
@@ -646,4 +620,33 @@ input:checked+.slider:before {
 
 .nudge-actions-container button:hover {
   background-color: #4B5563;
+}
+
+/* === CHRONODECK TIMELINE STYLES === */
+#chronodeck-card .chart-container {
+  height: 300px;
+  overflow-x: auto;
+  /* Enable horizontal scroll */
+  padding-bottom: 1rem;
+  /* Add some space for scrollbar */
+}
+
+/* Custom scrollbar for webkit browsers */
+#chronodeck-card .chart-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+#chronodeck-card .chart-container::-webkit-scrollbar-track {
+  background: #1F2937;
+  border-radius: 10px;
+}
+
+#chronodeck-card .chart-container::-webkit-scrollbar-thumb {
+  background-color: #4B5563;
+  border-radius: 10px;
+  border: 2px solid #1F2937;
+}
+
+#chronodeck-card .chart-container::-webkit-scrollbar-thumb:hover {
+  background-color: #6B7280;
 }

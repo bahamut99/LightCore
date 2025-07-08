@@ -9,6 +9,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let charts = {};
 
+// Register the datalabels plugin globally
+Chart.register(ChartDataLabels);
+
 async function handleTokenCallback() {
     if (window.location.hash.includes('access_token')) {
         const params = new URLSearchParams(window.location.hash.substring(1));
@@ -197,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
             handleTokenCallback().then(() => {
                 loadRecentLogs();
                 fetchAndRenderCharts(7);
-              fetchAndRenderChronoDeck(); // This is a new call
+              fetchAndRenderChronoDeck(); 
                 fetchAndDisplayInsight();
                 fetchAndRenderInsightHistory();
                 checkGoogleHealthConnection();
@@ -309,7 +312,6 @@ async function submitLog() {
 
         const newLog = await response.json();
         
-      // After a new log is submitted, also try to parse its events
       fetch('/.netlify/functions/parse-events', {
           method: 'POST',
           headers: {
@@ -317,7 +319,7 @@ async function submitLog() {
               'Authorization': `Bearer ${session.access_token}`
           },
           body: JSON.stringify({ log_id: newLog.id, log_text: newLog.log })
-      }).then(() => fetchAndRenderChronoDeck()); // Then re-render the ChronoDeck
+      }).then(() => fetchAndRenderChronoDeck()); 
 
         displayResults(newLog); 
         await loadRecentLogs();
@@ -374,7 +376,6 @@ async function fetchAndRenderCharts(range) {
     }
 }
 
-// === NEW FUNCTION TO FETCH CHRONODECK DATA ===
 async function fetchAndRenderChronoDeck() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -516,7 +517,6 @@ function td(content, parent, type = null, color = '') {
         
         if (color) {
             span.style.color = color;
-            // Create RGBA from hex color for the background
             const r = parseInt(color.slice(1, 3), 16);
             const g = parseInt(color.slice(3, 5), 16);
             const b = parseInt(color.slice(5, 7), 16);
@@ -598,67 +598,91 @@ function renderAllCharts(data) {
     renderChart('physicalChart', 'Physical Output', data.labels, data.physicalData, '#4ade80', commonOptions);
 }
 
-// === NEW FUNCTION TO RENDER THE CHRONODECK CHART ===
+// === NEW CHRONODECK RENDERER ===
 function renderChronoDeckChart(data) {
     const canvasId = 'chronoChart';
-    const chartContainer = document.getElementById(canvasId).parentElement;
+    const chartContainer = document.getElementById(canvasId)?.parentElement;
     
     if (charts[canvasId]) {
         charts[canvasId].destroy();
     }
     
     if (!data || data.length === 0) {
-        chartContainer.innerHTML = '<p class="subtle-text" style="text-align: center; padding-top: 4rem;">No timed events like "Workout" or "Meal" have been logged yet. Try adding one to your daily log!</p>';
+        if (chartContainer) {
+            chartContainer.innerHTML = `<canvas id="chronoChart"></canvas><p class="subtle-text" style="text-align: center; padding: 4rem 1rem;">No timed events like "Workout" or "Meal" have been logged yet. The adding one to your daily log!</p>`;
+        }
         return;
+    }
+    // If we have data but the placeholder is there, restore the canvas
+    if (chartContainer && !chartContainer.querySelector('canvas')) {
+        chartContainer.innerHTML = `<canvas id="chronoChart"></canvas>`;
     }
 
     const ctx = document.getElementById(canvasId).getContext('2d');
 
-    const eventsByType = data.reduce((acc, event) => {
-        const type = event.event_type;
-        if (!acc[type]) {
-            acc[type] = [];
-        }
-        const eventDate = new Date(event.event_time);
-        acc[type].push(eventDate.getHours() + eventDate.getMinutes() / 60);
-        return acc;
-    }, {});
-
-    const averages = Object.keys(eventsByType).map(type => {
-        const hours = eventsByType[type];
-        const avg = hours.reduce((a, b) => a + b, 0) / hours.length;
-        return { type, avg };
-    });
-
-    const averageLineValue = averages.length > 0 ? averages.reduce((sum, curr) => sum + curr.avg, 0) / averages.length : 0;
-
-    const colorMap = {
-      'Workout': '#38bdf8',
-      'Meal': '#4ade80',
-      'Caffeine': '#facc15',
-      'Sleep': '#a78bfa'
+    const eventConfig = {
+        'Workout':  { color: 'rgba(56, 189, 248, 0.7)', icon: '🏋️' },
+        'Meal':     { color: 'rgba(250, 204, 21, 0.7)', icon: '🍽️' },
+        'Caffeine': { color: 'rgba(249, 115, 22, 0.7)', icon: '☕' },
+        'Sleep':    { color: 'rgba(167, 139, 250, 0.7)', icon: '😴' }
     };
+
+    const dayLabels = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (let i = 6; i >= 0; i--) {
+        const day = new Date(today);
+        day.setDate(today.getDate() - i);
+        dayLabels.push(day.toLocaleDateString('en-US', { weekday: 'short' }));
+    }
+
+    const datasets = Object.keys(eventConfig).map(type => ({
+        label: type,
+        data: [],
+        backgroundColor: eventConfig[type].color,
+        barPercentage: 0.5,
+        borderRadius: 4,
+    }));
+
+    data.forEach(event => {
+        const eventDate = new Date(event.event_time);
+        const dayStr = eventDate.toLocaleDateString('en-US', { weekday: 'short' });
+        
+        const startHour = eventDate.getHours() + eventDate.getMinutes() / 60;
+        const endHour = startHour + 1; // Assume 1 hour duration for all events
+
+        const dataset = datasets.find(d => d.label === event.event_type);
+        if (dataset && dayLabels.includes(dayStr)) {
+            dataset.data.push({
+                x: [startHour, endHour],
+                y: dayStr
+            });
+        }
+    });
 
     charts[canvasId] = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: averages.map(a => a.type),
-            datasets: [{
-                label: 'Average Event Time (Hour of Day)',
-                data: averages.map(a => a.avg),
-                backgroundColor: averages.map(a => colorMap[a.type] || '#6B7280'),
-                borderRadius: 4
-            }]
+            labels: dayLabels,
+            datasets: datasets.filter(d => d.data.length > 0)
         },
         options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
             scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 24,
-                    title: { display: true, text: 'Hour of Day (24h)', color: '#9CA3AF' },
-                    ticks: { color: '#9CA3AF', stepSize: 4 }
-                },
                 x: {
+                    min: 0,
+                    max: 24,
+                    position: 'top',
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                    ticks: {
+                        color: '#9CA3AF',
+                        stepSize: 2,
+                        callback: (value) => `${value}`
+                    }
+                },
+                y: {
                     grid: { display: false },
                     ticks: { color: '#9CA3AF' }
                 }
@@ -668,40 +692,24 @@ function renderChronoDeckChart(data) {
                 tooltip: {
                     callbacks: {
                         label: function(context) {
-                            let label = context.dataset.label || '';
-                            if (label) {
-                                label += ': ';
-                            }
-                            if (context.parsed.y !== null) {
-                                const hours = Math.floor(context.parsed.y);
-                                const minutes = Math.round((context.parsed.y - hours) * 60);
-                                label += `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-                            }
-                            return label;
+                            const d = context.raw;
+                            const start = Math.floor(d.x[0]);
+                            const startMin = Math.round((d.x[0] - start) * 60);
+                            return `${context.dataset.label} at ${start.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
                         }
                     }
                 },
-                annotation: {
-                    annotations: {
-                        line1: {
-                            type: 'line',
-                            yMin: averageLineValue,
-                            yMax: averageLineValue,
-                            borderColor: '#ef4444',
-                            borderWidth: 2,
-                            borderDash: [6, 6],
-                            label: {
-                                content: 'Overall Avg',
-                                enabled: true,
-                                position: 'end',
-                                backgroundColor: 'rgba(239, 68, 68, 0.7)',
-                                font: { size: 10 }
-                            }
-                        }
+                datalabels: {
+                    color: 'white',
+                    align: 'start',
+                    anchor: 'start',
+                    offset: 8,
+                    font: { size: 14 },
+                    formatter: function(value, context) {
+                        return eventConfig[context.dataset.label].icon;
                     }
                 }
-            },
-            maintainAspectRatio: false,
+            }
         }
     });
 }
@@ -723,7 +731,7 @@ function renderChart(canvasId, label, labels, data, hexColor, options) {
     charts[canvasId] = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: labels.map(l => new Date(l)),
+            labels: labels,
             datasets: [{
                 label: label,
                 data: data,
@@ -739,6 +747,7 @@ function renderChart(canvasId, label, labels, data, hexColor, options) {
         options: {
             ...options,
             plugins: {
+                datalabels: { display: false }, // Disable datalabels for these charts
                 ...options.plugins,
                 title: {
                     display: true,
