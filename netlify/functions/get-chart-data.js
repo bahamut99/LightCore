@@ -24,7 +24,8 @@ exports.handler = async (event, context) => {
 
         if (error) throw new Error(`Supabase select error: ${error.message}`);
 
-        const labels = data.map(log => new Date(log.created_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }));
+        // **FIXED**: Send the full 'created_at' ISO string instead of a formatted string.
+        const labels = data.map(log => log.created_at); 
         const clarityData = data.map(log => log.clarity_score);
         const immuneData = data.map(log => log.immune_score);
         const physicalData = data.map(log => log.physical_readiness_score);
