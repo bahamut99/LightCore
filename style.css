@@ -529,108 +529,28 @@ input:checked+.slider:before {
   text-decoration: underline;
 }
 
-.about-container {
-  max-width: 800px;
-  margin: 2rem auto;
-  padding: 1rem;
-}
-
-.about-container h4 {
-  margin-top: 1.5rem;
-  margin-bottom: .5rem;
-  color: #9ca3af;
-}
-
-.about-container p {
-  line-height: 1.7;
-  color: #d1d5db;
-}
-
-.toast {
-  visibility: hidden;
-  min-width: 250px;
-  background-color: #374151;
-  color: #fff;
-  text-align: center;
-  border-radius: .5rem;
-  padding: 1rem;
-  position: fixed;
-  z-index: 200;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 30px;
-  font-size: .9rem;
-  opacity: 0;
-  transition: visibility .5s, opacity .5s linear;
-  border: 1px solid #4B5563;
-}
-
-.toast.show {
-  visibility: visible;
-  opacity: 1;
-}
-
-.nudge-card {
-  border-color: rgba(249, 115, 22, .4);
-  border-width: 1px;
-}
-
-.nudge-card h2 {
-  color: #f97316;
-  font-size: 1.2rem;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.nudge-card p {
-  margin: .5rem 0 1rem;
-  line-height: 1.6;
-}
-
-.nudge-actions-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .5rem;
-}
-
-.nudge-actions-container button {
-  background-color: #374151;
-  border: 1px solid #4b5563;
-  width: auto;
-  flex-grow: 1;
-  padding: .5rem 1rem;
-  margin: 0;
-  font-size: .8rem;
-}
-
-.nudge-actions-container button:hover {
-  background-color: #4b5563;
-}
-
-.trend-sentinel-banner {
-  background-color: rgba(30, 64, 175, 0.15);
-  color: #93c5fd;
-  border-radius: 12px;
-  padding: 10px 16px;
-  margin-bottom: 16px;
+/* 🌐 Trend Sentinel Style */
+.trend-sentinel-status {
+  font-size: 0.85rem;
+  color: #60a5fa;
+  background-color: rgba(59, 130, 246, 0.1);
+  border: 1px solid #3b82f6;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  display: inline-block;
+  margin-bottom: 0.75rem;
   font-weight: 600;
-  display: flex;
-  align-items: center;
-  font-size: 0.95rem;
-  animation: pulseGlow 2.5s ease-in-out infinite;
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.25);
+  animation: pulseGlow 2.5s infinite ease-in-out;
 }
 
 @keyframes pulseGlow {
-  0% {
-    opacity: 0.8;
+
+  0%,
+  100% {
+    box-shadow: 0 0 0px rgba(59, 130, 246, 0.5);
   }
 
   50% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 0.8;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
   }
 }
