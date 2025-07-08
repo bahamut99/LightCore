@@ -598,7 +598,7 @@ function renderAllCharts(data) {
     renderChart('physicalChart', 'Physical Output', data.labels, data.physicalData, '#4ade80', commonOptions);
 }
 
-// === NEW CHRONODECK RENDERER ===
+// === REVISED CHRONODECK RENDERER ===
 function renderChronoDeckChart(data) {
     const canvasId = 'chronoChart';
     const chartContainer = document.getElementById(canvasId)?.parentElement;
@@ -607,13 +607,19 @@ function renderChronoDeckChart(data) {
         charts[canvasId].destroy();
     }
     
+    // Clear placeholder text when we start rendering
+    if(chartContainer) {
+        const placeholder = chartContainer.querySelector('p');
+        if(placeholder) placeholder.remove();
+    }
+    
     if (!data || data.length === 0) {
-        if (chartContainer) {
-            chartContainer.innerHTML = `<canvas id="chronoChart"></canvas><p class="subtle-text" style="text-align: center; padding: 4rem 1rem;">No timed events like "Workout" or "Meal" have been logged yet. The adding one to your daily log!</p>`;
+        if (chartContainer && !chartContainer.querySelector('p')) {
+             chartContainer.innerHTML = `<p class="subtle-text" style="text-align: center; padding: 4rem 1rem;">No timed events found in your recent logs. Try adding one, like "Workout at 2pm"!</p>`;
         }
         return;
     }
-    // If we have data but the placeholder is there, restore the canvas
+    
     if (chartContainer && !chartContainer.querySelector('canvas')) {
         chartContainer.innerHTML = `<canvas id="chronoChart"></canvas>`;
     }
@@ -621,10 +627,10 @@ function renderChronoDeckChart(data) {
     const ctx = document.getElementById(canvasId).getContext('2d');
 
     const eventConfig = {
-        'Workout':  { color: 'rgba(56, 189, 248, 0.7)', icon: '🏋️' },
-        'Meal':     { color: 'rgba(250, 204, 21, 0.7)', icon: '🍽️' },
-        'Caffeine': { color: 'rgba(249, 115, 22, 0.7)', icon: '☕' },
-        'Sleep':    { color: 'rgba(167, 139, 250, 0.7)', icon: '😴' }
+        'Workout':  { color: 'rgba(56, 189, 248, 0.85)', icon: '🏋️', duration: 1.5 },
+        'Meal':     { color: 'rgba(250, 204, 21, 0.85)', icon: '🍽️', duration: 0.75 },
+        'Caffeine': { color: 'rgba(249, 115, 22, 0.85)', icon: '☕', duration: 0.5 },
+        'Sleep':    { color: 'rgba(167, 139, 250, 0.85)', icon: '😴', duration: 8 }
     };
 
     const dayLabels = [];
@@ -640,8 +646,9 @@ function renderChronoDeckChart(data) {
         label: type,
         data: [],
         backgroundColor: eventConfig[type].color,
-        barPercentage: 0.5,
-        borderRadius: 4,
+        barPercentage: 0.6,
+        borderRadius: 10,
+        borderWidth: 0,
     }));
 
     data.forEach(event => {
@@ -649,7 +656,8 @@ function renderChronoDeckChart(data) {
         const dayStr = eventDate.toLocaleDateString('en-US', { weekday: 'short' });
         
         const startHour = eventDate.getHours() + eventDate.getMinutes() / 60;
-        const endHour = startHour + 1; // Assume 1 hour duration for all events
+        const config = eventConfig[event.event_type] || { duration: 1 };
+        const endHour = startHour + config.duration;
 
         const dataset = datasets.find(d => d.label === event.event_type);
         if (dataset && dayLabels.includes(dayStr)) {
@@ -670,43 +678,64 @@ function renderChronoDeckChart(data) {
             indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+              padding: { top: 20 }
+            },
             scales: {
                 x: {
                     min: 0,
                     max: 24,
                     position: 'top',
-                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                    grid: { 
+                      color: 'rgba(255, 255, 255, 0.08)',
+                      borderColor: 'rgba(255, 255, 255, 0.0)'
+                    },
                     ticks: {
                         color: '#9CA3AF',
                         stepSize: 2,
-                        callback: (value) => `${value}`
+                        padding: 10,
                     }
                 },
                 y: {
-                    grid: { display: false },
-                    ticks: { color: '#9CA3AF' }
+                    grid: { 
+                      color: 'rgba(255, 255, 255, 0.08)',
+                      borderColor: 'rgba(255, 255, 255, 0.0)'
+                    },
+                    ticks: { 
+                      color: '#9CA3AF',
+                      padding: 10,
+                    }
                 }
             },
             plugins: {
                 legend: { display: false },
                 tooltip: {
+                    enabled: true,
                     callbacks: {
+                        title: () => null,
                         label: function(context) {
                             const d = context.raw;
                             const start = Math.floor(d.x[0]);
                             const startMin = Math.round((d.x[0] - start) * 60);
-                            return `${context.dataset.label} at ${start.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
+                            const end = Math.floor(d.x[1]);
+                            const endMin = Math.round((d.x[1] - end) * 60);
+
+                            const startTime = `${start.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
+                            const endTime = `${end.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
+                            
+                            return `${context.dataset.label}: ${startTime} - ${endTime}`;
                         }
                     }
                 },
                 datalabels: {
-                    color: 'white',
-                    align: 'start',
-                    anchor: 'start',
-                    offset: 8,
+                    color: 'rgba(255, 255, 255, 0.9)',
+                    align: 'center',
+                    anchor: 'center',
                     font: { size: 14 },
                     formatter: function(value, context) {
-                        return eventConfig[context.dataset.label].icon;
+                        const config = eventConfig[context.dataset.label];
+                        // Only show icon if the bar is wide enough
+                        return (value.x[1] - value.x[0] > 0.5) ? config.icon : '';
                     }
                 }
             }
@@ -747,7 +776,7 @@ function renderChart(canvasId, label, labels, data, hexColor, options) {
         options: {
             ...options,
             plugins: {
-                datalabels: { display: false }, // Disable datalabels for these charts
+                datalabels: { display: false },
                 ...options.plugins,
                 title: {
                     display: true,

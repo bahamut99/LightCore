@@ -624,14 +624,17 @@ input:checked+.slider:before {
 
 /* === CHRONODECK TIMELINE STYLES === */
 #chronodeck-card .chart-container {
-  height: 300px;
+  height: 320px;
+  /* Increased height for better spacing */
   overflow-x: auto;
-  /* Enable horizontal scroll */
-  padding-bottom: 1rem;
-  /* Add some space for scrollbar */
+  padding: 0.5rem 0;
 }
 
-/* Custom scrollbar for webkit browsers */
+#chronoChart {
+  /* Add a subtle glow to the chart elements */
+  filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.5));
+}
+
 #chronodeck-card .chart-container::-webkit-scrollbar {
   height: 8px;
 }
