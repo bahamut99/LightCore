@@ -6,14 +6,23 @@ exports.handler = async (event, context) => {
         const token = event.headers.authorization?.split(' ')[1];
         if (!token) throw new Error('Not authorized.');
 
-        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-        const { data: { user } } = await supabase.auth.getUser(token);
-        if (!user) throw new Error('User not found.');
+        // **FIX**: Initialize the Supabase client with the user's auth token directly.
+        // This is a more robust pattern for serverless functions.
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+            global: {
+                headers: { Authorization: `Bearer ${token}` }
+            }
+        });
+
+        // Now we can get the user without passing the token again.
+        const { data: { user }, error: userGetError } = await supabase.auth.getUser();
+        if (userGetError || !user) throw new Error('User not found or token invalid.');
 
         const { log_id, log_text } = JSON.parse(event.body);
         if (!log_id || !log_text) throw new Error('Missing log_id or log_text.');
 
-        const extractionPrompt = `Your task is to act as a data extractor. Read the user's log and identify specific, timestamped events. The only valid event types are 'Workout', 'Meal', 'Caffeine', and 'Sleep'. If you find an event, return a JSON array of objects. Each object must have an "event_type" and an "event_time" (a full ISO 8601 timestamp for today, ${new Date().toISOString().split('T')[0]}). If no events are mentioned, return an empty array []. User's Log: "${log_text}"`;
+        const today = new Date();
+        const extractionPrompt = `Your task is to act as a data extractor. Read the user's log and identify specific, timestamped events. The only valid event types are 'Workout', 'Meal', 'Caffeine', and 'Sleep'. If you find an event, return a JSON array of objects. Each object must have an "event_type" and an "event_time" (a full ISO 8601 timestamp for today, ${today.toISOString().split('T')[0]}). If no events are mentioned, return an empty array []. User's Log: "${log_text}"`;
 
         const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
         const aiResponse = await fetch(geminiApiUrl, {
@@ -31,10 +40,13 @@ exports.handler = async (event, context) => {
         const rawText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!rawText) return { statusCode: 200, body: 'No events found.'};
 
-        const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-        if (!jsonMatch) return { statusCode: 200, body: 'No valid event array found.'};
-
-        const extractedEvents = JSON.parse(jsonMatch[0]);
+        let extractedEvents;
+        try {
+            extractedEvents = JSON.parse(rawText.match(/\[[\s\S]*\]/)[0]);
+        } catch (e) {
+            console.log("No valid event JSON found in AI response.");
+            return { statusCode: 200, body: 'No valid event array found.'};
+        }
 
         if (extractedEvents && extractedEvents.length > 0) {
             const eventsToInsert = extractedEvents.map(e => ({
@@ -44,7 +56,10 @@ exports.handler = async (event, context) => {
                 event_time: e.event_time
             }));
             const { error: eventError } = await supabase.from('events').insert(eventsToInsert);
-            if (eventError) console.error("Error saving extracted events:", eventError.message);
+            if (eventError) {
+                console.error("Error saving extracted events:", eventError.message);
+                throw new Error(`Error saving extracted events: ${eventError.message}`);
+            }
         }
 
         return { statusCode: 200, body: 'Event parsing complete.' };
