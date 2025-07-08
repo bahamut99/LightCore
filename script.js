@@ -197,6 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
             handleTokenCallback().then(() => {
                 loadRecentLogs();
                 fetchAndRenderCharts(7);
+              fetchAndRenderChronoDeck(); // This is a new call
                 fetchAndDisplayInsight();
                 fetchAndRenderInsightHistory();
                 checkGoogleHealthConnection();
@@ -308,6 +309,16 @@ async function submitLog() {
 
         const newLog = await response.json();
         
+      // After a new log is submitted, also try to parse its events
+      fetch('/.netlify/functions/parse-events', {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({ log_id: newLog.id, log_text: newLog.log })
+      }).then(() => fetchAndRenderChronoDeck()); // Then re-render the ChronoDeck
+
         displayResults(newLog); 
         await loadRecentLogs();
         await fetchAndRenderCharts(7);
@@ -360,6 +371,28 @@ async function fetchAndRenderCharts(range) {
         renderAllCharts(data);
     } catch (error) {
         console.error("Error fetching or rendering charts:", error);
+    }
+}
+
+// === NEW FUNCTION TO FETCH CHRONODECK DATA ===
+async function fetchAndRenderChronoDeck() {
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const response = await fetch(`/.netlify/functions/get-events`, {
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        renderChronoDeckChart(data);
+    } catch (error) {
+        console.error("Error fetching or rendering ChronoDeck chart:", error);
+        const chronosContainer = document.getElementById('chronoChart').parentElement;
+        chronosContainer.innerHTML = `<p class="subtle-text" style="text-align: center;">Could not load ChronoDeck data.</p>`;
     }
 }
 
@@ -548,7 +581,12 @@ function renderAllCharts(data) {
                 }
             },
             x: {
-                grid: { display: false },
+                type: 'time',
+              time: {
+                  unit: 'day',
+                  tooltipFormat: 'MMM d',
+              },
+              grid: { display: false },
                 ticks: { color: '#9CA3AF' }
             } 
         },
@@ -559,6 +597,115 @@ function renderAllCharts(data) {
     renderChart('immuneChart', 'Immune Risk', data.labels, data.immuneData, '#facc15', commonOptions);
     renderChart('physicalChart', 'Physical Output', data.labels, data.physicalData, '#4ade80', commonOptions);
 }
+
+// === NEW FUNCTION TO RENDER THE CHRONODECK CHART ===
+function renderChronoDeckChart(data) {
+    const canvasId = 'chronoChart';
+    const chartContainer = document.getElementById(canvasId).parentElement;
+    
+    if (charts[canvasId]) {
+        charts[canvasId].destroy();
+    }
+    
+    if (!data || data.length === 0) {
+        chartContainer.innerHTML = '<p class="subtle-text" style="text-align: center; padding-top: 4rem;">No timed events like "Workout" or "Meal" have been logged yet. Try adding one to your daily log!</p>';
+        return;
+    }
+
+    const ctx = document.getElementById(canvasId).getContext('2d');
+
+    const eventsByType = data.reduce((acc, event) => {
+        const type = event.event_type;
+        if (!acc[type]) {
+            acc[type] = [];
+        }
+        const eventDate = new Date(event.event_time);
+        acc[type].push(eventDate.getHours() + eventDate.getMinutes() / 60);
+        return acc;
+    }, {});
+
+    const averages = Object.keys(eventsByType).map(type => {
+        const hours = eventsByType[type];
+        const avg = hours.reduce((a, b) => a + b, 0) / hours.length;
+        return { type, avg };
+    });
+
+    const averageLineValue = averages.length > 0 ? averages.reduce((sum, curr) => sum + curr.avg, 0) / averages.length : 0;
+
+    const colorMap = {
+      'Workout': '#38bdf8',
+      'Meal': '#4ade80',
+      'Caffeine': '#facc15',
+      'Sleep': '#a78bfa'
+    };
+
+    charts[canvasId] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: averages.map(a => a.type),
+            datasets: [{
+                label: 'Average Event Time (Hour of Day)',
+                data: averages.map(a => a.avg),
+                backgroundColor: averages.map(a => colorMap[a.type] || '#6B7280'),
+                borderRadius: 4
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 24,
+                    title: { display: true, text: 'Hour of Day (24h)', color: '#9CA3AF' },
+                    ticks: { color: '#9CA3AF', stepSize: 4 }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#9CA3AF' }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null) {
+                                const hours = Math.floor(context.parsed.y);
+                                const minutes = Math.round((context.parsed.y - hours) * 60);
+                                label += `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                            }
+                            return label;
+                        }
+                    }
+                },
+                annotation: {
+                    annotations: {
+                        line1: {
+                            type: 'line',
+                            yMin: averageLineValue,
+                            yMax: averageLineValue,
+                            borderColor: '#ef4444',
+                            borderWidth: 2,
+                            borderDash: [6, 6],
+                            label: {
+                                content: 'Overall Avg',
+                                enabled: true,
+                                position: 'end',
+                                backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                                font: { size: 10 }
+                            }
+                        }
+                    }
+                }
+            },
+            maintainAspectRatio: false,
+        }
+    });
+}
+
 
 function renderChart(canvasId, label, labels, data, hexColor, options) {
     if (charts[canvasId]) {
@@ -576,7 +723,7 @@ function renderChart(canvasId, label, labels, data, hexColor, options) {
     charts[canvasId] = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: labels,
+            labels: labels.map(l => new Date(l)),
             datasets: [{
                 label: label,
                 data: data,
