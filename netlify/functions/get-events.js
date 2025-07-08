@@ -4,11 +4,18 @@ exports.handler = async (event, context) => {
     const token = event.headers.authorization?.split(' ')[1];
     if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Not authorized.' }) };
 
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    if (userError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
-
     try {
+        // **FIX**: Initialize the Supabase client with the user's auth token directly.
+        // This applies the same robust pattern we used for the parse-events function.
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+            global: {
+                headers: { Authorization: `Bearer ${token}` }
+            }
+        });
+
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
+
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
