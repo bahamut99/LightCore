@@ -312,14 +312,19 @@ async function submitLog() {
 
         const newLog = await response.json();
         
-      fetch('/.netlify/functions/parse-events', {
-          method: 'POST',
-          headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.access_token}`
-          },
-          body: JSON.stringify({ log_id: newLog.id, log_text: newLog.log })
-      }).then(() => fetchAndRenderChronoDeck()); 
+        const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        fetch('/.netlify/functions/parse-events', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`
+            },
+            body: JSON.stringify({ 
+                log_id: newLog.id, 
+                log_text: newLog.log,
+                userTimezone: userTimezone 
+            })
+        }).then(() => fetchAndRenderChronoDeck()); 
 
         displayResults(newLog); 
         await loadRecentLogs();
@@ -598,7 +603,6 @@ function renderAllCharts(data) {
     renderChart('physicalChart', 'Physical Output', data.labels, data.physicalData, '#4ade80', commonOptions);
 }
 
-// === REVISED CHRONODECK RENDERER ===
 function renderChronoDeckChart(data) {
     const canvasId = 'chronoChart';
     const chartContainer = document.getElementById(canvasId)?.parentElement;
@@ -607,7 +611,6 @@ function renderChronoDeckChart(data) {
         charts[canvasId].destroy();
     }
     
-    // Clear placeholder text when we start rendering
     if(chartContainer) {
         const placeholder = chartContainer.querySelector('p');
         if(placeholder) placeholder.remove();
@@ -627,12 +630,12 @@ function renderChronoDeckChart(data) {
     const ctx = document.getElementById(canvasId).getContext('2d');
 
     const eventConfig = {
-        'Workout':  { color: 'rgba(56, 189, 248, 0.85)', icon: '🏋️', duration: 1.5 },
-        'Meal':     { color: 'rgba(250, 204, 21, 0.85)', icon: '🍽️', duration: 0.75 },
-        'Caffeine': { color: 'rgba(249, 115, 22, 0.85)', icon: '☕', duration: 0.5 },
-        'Sleep':    { color: 'rgba(167, 139, 250, 0.85)', icon: '😴', duration: 8 }
+        'Workout':  { color: 'rgba(56, 189, 248, 0.85)', icon: '🏋️' },
+        'Meal':     { color: 'rgba(250, 204, 21, 0.85)', icon: '🍽️' },
+        'Caffeine': { color: 'rgba(249, 115, 22, 0.85)', icon: '☕' },
+        'Sleep':    { color: 'rgba(167, 139, 250, 0.85)', icon: '😴' }
     };
-
+    
     const dayLabels = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -640,6 +643,24 @@ function renderChronoDeckChart(data) {
         const day = new Date(today);
         day.setDate(today.getDate() - i);
         dayLabels.push(day.toLocaleDateString('en-US', { weekday: 'short' }));
+    }
+
+    const processedEvents = [];
+    const tempEvents = [...data].sort((a,b) => new Date(a.event_time) - new Date(b.event_time));
+
+    for (let i = 0; i < tempEvents.length; i++) {
+        if (i + 1 < tempEvents.length && tempEvents[i].event_type === tempEvents[i+1].event_type) {
+            const start = new Date(tempEvents[i].event_time);
+            const end = new Date(tempEvents[i+1].event_time);
+            processedEvents.push({ type: tempEvents[i].event_type, start: start, end: end });
+            i++; 
+        } else {
+            const start = new Date(tempEvents[i].event_time);
+            // Default duration for single-point events is 30 mins, except for sleep
+            const duration = tempEvents[i].event_type === 'Sleep' ? 8 * 60 : 30; // in minutes
+            const end = new Date(start.getTime() + duration * 60 * 1000);
+            processedEvents.push({ type: tempEvents[i].event_type, start: start, end: end });
+        }
     }
 
     const datasets = Object.keys(eventConfig).map(type => ({
@@ -651,15 +672,12 @@ function renderChronoDeckChart(data) {
         borderWidth: 0,
     }));
 
-    data.forEach(event => {
-        const eventDate = new Date(event.event_time);
-        const dayStr = eventDate.toLocaleDateString('en-US', { weekday: 'short' });
-        
-        const startHour = eventDate.getHours() + eventDate.getMinutes() / 60;
-        const config = eventConfig[event.event_type] || { duration: 1 };
-        const endHour = startHour + config.duration;
+    processedEvents.forEach(event => {
+        const dayStr = event.start.toLocaleDateString('en-US', { weekday: 'short' });
+        const startHour = event.start.getHours() + event.start.getMinutes() / 60;
+        const endHour = event.end.getHours() + event.end.getMinutes() / 60 + (event.end.getDate() - event.start.getDate()) * 24;
 
-        const dataset = datasets.find(d => d.label === event.event_type);
+        const dataset = datasets.find(d => d.label === event.type);
         if (dataset && dayLabels.includes(dayStr)) {
             dataset.data.push({
                 x: [startHour, endHour],
@@ -694,9 +712,17 @@ function renderChronoDeckChart(data) {
                         color: '#9CA3AF',
                         stepSize: 2,
                         padding: 10,
+                        callback: function(value) {
+                            if (value === 0) return '12am';
+                            if (value === 12) return '12pm';
+                            if (value === 24) return '';
+                            if (value > 12) return (value - 12) + 'pm';
+                            return value + 'am';
+                        }
                     }
                 },
                 y: {
+                    stacked: true,
                     grid: { 
                       color: 'rgba(255, 255, 255, 0.08)',
                       borderColor: 'rgba(255, 255, 255, 0.0)'
@@ -715,15 +741,12 @@ function renderChronoDeckChart(data) {
                         title: () => null,
                         label: function(context) {
                             const d = context.raw;
-                            const start = Math.floor(d.x[0]);
-                            const startMin = Math.round((d.x[0] - start) * 60);
-                            const end = Math.floor(d.x[1]);
-                            const endMin = Math.round((d.x[1] - end) * 60);
-
-                            const startTime = `${start.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
-                            const endTime = `${end.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
-                            
-                            return `${context.dataset.label}: ${startTime} - ${endTime}`;
+                            const formatTime = (hour) => {
+                                const h = Math.floor(hour % 24);
+                                const m = Math.round((hour - Math.floor(hour)) * 60);
+                                return new Date(2000, 0, 1, h, m).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'});
+                            };
+                            return `${context.dataset.label}: ${formatTime(d.x[0])} - ${formatTime(d.x[1])}`;
                         }
                     }
                 },
@@ -734,7 +757,6 @@ function renderChronoDeckChart(data) {
                     font: { size: 14 },
                     formatter: function(value, context) {
                         const config = eventConfig[context.dataset.label];
-                        // Only show icon if the bar is wide enough
                         return (value.x[1] - value.x[0] > 0.5) ? config.icon : '';
                     }
                 }
