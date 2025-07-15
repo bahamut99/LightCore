@@ -110,6 +110,18 @@ h2 {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.card hr {
+  border: none;
+  border-top: 1px solid #374151;
+  margin: 1.25rem 0 0.25rem 0;
+}
+
+.history-link-container {
+  padding-top: 0.75rem;
+  text-align: center;
+}
+
+
 /* === FORM & BUTTON STYLES === */
 textarea,
 button,
@@ -398,40 +410,6 @@ td:nth-child(6) {
   }
 }
 
-/* === INSIGHT HISTORY STYLES === */
-#insight-history-container {
-  max-height: 250px;
-  overflow-y: auto;
-  padding-right: 10px;
-}
-
-.insight-item {
-  border-bottom: 1px solid #374151;
-  padding: 0.75rem 0;
-}
-
-.insight-item:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.insight-item:first-child {
-  padding-top: 0;
-}
-
-.insight-item summary {
-  cursor: pointer;
-  font-weight: 500;
-}
-
-.insight-item p {
-  margin-top: 0.75rem;
-  padding-left: 1rem;
-  color: #9CA3AF;
-  line-height: 1.5;
-  border-left: 2px solid #4B5563;
-}
-
 /* === Google Health Connect Styles === */
 .health-connect-container {
   border-top: 1px solid #374151;
@@ -625,13 +603,11 @@ input:checked+.slider:before {
 /* === CHRONODECK TIMELINE STYLES === */
 #chronodeck-card .chart-container {
   height: 320px;
-  /* Increased height for better spacing */
   overflow-x: auto;
   padding: 0.5rem 0;
 }
 
 #chronoChart {
-  /* Add a subtle glow to the chart elements */
   filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.5));
 }
 
