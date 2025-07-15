@@ -202,7 +202,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 fetchAndRenderCharts(7);
               fetchAndRenderChronoDeck(); 
                 fetchAndDisplayInsight();
-                fetchAndRenderInsightHistory();
                 checkGoogleHealthConnection();
                 fetchAndDisplayNudge();
             });
@@ -330,7 +329,6 @@ async function submitLog() {
         await loadRecentLogs();
         await fetchAndRenderCharts(7);
         await fetchAndDisplayInsight();
-        await fetchAndRenderInsightHistory();
         await fetchAndDisplayNudge();
         document.querySelector('#btn7day').classList.add('active');
         document.querySelector('#btn30day').classList.remove('active');
@@ -432,51 +430,6 @@ async function fetchAndDisplayInsight() {
     }
 }
 
-async function fetchAndRenderInsightHistory() {
-    const container = document.getElementById('insight-history-container');
-    container.innerHTML = '<p class="subtle-text">Loading history...</p>';
-
-    try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
-
-        const response = await fetch('/.netlify/functions/get-past-insights', {
-            headers: { 'Authorization': `Bearer ${session.access_token}` }
-        });
-
-        if (!response.ok) throw new Error("Failed to fetch insight history");
-
-        const insights = await response.json();
-
-        container.innerHTML = ''; 
-
-        if (!insights || insights.length === 0) {
-            container.innerHTML = '<p class="subtle-text">No saved insights yet.</p>';
-            return;
-        }
-
-        insights.forEach(insight => {
-            const details = document.createElement('details');
-            details.classList.add('insight-item');
-
-            const summary = document.createElement('summary');
-            summary.textContent = new Date(insight.created_at).toLocaleDateString();
-
-            const p = document.createElement('p');
-            p.textContent = insight.insight_text;
-
-            details.appendChild(summary);
-            details.appendChild(p);
-            container.appendChild(details);
-        });
-
-    } catch (e) {
-        console.error("Failed to load insight history:", e.message);
-        container.innerHTML = '<p class="error-message">Could not load history.</p>';
-    }
-}
-
-
 function displayResults(result) {
     document.getElementById('clarity').innerText = `${result.clarity_score}/10 (${result.clarity_label || 'N/A'})`;
     document.getElementById('immune').innerText = `${result.immune_score}/10 (${result.immune_label || 'N/A'})`;
@@ -569,6 +522,7 @@ function resetUI() {
 function renderAllCharts(data) {
     const commonOptions = {
         plugins: { 
+            datalabels: { display: false },
             legend: { display: false },
             tooltip: {
                 enabled: true,
@@ -670,7 +624,6 @@ function renderChronoDeckChart(data) {
         barPercentage: 0.6,
         borderRadius: 10,
         borderWidth: 0,
-        // Add icons via a custom property to access in the formatter
         custom: {
             icon: { 'Workout': '🏋️', 'Meal': '🍽️', 'Caffeine': '☕', 'Sleep': '😴', 'Nap': '💤' }[type]
         }
@@ -760,7 +713,6 @@ function renderChronoDeckChart(data) {
                     anchor: 'center',
                     font: { size: 14 },
                     formatter: function(value, context) {
-                        // Only show icon if the bar is wide enough
                         return (value.x[1] - value.x[0] > 0.5) ? context.dataset.custom.icon : '';
                     }
                 }

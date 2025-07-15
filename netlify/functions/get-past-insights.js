@@ -8,17 +8,33 @@ exports.handler = async (event, context) => {
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
 
+    const { limit = 20, offset = 0, startDate, endDate } = event.queryStringParameters;
+
     try {
-        const { data, error } = await supabase
+        let query = supabase
             .from('daily_logs')
-            .select('created_at, ai_notes')
+            .select('created_at, ai_notes', { count: 'exact' }) // Get total count
             .eq('user_id', user.id)
             .not('ai_notes', 'is', null)
-            .order('created_at', { ascending: false })
-            .limit(20);
+            .order('created_at', { ascending: false });
+
+        // Apply date filters if provided
+        if (startDate) {
+            query = query.gte('created_at', startDate);
+        }
+        if (endDate) {
+            // Add 1 day to end date to make the range inclusive
+            const inclusiveEndDate = new Date(endDate);
+            inclusiveEndDate.setDate(inclusiveEndDate.getDate() + 1);
+            query = query.lte('created_at', inclusiveEndDate.toISOString());
+        }
+
+        // Apply pagination
+        query = query.range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+
+        const { data, error, count } = await query;
 
         if (error) {
-            console.error('Supabase error in get-past-insights:', error);
             throw new Error(`Supabase fetch error: ${error.message}`);
         }
 
@@ -31,7 +47,7 @@ exports.handler = async (event, context) => {
 
         return {
             statusCode: 200,
-            body: JSON.stringify(insights),
+            body: JSON.stringify({ insights, count }),
         };
     } catch (error) {
         console.error('Error in get-past-insights function:', error);
