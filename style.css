@@ -178,8 +178,7 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.header-btn,
-.logout-btn {
+.header-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -199,8 +198,7 @@ button:disabled {
   appearance: none;
 }
 
-.header-btn:hover,
-.logout-btn:hover {
+.header-btn:hover {
   background-color: #4B5563;
 }
 

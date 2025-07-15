@@ -168,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const appContainer = document.getElementById('app-container');
     const loginForm = document.getElementById('login-form');
     const signupForm = document.getElementById('signup-form');
-    const logoutButton = document.getElementById('logout-button');
+    const logoutLink = document.getElementById('logout-link'); // Changed from logout-button
     const showSignupLink = document.getElementById('show-signup');
     const showLoginLink = document.getElementById('show-login');
     const authError = document.getElementById('auth-error');
@@ -207,7 +207,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    logoutButton.addEventListener('click', async () => {
+    logoutLink.addEventListener('click', async (e) => { // Changed from logout-button
+        e.preventDefault();
         await supabase.auth.signOut();
     });
 
@@ -516,7 +517,7 @@ function renderLogTable(logs) {
 
         td(new Date(logData.created_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }), tr);
         td(logData.log, tr);
-        td(logData.clarity_label, tr, 'score', logData.clarity_color);
+      td(logData.clarity_label, tr, 'score', logData.clarity_color);
         td(logData.immune_label, tr, 'score', logData.immune_color);
         td(logData.physical_readiness_label, tr, 'score', logData.physical_readiness_color);
         td(logData.ai_notes, tr);
@@ -632,7 +633,7 @@ function renderChronoDeckChart(data) {
     
     if (!data || data.length === 0) {
         if (chartContainer && !chartContainer.querySelector('p')) {
-             chartContainer.innerHTML = `<canvas id="chronoChart"></canvas><p class="subtle-text" style="text-align: center; padding: 4rem 1rem;">No timed events found in your recent logs. Try adding one, like "Workout at 2pm"!</p>`;
+             chartContainer.innerHTML = `<p class="subtle-text" style="text-align: center; padding: 4rem 1rem;">No timed events found in your recent logs. Try adding one, like "Workout at 2pm"!</p>`;
         }
         return;
     }
