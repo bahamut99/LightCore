@@ -180,17 +180,23 @@ button:disabled {
 
 .header-btn,
 .logout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
   background-color: #374151;
   color: #D1D5DB;
   border: 1px solid #4B5563;
-  width: auto;
-  padding: 0.5rem 1rem;
   text-decoration: none;
   border-radius: 0.5rem;
   font-size: 0.9rem;
   font-family: 'Inter', sans-serif;
-  display: block;
-  /* Helps with consistent height */
+  cursor: pointer;
+  line-height: 1.5;
+  /* Consistent line height */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 }
 
 .header-btn:hover,
