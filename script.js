@@ -220,7 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadRecentLogs();
                 fetchAndRenderCharts(7);
               fetchAndRenderChronoDeck(); 
-              fetchAndRenderGoalProgress(); // New function call
+              fetchAndRenderGoalProgress();
                 fetchAndDisplayInsight();
                 checkGoogleHealthConnection();
                 fetchAndDisplayNudge();
@@ -350,7 +350,7 @@ async function submitLog() {
         await fetchAndRenderCharts(7);
         await fetchAndDisplayInsight();
         await fetchAndDisplayNudge();
-        await fetchAndRenderGoalProgress(); // Refresh goal progress after submitting
+        await fetchAndRenderGoalProgress(); 
         document.querySelector('#btn7day').classList.add('active');
         document.querySelector('#btn30day').classList.remove('active');
 
@@ -429,7 +429,7 @@ async function fetchAndRenderGoalProgress() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
 
-        const response = await fetch(`/.netlify/functions/get-goal-progress`, {
+        const response = await fetchWithRetry(`/.netlify/functions/get-goal-progress`, {
             headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
         if (!response.ok) throw new Error('Could not load goal progress.');
@@ -632,7 +632,7 @@ function renderChronoDeckChart(data) {
     
     if (!data || data.length === 0) {
         if (chartContainer && !chartContainer.querySelector('p')) {
-             chartContainer.innerHTML = `<p class="subtle-text" style="text-align: center; padding: 4rem 1rem;">No timed events found in your recent logs. Try adding one, like "Workout at 2pm"!</p>`;
+             chartContainer.innerHTML = `<canvas id="chronoChart"></canvas><p class="subtle-text" style="text-align: center; padding: 4rem 1rem;">No timed events found in your recent logs. Try adding one, like "Workout at 2pm"!</p>`;
         }
         return;
     }
@@ -671,7 +671,7 @@ function renderChronoDeckChart(data) {
             i++; 
         } else {
             const start = new Date(tempEvents[i].event_time);
-            const duration = 30; // 30 minutes for single-point events
+            const duration = 30; 
             const end = new Date(start.getTime() + duration * 60 * 1000);
             processedEvents.push({ type: tempEvents[i].event_type, start: start, end: end });
         }
