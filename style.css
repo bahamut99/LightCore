@@ -81,8 +81,14 @@ h1 {
   font-size: 1.75rem;
   margin: 0;
   font-weight: 700;
-  margin-right: auto;
-  /* Pushes buttons to the right */
+}
+
+.header-actions {
+  margin-left: auto;
+  /* Pushes the button group to the right */
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 h2 {
@@ -183,6 +189,8 @@ button:disabled {
   border-radius: 0.5rem;
   font-size: 0.9rem;
   font-family: 'Inter', sans-serif;
+  display: block;
+  /* Helps with consistent height */
 }
 
 .header-btn:hover,
