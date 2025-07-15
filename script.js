@@ -12,27 +12,6 @@ let charts = {};
 // Register the datalabels plugin globally
 Chart.register(ChartDataLabels);
 
-// NEW: A helper function to automatically retry fetch requests on server errors
-async function fetchWithRetry(url, options, retries = 3, delay = 2000) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await fetch(url, options);
-            // Retry only on specific server-side transient errors
-            if ([502, 503, 504].includes(response.status)) {
-                console.warn(`Attempt ${i + 1}: Server error ${response.status}. Retrying in ${delay}ms...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                continue; // Go to the next iteration
-            }
-            return response; // Success or a non-retriable error
-        } catch (error) {
-            console.warn(`Attempt ${i + 1}: Network error. Retrying in ${delay}ms...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-        }
-    }
-    throw new Error(`Failed to fetch after ${retries} attempts.`);
-}
-
-
 async function handleTokenCallback() {
     if (window.location.hash.includes('access_token')) {
         const params = new URLSearchParams(window.location.hash.substring(1));
@@ -312,9 +291,7 @@ async function submitLog() {
 
     try {
         const { data: { session } } = await supabase.auth.getSession();
-
-        // Use the new fetchWithRetry function for the analyze-log call
-        const response = await fetchWithRetry('/.netlify/functions/analyze-log', {
+        const response = await fetch('/.netlify/functions/analyze-log', {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
@@ -443,7 +420,8 @@ async function fetchAndDisplayInsight() {
         if (data.insight) {
             insightTextElement.textContent = data.insight;
             insightTextElement.classList.remove('subtle-text');
-      .textContent = 'Not enough data to generate an insight yet.';
+        } else {
+            insightTextElement.textContent = 'Not enough data to generate an insight yet.';
         }
 
     } catch (e) {
