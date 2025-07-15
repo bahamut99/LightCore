@@ -12,6 +12,25 @@ let charts = {};
 // Register the datalabels plugin globally
 Chart.register(ChartDataLabels);
 
+async function fetchWithRetry(url, options, retries = 3, delay = 2000) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await fetch(url, options);
+            if ([502, 503, 504].includes(response.status)) {
+                console.warn(`Attempt ${i + 1}: Server error ${response.status}. Retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+            return response;
+        } catch (error) {
+            console.warn(`Attempt ${i + 1}: Network error. Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+    throw new Error(`Failed to fetch after ${retries} attempts.`);
+}
+
+
 async function handleTokenCallback() {
     if (window.location.hash.includes('access_token')) {
         const params = new URLSearchParams(window.location.hash.substring(1));
@@ -201,6 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadRecentLogs();
                 fetchAndRenderCharts(7);
               fetchAndRenderChronoDeck(); 
+              fetchAndRenderGoalProgress(); // New function call
                 fetchAndDisplayInsight();
                 checkGoogleHealthConnection();
                 fetchAndDisplayNudge();
@@ -291,7 +311,7 @@ async function submitLog() {
 
     try {
         const { data: { session } } = await supabase.auth.getSession();
-        const response = await fetch('/.netlify/functions/analyze-log', {
+        const response = await fetchWithRetry('/.netlify/functions/analyze-log', {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
@@ -330,6 +350,7 @@ async function submitLog() {
         await fetchAndRenderCharts(7);
         await fetchAndDisplayInsight();
         await fetchAndDisplayNudge();
+        await fetchAndRenderGoalProgress(); // Refresh goal progress after submitting
         document.querySelector('#btn7day').classList.add('active');
         document.querySelector('#btn30day').classList.remove('active');
 
@@ -400,6 +421,45 @@ async function fetchAndRenderChronoDeck() {
     }
 }
 
+async function fetchAndRenderGoalProgress() {
+    const goalCard = document.getElementById('goal-progress-card');
+    const goalContainer = document.getElementById('goal-progress-container');
+    
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const response = await fetch(`/.netlify/functions/get-goal-progress`, {
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (!response.ok) throw new Error('Could not load goal progress.');
+        
+        const data = await response.json();
+        
+        if (data && data.goal) {
+            goalCard.style.display = 'block';
+            const { goal_value } = data.goal;
+            const { progress } = data;
+            
+            let dotsHTML = '';
+            for (let i = 0; i < goal_value; i++) {
+                dotsHTML += `<div class="progress-dot ${i < progress ? 'completed' : ''}"></div>`;
+            }
+            
+            goalContainer.innerHTML = `
+                <p>Logged ${progress} / ${goal_value} days this week</p>
+                <div class="progress-dots">${dotsHTML}</div>
+            `;
+        } else {
+            goalCard.style.display = 'none';
+        }
+    } catch (error) {
+        console.error("Error fetching goal progress:", error.message);
+        goalCard.style.display = 'block';
+        goalContainer.innerHTML = `<p class="subtle-text">Could not load goal progress.</p>`;
+    }
+}
+
 async function fetchAndDisplayInsight() {
     const insightTextElement = document.getElementById('ai-insight-text');
     insightTextElement.textContent = 'Analyzing your data for new patterns...';
@@ -409,7 +469,7 @@ async function fetchAndDisplayInsight() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
         
-        const response = await fetch('/.netlify/functions/get-insight', {
+        const response = await fetchWithRetry('/.netlify/functions/get-insight', {
             headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
 

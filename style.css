@@ -116,7 +116,8 @@ h2 {
   margin: 1.25rem 0 0.25rem 0;
 }
 
-.history-link-container {
+.history-link-container,
+.manage-goal-link-container {
   padding-top: 0.75rem;
   text-align: center;
 }
@@ -312,6 +313,32 @@ td:nth-child(6) {
   text-align: center;
   display: inline-block;
   min-width: 60px;
+}
+
+/* === GOAL PROGRESS STYLES === */
+#goal-progress-container p {
+  margin: 0 0 1rem 0;
+  text-align: center;
+  font-size: 1rem;
+  color: #D1D5DB;
+}
+
+.progress-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.progress-dot {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background-color: #374151;
+  transition: background-color 0.3s;
+}
+
+.progress-dot.completed {
+  background-color: #22c55e;
 }
 
 /* === UTILITY & MODAL STYLES === */
