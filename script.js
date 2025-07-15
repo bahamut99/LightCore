@@ -630,10 +630,11 @@ function renderChronoDeckChart(data) {
     const ctx = document.getElementById(canvasId).getContext('2d');
 
     const eventConfig = {
-        'Workout':  { color: 'rgba(56, 189, 248, 0.85)', icon: '🏋️' },
-        'Meal':     { color: 'rgba(250, 204, 21, 0.85)', icon: '🍽️' },
-        'Caffeine': { color: 'rgba(249, 115, 22, 0.85)', icon: '☕' },
-        'Sleep':    { color: 'rgba(167, 139, 250, 0.85)', icon: '😴' }
+        'Workout':  { color: 'rgba(56, 189, 248, 0.85)'},
+        'Meal':     { color: 'rgba(250, 204, 21, 0.85)'},
+        'Caffeine': { color: 'rgba(249, 115, 22, 0.85)'},
+        'Sleep':    { color: 'rgba(167, 139, 250, 0.85)'},
+        'Nap':      { color: 'rgba(196, 181, 253, 0.85)'}
     };
     
     const dayLabels = [];
@@ -656,8 +657,7 @@ function renderChronoDeckChart(data) {
             i++; 
         } else {
             const start = new Date(tempEvents[i].event_time);
-            // Default duration for single-point events is 30 mins, except for sleep
-            const duration = tempEvents[i].event_type === 'Sleep' ? 8 * 60 : 30; // in minutes
+            const duration = 30; // 30 minutes for single-point events
             const end = new Date(start.getTime() + duration * 60 * 1000);
             processedEvents.push({ type: tempEvents[i].event_type, start: start, end: end });
         }
@@ -670,6 +670,10 @@ function renderChronoDeckChart(data) {
         barPercentage: 0.6,
         borderRadius: 10,
         borderWidth: 0,
+        // Add icons via a custom property to access in the formatter
+        custom: {
+            icon: { 'Workout': '🏋️', 'Meal': '🍽️', 'Caffeine': '☕', 'Sleep': '😴', 'Nap': '💤' }[type]
+        }
     }));
 
     processedEvents.forEach(event => {
@@ -756,8 +760,8 @@ function renderChronoDeckChart(data) {
                     anchor: 'center',
                     font: { size: 14 },
                     formatter: function(value, context) {
-                        const config = eventConfig[context.dataset.label];
-                        return (value.x[1] - value.x[0] > 0.5) ? config.icon : '';
+                        // Only show icon if the bar is wide enough
+                        return (value.x[1] - value.x[0] > 0.5) ? context.dataset.custom.icon : '';
                     }
                 }
             }
