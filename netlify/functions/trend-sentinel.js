@@ -94,113 +94,7 @@ exports.handler = async (event) => {
         const isStableData = volatility < 2.5;
 
         if (isSignificantTrend && isStableData) {
-          const prompt = `A high-confidence downward trend was detected...`;
-          const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
-          // For brevity, assuming nudgeContent is successfully generated
-          const nudgeContent = { headline: `Trend Alert: ${metricName}`, body_text: "We've noticed a downward trend here.", suggested_actions: [] };
-          
-          await supabaseAdmin.from('nudges').insert({
-            user_id: userId,
-            headline: nudgeContent.headline,
-            body_text: nudgeContent.body_text,
-            suggested_actions: nudgeContent.suggested_actions
-          });
-          
-          // --- NEW: Update AI Memory Context ---
-          const { data: contextData, error: contextError } = await supabaseAdmin
-                .from('lightcore_brain_context')
-                .select('trend_warnings')
-                .eq('user_id', userId)
-                .single();
-
-            if (contextError && contextError.code !== 'PGRST116') {
-                console.error("Error fetching context for trend update:", contextError.message);
-            } else {
-                let existingWarnings = contextData?.trend_warnings || [];
-                const newWarning = { date: new Date().toISOString(), headline: nudgeContent.headline, metric: metricName };
-                const newWarnings = [newWarning, ...existingWarnings].slice(0, 3);
-                
-                await supabaseAdmin
-                    .from('lightcore_brain_context')
-                    .upsert({
-                        user_id: userId,
-                        trend_warnings: newWarnings,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'user_id' });
-            }
-          // --- End of new logic ---
-
-          console.log(`Nudge and context updated for user ${userId}, metric ${metricName}`);
-          break;
-        }
-      }
-    }
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ message: "Trend Sentinel completed successfully." })
-    };
-
-  } catch (error) {
-    console.error("CRITICAL ERROR:", error.message);
-    return { statusCode: 500, body: `Error: ${error.message}` };
-  }
-};
-
-  try {
-    const supabaseAdmin = createAdminClient();
-
-    const { data: profiles, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('id');
-
-    if (profileError) throw new Error(`Error fetching profiles: ${profileError.message}`);
-    if (!profiles || profiles.length === 0) {
-      return { statusCode: 200, body: JSON.stringify({ message: "No profiles to process." }) };
-    }
-
-    for (const profile of profiles) {
-      const userId = profile.id;
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
-      const { data: recentNudges, error: nudgeError } = await supabaseAdmin
-        .from('nudges')
-        .select('id', { count: 'exact' })
-        .eq('user_id', userId)
-        .gte('created_at', twentyFourHoursAgo);
-
-      if (nudgeError || recentNudges.length > 0) continue;
-
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-      const { data: logs, error: logError } = await supabaseAdmin
-        .from('daily_logs')
-        .select('clarity_score, immune_score, physical_readiness_score')
-        .eq('user_id', userId)
-        .gte('created_at', sevenDaysAgo.toISOString())
-        .order('created_at', { ascending: true });
-
-      if (logError || !logs || logs.length < 4) continue;
-
-      const metrics = {
-        Clarity: logs.map(l => l.clarity_score).filter(s => s != null),
-        Immune: logs.map(l => l.immune_score).filter(s => s != null),
-        Physical: logs.map(l => l.physical_readiness_score).filter(s => s != null),
-      };
-
-      for (const metricName in metrics) {
-        const scores = metrics[metricName];
-        if (scores.length < 4) continue;
-
-        const trendSlope = getTrend(scores);
-        const volatility = getStandardDeviation(scores);
-
-        const isSignificantTrend = trendSlope < -0.4;
-        const isStableData = volatility < 2.5;
-
-        if (isSignificantTrend && isStableData) {
-          const prompt = `A high-confidence downward trend was detected...`;
+          const prompt = `A user's metric "${metricName}" is showing a significant, stable downward trend over the last 7 days. Generate a JSON object for a proactive nudge with "headline" (string), "body_text" (string, 2-3 sentences), and "suggested_actions" (array of strings).`;
           const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
           const aiResponse = await fetch(geminiApiUrl, {
@@ -222,7 +116,7 @@ exports.handler = async (event) => {
           try {
             nudgeContent = JSON.parse(aiText);
           } catch (e) {
-            console.warn(`Gemini parse error:`, e);
+            console.warn(`Gemini parse error in trend-sentinel:`, e);
             continue;
           }
 

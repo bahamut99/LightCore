@@ -1,8 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
-const createAdminClient = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-
 exports.handler = async (event, context) => {
     const token = event.headers.authorization?.split(' ')[1];
     if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Not authorized.' }) };
@@ -17,13 +15,13 @@ exports.handler = async (event, context) => {
             .select('id, created_at, log, clarity_score, immune_score, physical_readiness_score, sleep_hours, sleep_quality')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
-            .limit(12);
+            .limit(15);
 
         if (logsError) throw new Error(`Supabase log fetch error: ${logsError.message}`);
         
         const qualityLogs = logs ? logs.filter(l => l.clarity_score || l.immune_score || l.physical_readiness_score) : [];
 
-        if (qualityLogs.length < 3) return { statusCode: 200, body: JSON.stringify({ insight: 'Log a few more days with timed events to unlock new insights.' }) };
+        if (qualityLogs.length < 3) return { statusCode: 200, body: JSON.stringify({ insight: 'Log a few more days to unlock new insights.' }) };
 
         const logIds = qualityLogs.map(l => l.id);
         const { data: events, error: eventsError } = await supabase
@@ -44,6 +42,7 @@ exports.handler = async (event, context) => {
         let formattedDataForAI;
 
         if (hasAnyEvents) {
+            // Logic for when timed events ARE present
             formattedDataForAI = combinedData.map(log => {
                 const dateString = `Date: ${new Date(log.created_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`;
                 const scoresString = `Scores: Clarity=${log.clarity_score}, Immune=${log.immune_score}, Physical=${log.physical_readiness_score}`;
@@ -58,6 +57,7 @@ exports.handler = async (event, context) => {
             prompt = `You're a personal health AI analyst reviewing a user's journal. Your goal is to find one interesting and specific correlation between the *timing* of events and the user's health scores. Focus on *when* something happened. Examples: "Caffeine after 3PM tends to correlate with lower sleep quality." or "Morning workouts seem to correlate with better Mental Clarity." Be concise. Start your response with "I've noticed that..." or "It's interesting that...". Only give one insight. DATA:\n${formattedDataForAI}`;
 
         } else {
+            // Fallback logic for when NO timed events are present
             formattedDataForAI = combinedData.map(log => {
                 const dateString = `Date: ${new Date(log.created_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`;
                 const scoresString = `Scores: Clarity=${log.clarity_score}, Immune=${log.immune_score}, Physical=${log.physical_readiness_score}`;
@@ -88,29 +88,6 @@ exports.handler = async (event, context) => {
         if (!insight) {
             throw new Error("No insight was returned by the AI.");
         }
-
-        // --- NEW: Update AI Memory Context ---
-        const supabaseAdmin = createAdminClient();
-        const { data: contextData, error: contextError } = await supabaseAdmin
-            .from('lightcore_brain_context')
-            .select('recent_insights')
-            .eq('user_id', user.id)
-            .single();
-
-        if (contextError && contextError.code !== 'PGRST116') {
-             console.error("Error fetching context for insight update:", contextError.message);
-        } else {
-            let existingInsights = contextData?.recent_insights || [];
-            const newInsights = [insight, ...existingInsights].slice(0, 5);
-            await supabaseAdmin
-                .from('lightcore_brain_context')
-                .upsert({
-                    user_id: user.id,
-                    recent_insights: newInsights,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'user_id' });
-        }
-        // --- End of new logic ---
 
         return {
             statusCode: 200,
