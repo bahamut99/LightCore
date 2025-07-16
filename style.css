@@ -1,3 +1,7 @@
+* {
+  box-sizing: border-box;
+}
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
 
 body {
@@ -144,7 +148,6 @@ input[type="number"] {
   border-radius: 0.5rem;
   margin-top: 0.5rem;
   font-size: 1rem;
-  box-sizing: border-box;
 }
 
 form label,
@@ -697,7 +700,6 @@ input:checked+.slider:before {
 /* === CHRONODECK TIMELINE STYLES === */
 #chronodeck-card .chart-container {
   height: 300px;
-  /* Let the container size itself */
 }
 
 #chronoChart {
