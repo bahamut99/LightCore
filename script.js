@@ -168,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const appContainer = document.getElementById('app-container');
     const loginForm = document.getElementById('login-form');
     const signupForm = document.getElementById('signup-form');
-    const logoutLink = document.getElementById('logout-link'); // Changed from logout-button
+    const logoutLink = document.getElementById('logout-link');
     const showSignupLink = document.getElementById('show-signup');
     const showLoginLink = document.getElementById('show-login');
     const authError = document.getElementById('auth-error');
@@ -207,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    logoutLink.addEventListener('click', async (e) => { // Changed from logout-button
+    logoutLink.addEventListener('click', async (e) => {
         e.preventDefault();
         await supabase.auth.signOut();
     });
@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 fetchAndRenderCharts(7);
               fetchAndRenderChronoDeck(); 
               fetchAndRenderGoalProgress();
-                fetchAndDisplayInsight();
+                fetchAndRenderGuidance(); // Replaces the old insight function
                 checkGoogleHealthConnection();
                 fetchAndDisplayNudge();
             });
@@ -349,7 +349,7 @@ async function submitLog() {
         displayResults(newLog); 
         await loadRecentLogs();
         await fetchAndRenderCharts(7);
-        await fetchAndDisplayInsight();
+        await fetchAndRenderGuidance(); // Rerender guidance after new log
         await fetchAndDisplayNudge();
         await fetchAndRenderGoalProgress(); 
         document.querySelector('#btn7day').classList.add('active');
@@ -452,7 +452,9 @@ async function fetchAndRenderGoalProgress() {
                 <div class="progress-dots">${dotsHTML}</div>
             `;
         } else {
-            goalCard.style.display = 'none';
+            // Do not hide the card, but show a prompt to set a goal
+            goalCard.style.display = 'block';
+            goalContainer.innerHTML = `<p class="subtle-text">No weekly goal set.</p>`;
         }
     } catch (error) {
         console.error("Error fetching goal progress:", error.message);
@@ -461,35 +463,67 @@ async function fetchAndRenderGoalProgress() {
     }
 }
 
-async function fetchAndDisplayInsight() {
-    const insightTextElement = document.getElementById('ai-insight-text');
-    insightTextElement.textContent = 'Analyzing your data for new patterns...';
-    insightTextElement.classList.add('subtle-text');
+async function fetchAndRenderGuidance() {
+    const container = document.getElementById('guidance-container');
+    container.innerHTML = `<p class="subtle-text">Generating your personalized guidance...</p>`;
 
     try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
         
-        const response = await fetchWithRetry('/.netlify/functions/get-insight', {
+        const response = await fetchWithRetry('/.netlify/functions/generate-guidance', {
             headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
 
-        if (!response.ok) throw new Error("Failed to fetch insight");
+        if (!response.ok) throw new Error("Failed to fetch guidance");
         
-        const data = await response.json();
+        const { guidance } = await response.json();
 
-        if (data.insight) {
-            insightTextElement.textContent = data.insight;
-            insightTextElement.classList.remove('subtle-text');
+        container.innerHTML = ''; // Clear loading message
+
+        if (guidance) {
+            if (guidance.current_state) {
+                const p = document.createElement('p');
+                p.className = 'current-state';
+                p.textContent = guidance.current_state;
+                container.appendChild(p);
+            }
+
+            const sections = [
+                { title: 'Positives', key: 'positives', icon: '✅' },
+                { title: 'Concerns', key: 'concerns', icon: '⚠️' },
+                { title: 'Suggestions', key: 'suggestions', icon: '🚀' }
+            ];
+
+            sections.forEach(sec => {
+                if (guidance[sec.key] && guidance[sec.key].length > 0) {
+                    const sectionDiv = document.createElement('div');
+                    sectionDiv.className = `guidance-section ${sec.key}`;
+
+                    const h4 = document.createElement('h4');
+                    h4.textContent = `${sec.icon} ${sec.title}`;
+                    sectionDiv.appendChild(h4);
+
+                    const ul = document.createElement('ul');
+                    guidance[sec.key].forEach(item => {
+                        const li = document.createElement('li');
+                        li.textContent = item;
+                        ul.appendChild(li);
+                    });
+                    sectionDiv.appendChild(ul);
+                    container.appendChild(sectionDiv);
+                }
+            });
         } else {
-            insightTextElement.textContent = 'Not enough data to generate an insight yet.';
+            container.innerHTML = `<p class="subtle-text">Could not generate guidance at this time.</p>`;
         }
 
     } catch (e) {
-        console.error("Failed to load insight:", e.message);
-        insightTextElement.textContent = 'Could not load insight at this time.';
+        console.error("Failed to load guidance:", e.message);
+        container.innerHTML = `<p class="error-message">Could not load guidance at this time.</p>`;
     }
 }
+
 
 function displayResults(result) {
     document.getElementById('clarity').innerText = `${result.clarity_score}/10 (${result.clarity_label || 'N/A'})`;
@@ -517,7 +551,7 @@ function renderLogTable(logs) {
 
         td(new Date(logData.created_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }), tr);
         td(logData.log, tr);
-      td(logData.clarity_label, tr, 'score', logData.clarity_color);
+        td(logData.clarity_label, tr, 'score', logData.clarity_color);
         td(logData.immune_label, tr, 'score', logData.immune_color);
         td(logData.physical_readiness_label, tr, 'score', logData.physical_readiness_color);
         td(logData.ai_notes, tr);
@@ -633,7 +667,7 @@ function renderChronoDeckChart(data) {
     
     if (!data || data.length === 0) {
         if (chartContainer && !chartContainer.querySelector('p')) {
-             chartContainer.innerHTML = `<p class="subtle-text" style="text-align: center; padding: 4rem 1rem;">No timed events found in your recent logs. Try adding one, like "Workout at 2pm"!</p>`;
+             chartContainer.innerHTML = `<canvas id="chronoChart"></canvas><p class="subtle-text" style="text-align: center; padding: 4rem 1rem;">No timed events found in your recent logs. Try adding one, like "Workout at 2pm"!</p>`;
         }
         return;
     }
