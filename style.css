@@ -24,7 +24,8 @@ body {
 }
 
 .left-column {
-  flex: 2;
+  flex: 2.5;
+  /* Adjusted */
   min-width: 350px;
 }
 
@@ -34,7 +35,8 @@ body {
 }
 
 .right-column {
-  flex: 1.5;
+  flex: 2;
+  /* Adjusted */
   min-width: 320px;
 }
 
