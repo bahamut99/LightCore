@@ -1,9 +1,11 @@
 [build]
-command = "npm run build"
-publish = "lightcore-react/dist"
+  command = "npm run build"
+  publish = "lightcore-react/dist"
+  base = "lightcore-react"
 
 [functions]
-directory = "netlify/functions"
+  directory = "netlify/functions"
+  timeout = 25
 
 [functions."trend-sentinel"]
-schedule = "0 0 * * *"
+  schedule = "0 0 * * *"
