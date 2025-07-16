@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 fetchAndRenderCharts(7);
               fetchAndRenderChronoDeck(); 
               fetchAndRenderGoalProgress();
-                fetchAndRenderGuidance(); // Replaces the old insight function
+                fetchAndDisplayInsight(); 
                 checkGoogleHealthConnection();
                 fetchAndDisplayNudge();
             });
@@ -349,7 +349,7 @@ async function submitLog() {
         displayResults(newLog); 
         await loadRecentLogs();
         await fetchAndRenderCharts(7);
-        await fetchAndRenderGuidance(); // Rerender guidance after new log
+        await fetchAndDisplayInsight();
         await fetchAndDisplayNudge();
         await fetchAndRenderGoalProgress(); 
         document.querySelector('#btn7day').classList.add('active');
@@ -452,7 +452,6 @@ async function fetchAndRenderGoalProgress() {
                 <div class="progress-dots">${dotsHTML}</div>
             `;
         } else {
-            // Do not hide the card, but show a prompt to set a goal
             goalCard.style.display = 'block';
             goalContainer.innerHTML = `<p class="subtle-text">No weekly goal set.</p>`;
         }
@@ -463,67 +462,35 @@ async function fetchAndRenderGoalProgress() {
     }
 }
 
-async function fetchAndRenderGuidance() {
-    const container = document.getElementById('guidance-container');
-    container.innerHTML = `<p class="subtle-text">Generating your personalized guidance...</p>`;
+async function fetchAndDisplayInsight() {
+    const container = document.getElementById('ai-insight-text');
+    container.textContent = 'Analyzing your data for new patterns...';
+    container.classList.add('subtle-text');
 
     try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
         
-        const response = await fetchWithRetry('/.netlify/functions/generate-guidance', {
+        const response = await fetchWithRetry('/.netlify/functions/get-insight', {
             headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
 
-        if (!response.ok) throw new Error("Failed to fetch guidance");
+        if (!response.ok) throw new Error("Failed to fetch insight");
         
-        const { guidance } = await response.json();
+        const { insight } = await response.json();
 
-        container.innerHTML = ''; // Clear loading message
-
-        if (guidance) {
-            if (guidance.current_state) {
-                const p = document.createElement('p');
-                p.className = 'current-state';
-                p.textContent = guidance.current_state;
-                container.appendChild(p);
-            }
-
-            const sections = [
-                { title: 'Positives', key: 'positives', icon: '✅' },
-                { title: 'Concerns', key: 'concerns', icon: '⚠️' },
-                { title: 'Suggestions', key: 'suggestions', icon: '🚀' }
-            ];
-
-            sections.forEach(sec => {
-                if (guidance[sec.key] && guidance[sec.key].length > 0) {
-                    const sectionDiv = document.createElement('div');
-                    sectionDiv.className = `guidance-section ${sec.key}`;
-
-                    const h4 = document.createElement('h4');
-                    h4.textContent = `${sec.icon} ${sec.title}`;
-                    sectionDiv.appendChild(h4);
-
-                    const ul = document.createElement('ul');
-                    guidance[sec.key].forEach(item => {
-                        const li = document.createElement('li');
-                        li.textContent = item;
-                        ul.appendChild(li);
-                    });
-                    sectionDiv.appendChild(ul);
-                    container.appendChild(sectionDiv);
-                }
-            });
+        if (insight) {
+            container.textContent = insight;
+            container.classList.remove('subtle-text');
         } else {
-            container.innerHTML = `<p class="subtle-text">Could not generate guidance at this time.</p>`;
+            container.textContent = 'Not enough data to generate an insight yet.';
         }
 
     } catch (e) {
-        console.error("Failed to load guidance:", e.message);
-        container.innerHTML = `<p class="error-message">Could not load guidance at this time.</p>`;
+        console.error("Failed to load insight:", e.message);
+        container.textContent = 'Could not load insight at this time.';
     }
 }
-
 
 function displayResults(result) {
     document.getElementById('clarity').innerText = `${result.clarity_score}/10 (${result.clarity_label || 'N/A'})`;

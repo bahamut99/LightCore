@@ -1,256 +1,254 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="UTF-8" />
-    <title>LightCore - Your Health Dashboard</title>
-    <link rel="stylesheet" href="style.css" />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <head>
+    <meta charset="UTF-8" />
+    <title>LightCore - Your Health Dashboard</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-    <link rel="icon" type="image/png" href="https://i.imgur.com/d5N9dkk.png" />
-  </head>
-  <body>
-    <svg width="0" height="0" style="display: none">
-      <symbol id="google-health-logo" viewBox="0 0 24 24">
-        <path
-          d="M12.85 6.12c-2.49-1.39-5.5.35-6.88 2.84-1.39 2.49.35 5.5 2.84 6.88 2.49 1.39 5.5-.35 6.88-2.84 1.39-2.49-.35-5.5-2.84-6.88ZM9.49 14.15a3.49 3.49 0 1 1 0-6.98 3.49 3.49 0 0 1 0 6.98Z"
-        />
-        <path
-          d="M17.38 5.62c-1.5-2.58-4.83-3.7-7.4-2.21l.7.4a6.49 6.49 0 0 1 6.3 3.96l.48-.85Z"
-        />
-        <path
-          d="M21.12 11.15c-1.39-2.49-4.4-3.84-7.03-2.84l.4 1.1a5.49 5.49 0 0 1 5.37 2.4l1.26-.66Z"
-        />
-        <path
-          d="M5.62 6.62c-2.58 1.5-3.7 4.83-2.21 7.4l.4.7a6.49 6.49 0 0 1 3.96-6.3l-.85-.48Z"
-        />
-        <path
-          d="M11.15 2.88c-2.49-1.39-5.83-.54-7.23 2.05l.66 1.26a5.49 5.49 0 0 1 2.4-5.37l-1.1-.4Z"
-        />
-      </symbol>
-    </svg>
+    <link rel="icon" type="image/png" href="https://i.imgur.com/d5N9dkk.png" />
+  </head>
+  <body>
+    <svg width="0" height="0" style="display: none">
+      <symbol id="google-health-logo" viewBox="0 0 24 24">
+        <path
+          d="M12.85 6.12c-2.49-1.39-5.5.35-6.88 2.84-1.39 2.49.35 5.5 2.84 6.88 2.49 1.39 5.5-.35 6.88-2.84 1.39-2.49-.35-5.5-2.84-6.88ZM9.49 14.15a3.49 3.49 0 1 1 0-6.98 3.49 3.49 0 0 1 0 6.98Z"
+        />
+        <path
+          d="M17.38 5.62c-1.5-2.58-4.83-3.7-7.4-2.21l.7.4a6.49 6.49 0 0 1 6.3 3.96l.48-.85Z"
+        />
+        <path
+          d="M21.12 11.15c-1.39-2.49-4.4-3.84-7.03-2.84l.4 1.1a5.49 5.49 0 0 1 5.37 2.4l1.26-.66Z"
+        />
+        <path
+          d="M5.62 6.62c-2.58 1.5-3.7 4.83-2.21 7.4l.4.7a6.49 6.49 0 0 1 3.96-6.3l-.85-.48Z"
+        />
+        <path
+          d="M11.15 2.88c-2.49-1.39-5.83-.54-7.23 2.05l.66 1.26a5.49 5.49 0 0 1 2.4-5.37l-1.1-.4Z"
+        />
+      </symbol>
+    </svg>
 
-    <div id="auth-container">
-      <div class="header-container">
-        <img
-          src="https://i.imgur.com/d5N9dkk.png"
-          alt="LightCore Logo"
-          style="height: 44px"
-        />
-        <h1>LightCore</h1>
-      </div>
-      <div class="card">
-        <form id="login-form">
-          <h2>Log In</h2>
-          <label for="login-email">Email</label>
-          <input type="email" id="login-email" required />
-          <label for="login-password">Password</label>
-          <input type="password" id="login-password" required />
-          <button type="submit">Log In</button>
-          <p id="auth-error" class="error-message" style="display: none"></p>
-        </form>
-        <form id="signup-form" style="display: none">
-          <h2>Sign Up</h2>
-          <label for="signup-email">Email</label>
-          <input type="email" id="signup-email" required />
-          <label for="signup-password">Password</label>
-          <input type="password" id="signup-password" required minlength="6" />
-          <button type="submit">Sign Up</button>
-        </form>
-        <p class="auth-toggle">
-          <a href="#" id="show-signup">Don't have an account? Sign Up</a>
-          <a href="#" id="show-login" style="display: none"
-            >Already have an account? Log In</a
-          >
-        </p>
-      </div>
-    </div>
+    <div id="auth-container">
+      <div class="header-container">
+        <img
+          src="https://i.imgur.com/d5N9dkk.png"
+          alt="LightCore Logo"
+          style="height: 44px"
+        />
+        <h1>LightCore</h1>
+      </div>
+      <div class="card">
+        <form id="login-form">
+          <h2>Log In</h2>
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" required />
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" required />
+          <button type="submit">Log In</button>
+          <p id="auth-error" class="error-message" style="display: none"></p>
+        </form>
+        <form id="signup-form" style="display: none">
+          <h2>Sign Up</h2>
+          <label for="signup-email">Email</label>
+          <input type="email" id="signup-email" required />
+          <label for="signup-password">Password</label>
+          <input type="password" id="signup-password" required minlength="6" />
+          <button type="submit">Sign Up</button>
+        </form>
+        <p class="auth-toggle">
+          <a href="#" id="show-signup">Don't have an account? Sign Up</a>
+          <a href="#" id="show-login" style="display: none"
+            >Already have an account? Log In</a
+          >
+        </p>
+      </div>
+    </div>
 
-    <div id="app-container" style="display: none">
-      <div class="header-container">
-        <img
-          src="https://i.imgur.com/d5N9dkk.png"
-          alt="LightCore Logo"
-          style="height: 44px"
-        />
-        <h1>LightCore - Your Health Dashboard</h1>
+    <div id="app-container" style="display: none">
+      <div class="header-container">
+        <img
+          src="https://i.imgur.com/d5N9dkk.png"
+          alt="LightCore Logo"
+          style="height: 44px"
+        />
+        <h1>LightCore - Your Health Dashboard</h1>
         <div class="header-actions">
             <a href="goals.html" class="header-btn">My Goals</a>
-            <a href="#" id="logout-link" class="header-btn">Log Out</a>
+            <a href="#" id="logout-link" class="header-btn">Log Out</a>
         </div>
-      </div>
+      </div>
 
-      <div class="main-container">
-        <div class="left-column">
+      <div class="main-container">
+        <div class="left-column">
             <div class="card" id="goal-progress-card" style="display: none;">
                 <h2>🎯 Weekly Progress</h2>
                 <div id="goal-progress-container"></div>
             </div>
-          <div class="card">
-            <h2>📊 Trends</h2>
-            <div class="toggle-buttons">
-              <button id="btn7day" class="active">7 Day</button>
-              <button id="btn30day">30 Day</button>
-            </div>
-            <div class="chart-container">
-              <canvas id="clarityChart"></canvas>
-            </div>
-            <div class="chart-container">
-              <canvas id="immuneChart"></canvas>
-            </div>
-            <div class="chart-container">
-              <canvas id="physicalChart"></canvas>
-            </div>
-          </div>
-          <div class="card" id="chronodeck-card">
-            <h2>🕰️ ChronoDeck</h2>
-            <div class="chart-container" style="height: 250px">
-              <canvas id="chronoChart"></canvas>
-            </div>
-          </div>
-        </div>
+          <div class="card">
+            <h2>📊 Trends</h2>
+            <div class="toggle-buttons">
+              <button id="btn7day" class="active">7 Day</button>
+              <button id="btn30day">30 Day</button>
+            </div>
+            <div class="chart-container">
+              <canvas id="clarityChart"></canvas>
+            </div>
+            <div class="chart-container">
+              <canvas id="immuneChart"></canvas>
+            </div>
+            <div class="chart-container">
+              <canvas id="physicalChart"></canvas>
+            </div>
+          </div>
+          <div class="card" id="chronodeck-card">
+            <h2>🕰️ ChronoDeck</h2>
+            <div class="chart-container" style="height: 300px;">
+              <canvas id="chronoChart"></canvas>
+            </div>
+          </div>
+        </div>
 
-        <div class="center-column">
-          <div class="card nudge-card" id="nudge-card" style="display: none">
-            <h2 id="nudge-headline"></h2>
-            <p id="nudge-body"></p>
-            <div id="nudge-actions" class="nudge-actions-container"></div>
-          </div>
+        <div class="center-column">
+          <div class="card nudge-card" id="nudge-card" style="display: none">
+            <h2 id="nudge-headline"></h2>
+            <p id="nudge-body"></p>
+            <div id="nudge-actions" class="nudge-actions-container"></div>
+          </div>
 
-          <div class="card">
-            <label for="log">📝 Daily Log Entry</label>
-            <textarea
-              id="log"
-              rows="5"
-              placeholder="I woke up feeling clear-headed..."
-            ></textarea>
-            <div style="display: flex; align-items: center; gap: 0.5rem">
-              <button id="analyzeBtn">Analyze Log</button>
-              <div id="spinner" style="display: none" class="loader"></div>
-            </div>
-          </div>
+          <div class="card">
+            <label for="log">📝 Daily Log Entry</label>
+            <textarea
+              id="log"
+              rows="5"
+              placeholder="I woke up feeling clear-headed..."
+            ></textarea>
+            <div style="display: flex; align-items: center; gap: 0.5rem">
+              <button id="analyzeBtn">Analyze Log</button>
+              <div id="spinner" style="display: none" class="loader"></div>
+            </div>
+          </div>
 
-          <div class="card" id="results" style="display: none">
-            <div class="score">
-              <span class="label">Mental Clarity:</span>
-              <span id="clarity"></span>
-            </div>
-            <div class="score">
-              <span class="label">Immune Risk:</span> <span id="immune"></span>
-            </div>
-            <div class="score">
-              <span class="label">Physical Output:</span>
-              <span id="physical"></span>
-            </div>
-            <div class="notes-section">
-              <span class="label">AI Notes:</span>
-              <p id="notes"></p>
-            </div>
-          </div>
-          <div class="card">
-            <h2>🕓 Recent Entries</h2>
-            <p class="subtle-text">Click on a row to see full details.</p>
-            <div class="table-container">
-              <table id="logTable">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Log</th>
-                    <th>Clarity</th>
-                    <th>Immune</th>
-                    <th>Physical</th>
-                    <th>Notes</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+          <div class="card" id="results" style="display: none">
+            <div class="score">
+              <span class="label">Mental Clarity:</span>
+              <span id="clarity"></span>
+            </div>
+            <div class="score">
+              <span class="label">Immune Risk:</span> <span id="immune"></span>
+            </div>
+            <div class="score">
+              <span class="label">Physical Output:</span>
+              <span id="physical"></span>
+            </div>
+            <div class="notes-section">
+              <span class="label">AI Notes:</span>
+              <p id="notes"></p>
+            </div>
+          </div>
+          <div class="card">
+            <h2>🕓 Recent Entries</h2>
+            <p class="subtle-text">Click on a row to see full details.</p>
+            <div class="table-container">
+              <table id="logTable">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Log</th>
+                    <th>Clarity</th>
+                    <th>Immune</th>
+                    <th>Physical</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+          _tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
 
-        <div class="right-column">
-          <div class="card" id="sleep-card">
-            <div id="manual-sleep-inputs">
-              <label for="sleep-hours">Hours Slept 😴</label>
-              <input type="number" id="sleep-hours" min="0" max="24" step="0.5" placeholder="e.g., 7.5" />
-              <label for="sleep-quality">Sleep Quality (1-5) ⭐</label>
-              <input type="number" id="sleep-quality" min="1" max="5" placeholder="1=Poor, 5=Excellent" />
-            </div>
-            <div id="google-health-connect" class="health-connect-container toggle-style">
-              <svg class="health-connect-logo"><use href="#google-health-logo"></use></svg>
-              <span>Automate with Google Health</span>
-              <label class="switch">
-                <input type="checkbox" id="google-health-toggle" />
-                <span class="slider round"></span>
-              </label>
-            </div>
-            <div id="google-health-connected" class="health-connect-container" style="display: none">
-              <p class="connected-text">
-                <svg class="health-connect-logo connected"><use href="#google-health-logo"></use></svg>
-                Sleep data is automated.
-              </p>
-            </div>
-          </div>
+        <div class="right-column">
+          <div class="card" id="sleep-card">
+            <div id="manual-sleep-inputs">
+              <label for="sleep-hours">Hours Slept 😴</label>
+              <input type="number" id="sleep-hours" min="0" max="24" step="0.5" placeholder="e.g., 7.5" />
+              <label for="sleep-quality">Sleep Quality (1-5) ⭐</label>
+              <input type="number" id="sleep-quality" min="1" max="5" placeholder="1=Poor, 5=Excellent" />
+            </div>
+            <div id="google-health-connect" class="health-connect-container toggle-style">
+              <svg class="health-connect-logo"><use href="#google-health-logo"></use></svg>
+              <span>Automate with Google Health</span>
+              <label class="switch">
+                <input type="checkbox" id="google-health-toggle" />
+                <span class="slider round"></span>
+              </label>
+            </div>
+            <div id="google-health-connected" class="health-connect-container" style="display: none">
+              <p class="connected-text">
+                <svg class="health-connect-logo connected"><use href="#google-health-logo"></use></svg>
+                Sleep data is automated.
+              </p>
+            </div>
+          </div>
 
             <div class="card card-glass" id="guidance-card">
                 <h2>Your Lightcore Guide</h2>
-                <div id="guidance-container">
-                    <p class="subtle-text">Generating your personalized guidance...</p>
-                </div>
+                <p id="ai-insight-text" class="subtle-text">Generating your personalized guidance...</p>
                 <hr>
                 <div class="history-link-container">
                     <a href="history.html" class="footer-link">View Full Insights History</a>
                 </div>
             </div>
-        </div>
-      </div>
+        </div>
+      </div>
 
-      <div class="footer">
-        <a href="about.html" class="footer-link">What is LightCore?</a>
-      </div>
-    </div>
+      <div class="footer">
+        <a href="about.html" class="footer-link">What is LightCore?</a>
+      </div>
+    </div>
 
-    <div id="logModal" class="modal-overlay" style="display: none">
-      <div class="modal-content">
-        <button id="closeModal" class="modal-close-btn">&times;</button>
-        <h3 id="modalDate"></h3>
-        <h4>Full Log Entry:</h4>
-        <p id="modalLog"></p>
-        <hr />
-        <h4>Sleep Data:</h4>
-        <div class="modal-scores">
-          <div>
-      _label">Hours Slept:</span>
-            <span id="modalSleepHours"></span>
-          </div>
-          <div>
-            <span class="label">Sleep Quality (1-5):</span>
-            <span id="modalSleepQuality"></span>
-          </div>
-        </div>
-        <hr />
-        <h4>AI Analysis:</h4>
-        <div class="modal-scores">
-          <div>
-            <span class="label">Mental Clarity:</span>
-            <span id="modalClarity"></span>
-          </div>
-          <div>
-            <span class="label">Immune Risk:</span>
-            <span id="modalImmune"></span>
-          </div>
-          <div>
-            <span class="label">Physical Output:</span>
-            <span id="modalPhysical"></span>
-          </div>
-        </div>
-        <h4>AI Notes:</h4>
-        <p id="modalNotes"></p>
-      </div>
-    </div>
+    <div id="logModal" class="modal-overlay" style="display: none">
+      <div class="modal-content">
+        <button id="closeModal" class="modal-close-btn">&times;</button>
+        <h3 id="modalDate"></h3>
+        <h4>Full Log Entry:</h4>
+        <p id="modalLog"></p>
+        <hr />
+        <h4>Sleep Data:</h4>
+        <div class="modal-scores">
+          <div>
+            <span class="label">Hours Slept:</span>
+            <span id="modalSleepHours"></span>
+          </div>
+          <div>
+            <span class="label">Sleep Quality (1-5):</span>
+            <span id="modalSleepQuality"></span>
+          </div>
+        </div>
+        <hr />
+        <h4>AI Analysis:</h4>
+        <div class="modal-scores">
+          <div>
+            <span class="label">Mental Clarity:</span>
+            <span id="modalClarity"></span>
+          </div>
+          <div>
+            <span class="label">Immune Risk:</span>
+            <span id="modalImmune"></span>
+          </div>
+          <div>
+            <span class="label">Physical Output:</span>
+            <span id="modalPhysical"></span>
+          </div>
+        </div>
+        <h4>AI Notes:</h4>
+        <p id="modalNotes"></p>
+      </div>
+    </div>
 
-    <div id="toast-notification" class="toast"></div>
+    <div id="toast-notification" class="toast"></div>
 
-    <script src="script.js" type="module"></script>
-  </body>
+    <script src="script.js" type="module"></script>
+  </body>
 </html>
