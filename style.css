@@ -25,19 +25,16 @@ body {
 
 .left-column {
   flex: 2;
-  /* Reverted to original proportions */
   min-width: 350px;
 }
 
 .center-column {
   flex: 3;
-  /* Reverted to original proportions */
   min-width: 400px;
 }
 
 .right-column {
   flex: 1.5;
-  /* Reverted to original proportions */
   min-width: 320px;
 }
 
@@ -700,7 +697,7 @@ input:checked+.slider:before {
 /* === CHRONODECK TIMELINE STYLES === */
 #chronodeck-card .chart-container {
   height: 300px;
-  /* Reverted to a more compact height */
+  /* Let the container size itself */
 }
 
 #chronoChart {
