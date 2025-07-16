@@ -17,26 +17,30 @@ body {
   margin: 4rem auto;
 }
 
-/* === LAYOUT STYLES (NOW USING CSS GRID) === */
+/* === LAYOUT STYLES (REVERTED TO FLEXBOX) === */
 .main-container {
-  display: grid;
-  grid-template-columns: 2fr 3fr 1.5fr;
-  /* This enforces the proportions you liked */
+  display: flex;
+  flex-wrap: wrap;
   gap: 2rem;
-  align-items: start;
-  /* Grid equivalent of flex-start */
+  align-items: flex-start;
   max-width: 1800px;
   margin: auto;
 }
 
-/* Flex properties are no longer needed for the columns themselves */
-.left-column,
-.center-column,
-.right-column {
-  width: 100%;
-  /* Make columns fill their grid track */
+.left-column {
+  flex: 2;
+  min-width: 350px;
 }
 
+.center-column {
+  flex: 3;
+  min-width: 400px;
+}
+
+.right-column {
+  flex: 1.5;
+  min-width: 320px;
+}
 
 .toggle-buttons {
   display: flex;
