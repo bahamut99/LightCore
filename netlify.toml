@@ -1,5 +1,18 @@
+# This section tells Netlify how to build your React app
+[build]
+  # The command to run to build your site
+  command = "npm run build"
+  
+  # The folder that contains the built, static site
+  publish = "lightcore-react/dist"
+  
+  # The directory where the build command should be run
+  base = "lightcore-react"
+
+# This section configures your backend serverless functions
 [functions]
   directory = "netlify/functions"
+  timeout = 25
 
 [functions."trend-sentinel"]
   schedule = "0 0 * * *"
