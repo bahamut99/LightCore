@@ -699,10 +699,8 @@ input:checked+.slider:before {
 
 /* === CHRONODECK TIMELINE STYLES === */
 #chronodeck-card .chart-container {
-  height: 250px;
-  /* Reverted height */
-  overflow-x: hidden;
-  /* Removed scrollbar */
+  height: 300px;
+  /* Reverted to a more compact height */
 }
 
 #chronoChart {
