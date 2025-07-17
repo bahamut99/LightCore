@@ -1,0 +1,109 @@
+.history-page-container {
+    max-width: 900px;
+    margin: auto;
+    padding: 1rem;
+}
+
+.history-page-container .header-container {
+    margin-bottom: 1rem;
+}
+
+.back-link {
+    margin-left: auto;
+    color: #9CA3AF;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.back-link:hover {
+    color: #F9FAFB;
+}
+
+.controls-card {
+    padding: 1rem 1.5rem;
+}
+
+.controls-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.filter-group label {
+    margin: 0;
+    font-weight: 500;
+    color: #9CA3AF;
+}
+
+#date-range-picker {
+    width: 280px;
+    margin: 0;
+}
+
+.control-btn {
+    width: auto;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    background-color: #374151;
+    border: 1px solid #4B5563;
+}
+
+.control-btn:hover {
+    background-color: #4B5563;
+}
+
+.control-btn:disabled {
+    background-color: #1F2937;
+    color: #4B5563;
+    cursor: not-allowed;
+}
+
+#insights-container {
+    margin-top: 2rem;
+}
+
+.insight-card {
+    background: #1F2937;
+    border: 1px solid #374151;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.insight-card h3 {
+    margin: 0 0 0.75rem 0;
+    font-weight: 700;
+    color: #F9FAFB;
+}
+
+.insight-card p {
+    margin: 0;
+    line-height: 1.6;
+    color: #D1D5DB;
+}
+
+#pagination-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+}
+
+#page-info {
+    font-weight: 500;
+    color: #9CA3AF;
+}
+
+#loading-spinner {
+    margin-left: 1rem;
+}
