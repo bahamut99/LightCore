@@ -112,6 +112,8 @@ h2 {
     padding: 1.5rem;
     margin-bottom: 1.5rem;
     box-shadow: 0 0 25px rgba(0, 0, 0, 0.2), 0 4px 8px rgba(0, 0, 0, 0.3);
+    position: relative;
+    /* Needed for absolute positioned children like close buttons */
 }
 
 .card-glass {
@@ -335,7 +337,17 @@ td:nth-child(6) {
     min-width: 60px;
 }
 
-/* === GOAL PROGRESS STYLES === */
+/* === GOAL & WEEKLY REVIEW STYLES === */
+#weekly-summary-card h2 {
+    text-align: center;
+}
+
+#weekly-summary-card .notes-section .label {
+    display: block;
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
 #goal-progress-container p {
     margin: 0 0 1rem 0;
     text-align: center;
@@ -516,18 +528,18 @@ td:nth-child(6) {
     filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.5));
 }
 
-/* === NEW ANIMATION FOR HIGHLIGHTING === */
+/* === HIGHLIGHT ANIMATION === */
 @keyframes highlight-glow {
     0% {
-        box-shadow: 0 0 12px 2px rgba(59, 130, 246, 0.0);
+        box-shadow: 0 0 0px 0px rgba(59, 130, 246, 0.0);
     }
 
     50% {
-        box-shadow: 0 0 12px 2px rgba(59, 130, 246, 0.7);
+        box-shadow: 0 0 15px 3px rgba(59, 130, 246, 0.7);
     }
 
     100% {
-        box-shadow: 0 0 12px 2px rgba(59, 130, 246, 0.0);
+        box-shadow: 0 0 0px 0px rgba(59, 130, 246, 0.0);
     }
 }
 
