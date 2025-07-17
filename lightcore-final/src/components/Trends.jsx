@@ -7,12 +7,8 @@ function Trends() {
   const [range, setRange] = useState(7);
   const [chartData, setChartData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  const clarityChartRef = useRef(null);
-  const immuneChartRef = useRef(null);
-  const physicalChartRef = useRef(null);
   const chartInstances = useRef({});
-
+  
   const fetchChartData = useCallback(async () => {
     setIsLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
@@ -35,12 +31,15 @@ function Trends() {
   }, [fetchChartData]);
 
   useEffect(() => {
-    const cleanup = () => {
-        Object.values(chartInstances.current).forEach(chart => chart?.destroy());
+    const canvases = {
+        clarity: document.getElementById('clarityChart'),
+        immune: document.getElementById('immuneChart'),
+        physical: document.getElementById('physicalChart')
     };
-    cleanup();
 
-    if (chartData && clarityChartRef.current && immuneChartRef.current && physicalChartRef.current) {
+    Object.values(chartInstances.current).forEach(c => c?.destroy());
+
+    if (chartData && canvases.clarity && canvases.immune && canvases.physical) {
         const commonOptions = {
             scales: { 
                 y: { beginAtZero: true, max: 10, ticks: { color: '#9CA3AF', stepSize: 2 } },
@@ -48,11 +47,11 @@ function Trends() {
             },
             maintainAspectRatio: false,
         };
-        chartInstances.current.clarity = renderChart(clarityChartRef.current, 'Mental Clarity', chartData.labels, chartData.clarityData, '#38bdf8', commonOptions);
-        chartInstances.current.immune = renderChart(immuneChartRef.current, 'Immune Risk', chartData.labels, chartData.immuneData, '#facc15', commonOptions);
-        chartInstances.current.physical = renderChart(physicalChartRef.current, 'Physical Output', chartData.labels, chartData.physicalData, '#4ade80', commonOptions);
+        chartInstances.current.clarity = renderChart(canvases.clarity, 'Mental Clarity', chartData.labels, chartData.clarityData, '#38bdf8', commonOptions);
+        chartInstances.current.immune = renderChart(canvases.immune, 'Immune Risk', chartData.labels, chartData.immuneData, '#facc15', commonOptions);
+        chartInstances.current.physical = renderChart(canvases.physical, 'Physical Output', chartData.labels, chartData.physicalData, '#4ade80', commonOptions);
     }
-    return cleanup;
+    return () => Object.values(chartInstances.current).forEach(c => c?.destroy());
   }, [chartData]);
 
   function renderChart(canvas, label, labels, data, hexColor, options) {
@@ -78,9 +77,9 @@ function Trends() {
         </div>
         {isLoading ? <div className="loader" style={{margin: '1rem auto'}}></div> : (
             <>
-                <div className="chart-container"><canvas ref={clarityChartRef}></canvas></div>
-                <div className="chart-container"><canvas ref={immuneChartRef}></canvas></div>
-                <div className="chart-container"><canvas ref={physicalChartRef}></canvas></div>
+                <div className="chart-container"><canvas id="clarityChart"></canvas></div>
+                <div className="chart-container"><canvas id="immuneChart"></canvas></div>
+                <div className="chart-container"><canvas id="physicalChart"></canvas></div>
             </>
         )}
     </div>

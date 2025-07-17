@@ -1,24 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient.js';
 
-// This is a new sub-component for the modal, keeping it organized
 const LogDetailModal = ({ log, onClose }) => {
     if (!log) return null;
-
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
                 <button onClick={onClose} className="modal-close-btn">&times;</button>
-                <h3 id="modalDate">{new Date(log.created_at).toLocaleString()}</h3>
+                <h3>{new Date(log.created_at).toLocaleString()}</h3>
                 <h4>Full Log Entry:</h4>
-                <p>{log.log}</p>
-                <hr />
+                <p>{log.log}</p><hr />
                 <h4>Sleep Data:</h4>
                 <div className="modal-scores">
                     <div><span className="label">Hours Slept:</span><span>{log.sleep_hours || 'N/A'}</span></div>
                     <div><span className="label">Sleep Quality (1-5):</span><span>{log.sleep_quality ? `${log.sleep_quality} / 5` : 'N/A'}</span></div>
-                </div>
-                <hr />
+                </div><hr />
                 <h4>AI Analysis:</h4>
                 <div className="modal-scores">
                     <div><span className="label">Mental Clarity:</span><span>{log.clarity_score}/10 ({log.clarity_label})</span></div>
@@ -32,7 +28,6 @@ const LogDetailModal = ({ log, onClose }) => {
     );
 };
 
-
 function RecentEntries() {
   const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -42,7 +37,6 @@ function RecentEntries() {
     setIsLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { setIsLoading(false); return; }
-
     try {
       const response = await fetch('/.netlify/functions/recent-logs', { headers: { 'Authorization': `Bearer ${session.access_token}` } });
       if (!response.ok) throw new Error("Failed to load recent logs");
@@ -59,12 +53,8 @@ function RecentEntries() {
   }, [fetchRecentLogs]);
   
   const TdScore = ({ children, color }) => {
-    if (color) {
-      const r = parseInt(color.slice(1, 3), 16), g = parseInt(color.slice(3, 5), 16), b = parseInt(color.slice(5, 7), 16);
-      const style = { color: color, backgroundColor: `rgba(${r}, ${g}, ${b}, 0.1)` };
-      return <td><span className="score-bubble" style={style}>{children || 'N/A'}</span></td>;
-    }
-    return <td><span className="score-bubble">{children || 'N/A'}</span></td>;
+    const style = color ? { color, backgroundColor: `rgba(${parseInt(color.slice(1, 3), 16)}, ${parseInt(color.slice(3, 5), 16)}, ${parseInt(color.slice(5, 7), 16)}, 0.1)` } : {};
+    return <td><span className="score-bubble" style={style}>{children || 'N/A'}</span></td>;
   };
   
   return (

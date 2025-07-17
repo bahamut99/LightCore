@@ -66,7 +66,7 @@ function LightcoreGuide() {
             </>
         );
     }
-    return null;
+    return <p className="subtle-text">Log data for a few days to start generating personalized guidance.</p>;
   };
 
   return (

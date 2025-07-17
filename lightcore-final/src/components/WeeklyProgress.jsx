@@ -20,7 +20,7 @@ function WeeklyProgress() {
         setGoal(data.goal);
         setProgress(data.progress);
       } else {
-        setGoal(null); // Explicitly set to null if no goal is found
+        setGoal(null);
       }
     } catch (error) { console.error("Error fetching goal progress:", error); } 
     finally { setIsLoading(false); }

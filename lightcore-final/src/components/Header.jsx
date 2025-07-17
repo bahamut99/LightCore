@@ -14,7 +14,7 @@ function Header() {
         alt="LightCore Logo"
         style={{ height: '44px' }}
       />
-      <h1>LightCore - Your Health Dashboard</h1>
+      <h1>LightCore - Your Bio Digital Twin</h1>
       <div className="header-actions">
         <a href="goals.html" className="header-btn">My Goals</a>
         <a href="#" id="logout-link" className="header-btn" onClick={handleLogout}>Log Out</a>
