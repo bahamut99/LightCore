@@ -1,6 +1,6 @@
 import React from 'react';
 import Header from './Header.jsx';
-import WeeklySummary from './WeeklySummary.jsx'; // Import the new summary component
+import WeeklySummary from './WeeklySummary.jsx';
 import Trends from './Trends.jsx';
 import ChronoDeck from './ChronoDeck.jsx';
 import LogEntry from './LogEntry.jsx';
@@ -13,7 +13,7 @@ function Dashboard() {
       <Header />
       <main className="main-container">
         <div className="left-column">
-          <WeeklySummary /> {/* Use the new component here */}
+          <WeeklySummary />
           <Trends />
           <ChronoDeck />
         </div>
