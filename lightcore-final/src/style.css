@@ -507,196 +507,6 @@ td:nth-child(6) {
     }
 }
 
-/* === Google Health Connect Styles === */
-.health-connect-container {
-    border-top: 1px solid #374151;
-    margin-top: 1.5rem;
-    padding-top: 1.5rem;
-    text-align: center;
-}
-
-.health-connect-logo {
-    width: 1.25rem;
-    height: 1.25rem;
-    fill: #D1D5DB;
-}
-
-.health-connect-logo.connected {
-    fill: #22c55e;
-}
-
-p.connected-text {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    color: #9CA3AF;
-}
-
-.health-connect-container.toggle-style {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    text-align: left;
-}
-
-.health-connect-container.toggle-style span {
-    font-size: 0.9rem;
-    font-weight: 500;
-    margin-left: 0.5rem;
-}
-
-.switch {
-    position: relative;
-    display: inline-block;
-    width: 50px;
-    height: 28px;
-}
-
-.switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #374151;
-    transition: .4s;
-}
-
-.slider:before {
-    position: absolute;
-    content: "";
-    height: 20px;
-    width: 20px;
-    left: 4px;
-    bottom: 4px;
-    background-color: white;
-    transition: .4s;
-}
-
-input:checked+.slider {
-    background-color: #2563EB;
-}
-
-input:focus+.slider {
-    box-shadow: 0 0 1px #2563EB;
-}
-
-input:checked+.slider:before {
-    transform: translateX(22px);
-}
-
-.slider.round {
-    border-radius: 34px;
-}
-
-.slider.round:before {
-    border-radius: 50%;
-}
-
-/* === Footer and About Page === */
-.footer {
-    text-align: center;
-    padding: 2rem 1rem;
-}
-
-.footer-link {
-    font-size: 0.8rem;
-    color: #6B7280;
-    text-decoration: none;
-    transition: color 0.2s;
-}
-
-.footer-link:hover {
-    color: #9CA3AF;
-    text-decoration: underline;
-}
-
-.about-container {
-    max-width: 800px;
-    margin: 2rem auto;
-    padding: 1rem;
-}
-
-.about-container h4 {
-    margin-top: 1.5rem;
-    margin-bottom: 0.5rem;
-    color: #9CA3AF;
-}
-
-.about-container p {
-    line-height: 1.7;
-    color: #D1D5DB;
-}
-
-.toast {
-    visibility: hidden;
-    min-width: 250px;
-    background-color: #374151;
-    color: #fff;
-    text-align: center;
-    border-radius: 0.5rem;
-    padding: 1rem;
-    position: fixed;
-    z-index: 200;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: 30px;
-    font-size: 0.9rem;
-    opacity: 0;
-    transition: visibility 0.5s, opacity 0.5s linear;
-    border: 1px solid #4B5563;
-}
-
-.toast.show {
-    visibility: visible;
-    opacity: 1;
-}
-
-.nudge-card {
-    border-color: rgba(249, 115, 22, 0.4);
-    border-width: 1px;
-}
-
-.nudge-card h2 {
-    color: #f97316;
-    font-size: 1.2rem;
-    text-transform: none;
-    letter-spacing: 0;
-}
-
-.nudge-card p {
-    margin: 0.5rem 0 1rem 0;
-    line-height: 1.6;
-}
-
-.nudge-actions-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
-
-.nudge-actions-container button {
-    background-color: #374151;
-    border: 1px solid #4B5563;
-    width: auto;
-    flex-grow: 1;
-    padding: 0.5rem 1rem;
-    margin: 0;
-    font-size: 0.8rem;
-}
-
-.nudge-actions-container button:hover {
-    background-color: #4B5563;
-}
-
 /* === CHRONODECK TIMELINE STYLES === */
 #chronodeck-card .chart-container {
     height: 300px;
@@ -704,4 +514,23 @@ input:checked+.slider:before {
 
 #chronoChart {
     filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.5));
+}
+
+/* === NEW ANIMATION FOR HIGHLIGHTING === */
+@keyframes highlight-glow {
+    0% {
+        box-shadow: 0 0 12px 2px rgba(59, 130, 246, 0.0);
+    }
+
+    50% {
+        box-shadow: 0 0 12px 2px rgba(59, 130, 246, 0.7);
+    }
+
+    100% {
+        box-shadow: 0 0 12px 2px rgba(59, 130, 246, 0.0);
+    }
+}
+
+.highlight-new-content {
+    animation: highlight-glow 2.5s ease-out;
 }
