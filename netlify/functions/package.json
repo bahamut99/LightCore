@@ -1,3 +1,5 @@
 {
-  "type": "module"
+  "name": "lightcore-functions",
+  "type": "commonjs",
+  "main": "index.js"
 }
