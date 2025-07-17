@@ -113,7 +113,7 @@ exports.handler = async (event, context) => {
             ai_notes: analysis.notes || "No specific notes generated.",
             sleep_hours: sleep_hours || null,
             sleep_quality: sleep_quality || null,
-            tags: analysis.tags || [] // Add the new tags array
+            tags: analysis.tags || []
         };
         
         const { data: newLogData, error: dbError } = await supabase
