@@ -6,6 +6,7 @@ import ChronoDeck from './ChronoDeck.jsx';
 import LogEntry from './LogEntry.jsx';
 import RecentEntries from './RecentEntries.jsx';
 import LightcoreGuide from './LightcoreGuide.jsx';
+import NudgeNotice from './NudgeNotice.jsx'; // 1. Import the new component
 
 function Dashboard() {
   return (
@@ -18,6 +19,7 @@ function Dashboard() {
           <ChronoDeck />
         </div>
         <div className="center-column">
+          <NudgeNotice /> {/* 2. Add the component here */}
           <LogEntry />
           <RecentEntries />
         </div>
@@ -26,7 +28,6 @@ function Dashboard() {
         </div>
       </main>
       <div className="footer">
-        {/* The links below were updated */}
         <a href="about.html" className="footer-link">What is LightCore?</a>
         <span className="footer-separator">|</span>
         <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer" className="footer-link">Privacy Policy</a>
