@@ -26,7 +26,10 @@ function Dashboard() {
         </div>
       </main>
       <div className="footer">
+        {/* The links below were updated */}
         <a href="about.html" className="footer-link">What is LightCore?</a>
+        <span className="footer-separator">|</span>
+        <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer" className="footer-link">Privacy Policy</a>
       </div>
     </div>
   );
