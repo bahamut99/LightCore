@@ -1,0 +1,129 @@
+body {
+    font-family: 'Inter', sans-serif;
+    background: #111827;
+    color: #D1D5DB;
+    padding: 1rem 2rem;
+    margin: 0;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 800px;
+    margin: 2rem auto;
+}
+
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    text-align: left;
+    border-bottom: 1px solid #374151;
+    padding-bottom: 1.5rem;
+}
+
+.logo {
+    height: 50px;
+}
+
+h1 {
+    color: #F9FAFB;
+    font-size: 2.25rem;
+    margin: 0;
+}
+
+h2 {
+    color: #60A5FA;
+    font-size: 1.75rem;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+}
+
+h3 {
+    color: #E5E7EB;
+    font-size: 1.4rem;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+h4 {
+    color: #9CA3AF;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+}
+
+p,
+ul {
+    color: #D1D5DB;
+    font-size: 1rem;
+    margin-bottom: 1rem;
+}
+
+ul {
+    padding-left: 20px;
+    list-style-type: '— ';
+}
+
+li {
+    margin-bottom: 0.75rem;
+    padding-left: 0.5rem;
+}
+
+section {
+    margin-bottom: 2.5rem;
+}
+
+.highlight-box {
+    background: #1F2937;
+    border: 1px solid #374151;
+    border-radius: 1rem;
+    padding: 1.5rem 2rem;
+}
+
+.how-it-works {
+    text-align: center;
+}
+
+.steps-container {
+    display: flex;
+    justify-content: space-between;
+    gap: 2rem;
+    margin-top: 1.5rem;
+}
+
+.step {
+    flex: 1;
+    text-align: center;
+}
+
+.step p {
+    font-size: 0.95rem;
+    color: #9CA3AF;
+}
+
+.cta-section {
+    text-align: center;
+    margin-top: 3rem;
+    background-color: rgba(59, 130, 246, 0.1);
+    padding: 2rem;
+    border-radius: 1rem;
+}
+
+.button-primary {
+    display: inline-block;
+    background-color: #3B82F6;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    text-decoration: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    margin-top: 1rem;
+    transition: background-color 0.2s;
+}
+
+.button-primary:hover {
+    background-color: #2563EB;
+}
