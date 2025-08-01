@@ -1,5 +1,8 @@
 const { createClient } = require('@supabase/supabase-js');
 
+// Helper function to create a secure admin client
+const createAdminClient = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
 exports.handler = async (event, context) => {
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: 'Method Not Allowed' };
@@ -8,8 +11,9 @@ exports.handler = async (event, context) => {
     const token = event.headers.authorization?.split(' ')[1];
     if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Not authorized.' }) };
 
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    // This part is for validating the user token and is correct
+    const supabaseUserClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+    const { data: { user }, error: userError } = await supabaseUserClient.auth.getUser(token);
     if (userError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
 
     try {
@@ -18,20 +22,23 @@ exports.handler = async (event, context) => {
             return { statusCode: 400, body: JSON.stringify({ error: 'Missing goal_type or goal_value.' }) };
         }
 
-        // First, check if a goal of this type already exists for the user
-        const { data: existingGoal, error: fetchError } = await supabase
+        // For all database modifications, we now use the secure admin client
+        const supabaseAdmin = createAdminClient();
+
+        // Check if a goal of this type already exists for the user
+        const { data: existingGoal, error: fetchError } = await supabaseAdmin
             .from('goals')
             .select('id')
             .eq('user_id', user.id)
             .eq('goal_type', goal_type)
             .single();
 
-        if (fetchError && fetchError.code !== 'PGRST116') { // Ignore "not found" error which is expected
+        if (fetchError && fetchError.code !== 'PGRST116') { // Ignore "not found" error
             throw new Error(`Supabase fetch error: ${fetchError.message}`);
         }
 
-        // Deactivate all other goals for the user first to ensure only one is active.
-        await supabase
+        // Deactivate all other goals for the user first
+        await supabaseAdmin
             .from('goals')
             .update({ is_active: false })
             .eq('user_id', user.id);
@@ -39,7 +46,7 @@ exports.handler = async (event, context) => {
         let savedData;
         if (existingGoal) {
             // If it exists, UPDATE it with the new value and set it to active
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from('goals')
                 .update({ goal_value: goal_value, is_active: true })
                 .eq('id', existingGoal.id)
@@ -49,7 +56,7 @@ exports.handler = async (event, context) => {
             savedData = data;
         } else {
             // If it does not exist, INSERT a new one
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from('goals')
                 .insert({
                     user_id: user.id,
