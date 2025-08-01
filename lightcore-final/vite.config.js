@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { resolve } from 'path'
 
 export default defineConfig({
   plugins: [react()],
@@ -8,6 +9,14 @@ export default defineConfig({
       '/.netlify/functions': {
         target: 'https://lightcorehealth.netlify.app',
         changeOrigin: true,
+      },
+    },
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        goals: resolve(__dirname, 'goals.html'),
       },
     },
   },
