@@ -53,19 +53,5 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/history.js" type="module"></script>
-
-    <script>
-      flatpickr("#date-range-picker", {
-        mode: "range",
-        dateFormat: "Y-m-d",
-        // This tells the main history.js script when a date is picked
-        onChange: function (selectedDates) {
-          const event = new CustomEvent("dateRangeChanged", {
-            detail: selectedDates,
-          });
-          document.dispatchEvent(event);
-        },
-      });
-    </script>
   </body>
 </html>
