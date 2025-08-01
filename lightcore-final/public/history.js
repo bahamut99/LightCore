@@ -18,21 +18,20 @@ const pageInfo = document.getElementById('page-info');
 const exportBtn = document.getElementById('export-csv-btn');
 const loadingSpinner = document.getElementById('loading-spinner');
 
-flatpickr("#date-range-picker", {
-    mode: "range",
-    dateFormat: "Y-m-d",
-    onChange: function(selectedDates) {
-        if (selectedDates.length === 2) {
-            dateRange.start = selectedDates[0];
-            dateRange.end = selectedDates[1];
-        } else if (selectedDates.length === 0) {
-            dateRange.start = null;
-            dateRange.end = null;
-        }
-        currentPage = 1;
-        fetchAndRenderInsights();
+// NEW: Listen for the date change event from the HTML
+document.addEventListener('dateRangeChanged', (event) => {
+    const selectedDates = event.detail;
+    if (selectedDates.length === 2) {
+        dateRange.start = selectedDates[0];
+        dateRange.end = selectedDates[1];
+    } else if (selectedDates.length === 0) {
+        dateRange.start = null;
+        dateRange.end = null;
     }
+    currentPage = 1;
+    fetchAndRenderInsights();
 });
+
 
 async function fetchAndRenderInsights() {
     loadingSpinner.style.display = 'block';
