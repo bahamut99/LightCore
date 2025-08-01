@@ -12,47 +12,59 @@ function Trends() {
   const fetchChartData = useCallback(async () => {
     setIsLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setIsLoading(false); return; }
+    if (!session) {
+      setIsLoading(false);
+      return;
+    }
+    
+    // For ranges greater than 1 day, we request aggregated daily data.
+    const aggregate = range > 1 ? 'daily' : 'none';
     
     try {
-      const response = await fetch(`/.netlify/functions/get-chart-data?range=${range}`, {
+      const response = await fetch(`/.netlify/functions/get-chart-data?range=${range}&aggregate=${aggregate}`, {
           headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
       const data = await response.json();
       setChartData(data);
-    } catch (error) { console.error("Error fetching chart data:", error); } 
-    finally { setIsLoading(false); }
+    } catch (error) {
+      console.error("Error fetching chart data:", error);
+    } finally {
+      setIsLoading(false);
+    }
   }, [range]);
 
   useEffect(() => {
     fetchChartData();
-    window.addEventListener('newLogSubmitted', fetchChartData);
-    return () => window.removeEventListener('newLogSubmitted', fetchChartData);
+    const handleNewLog = () => fetchChartData();
+    window.addEventListener('newLogSubmitted', handleNewLog);
+    return () => window.removeEventListener('newLogSubmitted', handleNewLog);
   }, [fetchChartData]);
 
   useEffect(() => {
     const canvases = {
-        clarity: document.getElementById('clarityChart'),
-        immune: document.getElementById('immuneChart'),
-        physical: document.getElementById('physicalChart')
+      clarity: document.getElementById('clarityChart'),
+      immune: document.getElementById('immuneChart'),
+      physical: document.getElementById('physicalChart')
     };
 
+    // Destroy previous chart instances
     Object.values(chartInstances.current).forEach(c => c?.destroy());
 
     if (chartData && canvases.clarity && canvases.immune && canvases.physical) {
-        const commonOptions = {
-            scales: { 
-                y: { beginAtZero: true, max: 10, ticks: { color: '#9CA3AF', stepSize: 2 } },
-                x: { type: 'time', time: { unit: 'day' }, grid: { display: false }, ticks: { color: '#9CA3AF' } } 
-            },
-            maintainAspectRatio: false,
-        };
-        chartInstances.current.clarity = renderChart(canvases.clarity, 'Mental Clarity', chartData.labels, chartData.clarityData, '#38bdf8', commonOptions);
-        chartInstances.current.immune = renderChart(canvases.immune, 'Immune Risk', chartData.labels, chartData.immuneData, '#facc15', commonOptions);
-        chartInstances.current.physical = renderChart(canvases.physical, 'Physical Output', chartData.labels, chartData.physicalData, '#4ade80', commonOptions);
+      const timeUnit = range === 1 ? 'hour' : 'day'; // Use 'hour' for 1D view
+      const commonOptions = {
+          scales: { 
+              y: { beginAtZero: true, max: 10, ticks: { color: '#9CA3AF', stepSize: 2 } },
+              x: { type: 'time', time: { unit: timeUnit }, grid: { display: false }, ticks: { color: '#9CA3AF' } } 
+          },
+          maintainAspectRatio: false,
+      };
+      chartInstances.current.clarity = renderChart(canvases.clarity, 'Mental Clarity', chartData.labels, chartData.clarityData, '#38bdf8', commonOptions);
+      chartInstances.current.immune = renderChart(canvases.immune, 'Immune Risk', chartData.labels, chartData.immuneData, '#facc15', commonOptions);
+      chartInstances.current.physical = renderChart(canvases.physical, 'Physical Output', chartData.labels, chartData.physicalData, '#4ade80', commonOptions);
     }
     return () => Object.values(chartInstances.current).forEach(c => c?.destroy());
-  }, [chartData]);
+  }, [chartData, range]); // Re-render charts when range changes to update axis
 
   function renderChart(canvas, label, labels, data, hexColor, options) {
     if (!canvas) return null;
@@ -68,20 +80,28 @@ function Trends() {
     });
   }
 
+  const TimeRangeButton = ({ value, label }) => (
+    <button onClick={() => setRange(value)} className={range === value ? 'active' : ''}>
+      {label}
+    </button>
+  );
+
   return (
     <div className="card">
-        <h2>📊 Trends</h2>
-        <div className="toggle-buttons">
-            <button onClick={() => setRange(7)} className={range === 7 ? 'active' : ''}>7 Day</button>
-            <button onClick={() => setRange(30)} className={range === 30 ? 'active' : ''}>30 Day</button>
-        </div>
-        {isLoading ? <div className="loader" style={{margin: '1rem auto'}}></div> : (
-            <>
-                <div className="chart-container"><canvas id="clarityChart"></canvas></div>
-                <div className="chart-container"><canvas id="immuneChart"></canvas></div>
-                <div className="chart-container"><canvas id="physicalChart"></canvas></div>
-            </>
-        )}
+      <h2>📊 Trends</h2>
+      <div className="time-range-buttons">
+        <TimeRangeButton value={1} label="1D" />
+        <TimeRangeButton value={7} label="7D" />
+        <TimeRangeButton value={30} label="30D" />
+        <TimeRangeButton value={90} label="90D" />
+      </div>
+      {isLoading ? <div className="loader" style={{margin: '1rem auto'}}></div> : (
+          <>
+            <div className="chart-container"><canvas id="clarityChart"></canvas></div>
+            <div className="chart-container"><canvas id="immuneChart"></canvas></div>
+            <div className="chart-container"><canvas id="physicalChart"></canvas></div>
+          </>
+      )}
     </div>
   );
 }
