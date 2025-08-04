@@ -1,8 +1,8 @@
-[build]
-  command = "npm run build"
-  publish = "dist"
-
-[functions]
-  directory = "functions"
-  # Give functions up to 25 seconds to run
+[build] 
+  command = "npm run build" 
+  publish = "dist" 
+ 
+[functions] 
+  directory = "functions" 
+  # Give functions up to 25 seconds to run 
   timeout = 25
