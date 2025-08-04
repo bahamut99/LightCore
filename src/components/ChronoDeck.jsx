@@ -20,6 +20,15 @@ const getLastSevenDays = () => {
     return days;
 };
 
+// New, more precise set of hour markers for the timeline
+const hourMarkers = [
+    { label: '12A', position: 0 },
+    { label: '6A', position: 25 },
+    { label: '12P', position: 50 },
+    { label: '6P', position: 75 },
+    { label: '12A', position: 100 }
+];
+
 function ChronoDeck({ isLoading, data: eventsData }) {
     
     const today = new Date();
@@ -47,7 +56,6 @@ function ChronoDeck({ isLoading, data: eventsData }) {
             const dayString = day.toISOString().split('T')[0];
             const dayName = day.toLocaleDateString('en-US', { weekday: 'short' });
             
-            // More robust check for the current day
             const isToday = day.getFullYear() === today.getFullYear() &&
                           day.getMonth() === today.getMonth() &&
                           day.getDate() === today.getDate();
@@ -70,7 +78,6 @@ function ChronoDeck({ isLoading, data: eventsData }) {
                     id: event.event_time,
                     type: event.event_type,
                     timeString: timeString,
-                    icon: config.icon,
                     style: {
                         left: `${startPercent}%`,
                         width: `${widthPercent}%`,
@@ -115,10 +122,11 @@ function ChronoDeck({ isLoading, data: eventsData }) {
                     <div className="hour-marker-track">
                         <div className="hour-marker-spacer"></div>
                         <div className="hour-markers">
-                            <span>12A</span>
-                            <span>6A</span>
-                            <span>12P</span>
-                            <span>6P</span>
+                            {hourMarkers.map(marker => (
+                                <span key={marker.label + marker.position} style={{ left: `${marker.position}%` }}>
+                                    {marker.label}
+                                </span>
+                            ))}
                         </div>
                     </div>
                 </>
