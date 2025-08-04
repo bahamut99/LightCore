@@ -714,10 +714,9 @@ td:nth-child(6) {
     overflow: hidden;
 }
 
-/* NEW animation for the subtle background pulse */
 @keyframes pulse-blue-bg {
     0% { background-color: #1F2937; }
-    50% { background-color: #263347; } /* A slightly lighter, bluer shade */
+    50% { background-color: #263347; }
     100% { background-color: #1F2937; }
 }
 
@@ -731,28 +730,54 @@ td:nth-child(6) {
 
 .timeline-bar-base.is-today {
     animation: pulse-blue-bg 3s infinite ease-in-out;
-    /* NEW: Add the repeating gradient for the grid lines */
     background-image: 
         repeating-linear-gradient(to right, 
             transparent 0, 
             transparent calc(4.1667% - 1px), 
-            #1F2937 4.1667%, /* Faint line color */
+            rgba(31, 41, 55, 0.7) 4.1667%, /* Darker line color for contrast */
             transparent calc(4.1667% + 1px)
         );
 }
 
 .event-block {
     position: absolute;
-    top: 0;
-    height: 100%;
     border-radius: 2px;
     transition: all 0.2s ease-in-out;
     cursor: pointer;
+    box-sizing: border-box; /* Important for borders */
 }
 
-.event-block:hover {
-    transform: scaleY(1.1);
-    filter: brightness(1.2);
+/* ========================================
+   ChronoDeck Overlap Styles
+======================================== */
+
+@keyframes pulse-block {
+  50% {
+    filter: brightness(1.25);
+  }
+}
+
+/* When a day has overlaps, animate all blocks on that day */
+.has-overlap .event-block {
+    animation: pulse-block 2.5s infinite ease-in-out;
+}
+
+/* Default state for all blocks */
+.event-block {
+    top: 0;
+    height: 100%;
+}
+
+/* Split-bar styles for overlapping events */
+.event-block.track-top {
+    top: 0;
+    height: 50%;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.3); /* Divider line */
+}
+
+.event-block.track-bottom {
+    top: 50%;
+    height: 50%;
 }
 
 /* ========================================
@@ -775,7 +800,7 @@ td:nth-child(6) {
 .hour-markers {
     position: relative;
     width: 100%;
-    height: 1em; /* Give it some height */
+    height: 1em;
     font-size: 0.7rem;
     font-weight: 500;
     color: #4B5563;
@@ -783,13 +808,13 @@ td:nth-child(6) {
 
 .hour-markers span {
     position: absolute;
-    transform: translateX(-50%); /* Center the text on the position */
+    transform: translateX(-50%);
 }
 
 .hour-markers span:first-child {
-    transform: translateX(0); /* Align 12A to the start */
+    transform: translateX(0);
 }
 
 .hour-markers span:last-child {
-    transform: translateX(-100%); /* Align the final 12A to the end */
+    transform: translateX(-100%);
 }

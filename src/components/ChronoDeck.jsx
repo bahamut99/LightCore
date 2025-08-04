@@ -20,7 +20,6 @@ const getLastSevenDays = () => {
     return days;
 };
 
-// New, more precise set of hour markers for the timeline
 const hourMarkers = [
     { label: '12A', position: 0 },
     { label: '6A', position: 25 },
@@ -28,6 +27,32 @@ const hourMarkers = [
     { label: '6P', position: 75 },
     { label: '12A', position: 100 }
 ];
+
+// New helper function to process events into non-overlapping tracks
+function processEventsIntoTracks(dailyEvents) {
+    const topTrack = [];
+    const bottomTrack = [];
+
+    const sortedEvents = dailyEvents
+        .map(event => {
+            const config = EVENT_CONFIG[event.event_type] || { duration: 30 };
+            const startTime = new Date(event.event_time).getTime();
+            const endTime = startTime + config.duration * 60000;
+            return { ...event, startTime, endTime };
+        })
+        .sort((a, b) => a.startTime - b.startTime);
+
+    for (const event of sortedEvents) {
+        const lastInTop = topTrack[topTrack.length - 1];
+        if (!lastInTop || event.startTime >= lastInTop.endTime) {
+            topTrack.push(event);
+        } else {
+            bottomTrack.push(event);
+        }
+    }
+    return { topTrack, bottomTrack };
+}
+
 
 function ChronoDeck({ isLoading, data: eventsData }) {
     
@@ -60,33 +85,35 @@ function ChronoDeck({ isLoading, data: eventsData }) {
                           day.getMonth() === today.getMonth() &&
                           day.getDate() === today.getDate();
 
-            const processedEvents = eventsByDay[dayString].map(event => {
-                const config = EVENT_CONFIG[event.event_type] || { color: '#6B7280', duration: 30, icon: '🗓️' };
+            const { topTrack, bottomTrack } = processEventsIntoTracks(eventsByDay[dayString]);
+            const hasOverlap = bottomTrack.length > 0;
+
+            const createBlock = (event) => {
+                const config = EVENT_CONFIG[event.event_type] || { duration: 30 };
                 const startTime = new Date(event.event_time);
-                
                 const startOfDay = new Date(startTime);
                 startOfDay.setHours(0, 0, 0, 0);
-
                 const minutesFromStartOfDay = (startTime - startOfDay) / 60000;
-                
                 const startPercent = (minutesFromStartOfDay / 1440) * 100;
                 const widthPercent = (config.duration / 1440) * 100;
-
                 const timeString = startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
                 return {
-                    id: event.event_time,
+                    id: event.event_time + event.event_type, // More unique key
                     type: event.event_type,
                     timeString: timeString,
-                    style: {
-                        left: `${startPercent}%`,
-                        width: `${widthPercent}%`,
-                        backgroundColor: config.color
-                    }
+                    style: { left: `${startPercent}%`, width: `${widthPercent}%`, backgroundColor: config.color }
                 };
-            });
+            };
 
-            return { dayName, dateString: dayString, events: processedEvents, isToday };
+            return { 
+                dayName, 
+                dateString: dayString, 
+                isToday,
+                hasOverlap,
+                topTrackEvents: topTrack.map(createBlock),
+                bottomTrackEvents: bottomTrack.map(createBlock)
+            };
         });
     };
 
@@ -105,12 +132,20 @@ function ChronoDeck({ isLoading, data: eventsData }) {
                         {weeklyData.map(day => (
                             <div className="day-row" key={day.dateString}>
                                 <div className="day-label">{day.dayName}</div>
-                                <div className="timeline-bar-container">
+                                <div className={`timeline-bar-container ${day.hasOverlap ? 'has-overlap' : ''}`}>
                                     <div className={`timeline-bar-base ${day.isToday ? 'is-today' : ''}`}></div>
-                                    {day.events.map(event => (
+                                    {day.topTrackEvents.map(event => (
                                         <div 
                                             key={event.id}
-                                            className="event-block"
+                                            className="event-block track-top"
+                                            style={event.style}
+                                            title={`${event.type} at ${event.timeString}`}
+                                        ></div>
+                                    ))}
+                                    {day.bottomTrackEvents.map(event => (
+                                        <div 
+                                            key={event.id}
+                                            className="event-block track-bottom"
                                             style={event.style}
                                             title={`${event.type} at ${event.timeString}`}
                                         ></div>
