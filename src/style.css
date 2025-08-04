@@ -666,9 +666,8 @@ td:nth-child(6) {
     line-height: 1.5;
 }
 
-/*
-========================================
-NEW ChronoDeck "Pulsing Line" Styles
+/* ========================================
+NEW ChronoDeck Horizontal View
 ========================================
 */
 
@@ -677,134 +676,70 @@ NEW ChronoDeck "Pulsing Line" Styles
     justify-content: space-between;
     align-items: center;
     width: 100%;
+    margin-bottom: 0.5rem; /* Reduced bottom margin */
 }
 
 #chronodeck-card .card-header h2 {
     margin-bottom: 0;
 }
 
-.chrono-deck-wrapper {
-    min-height: 300px; /* Ensures the card has a consistent height */
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
+.chrono-deck-weekly-view {
+    padding-top: 0.5rem;
 }
 
-.chrono-deck-message {
-    flex-grow: 1;
+.day-row {
     display: flex;
-    justify-content: center;
     align-items: center;
-    color: #6B7280; /* --text-secondary */
-    font-style: italic;
-    padding: 2rem 0;
-}
-.chrono-deck-message.error {
-    color: #f87171; /* --error-color */
-    font-style: normal;
+    gap: 0.75rem;
+    margin-bottom: 8px;
 }
 
-.timeline-container {
-    position: relative;
-    padding: 20px 0;
-    margin-top: 10px;
-}
-
-.timeline-line {
-    position: absolute;
-    left: 50%;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background-color: #374151; /* --border-color */
-    transform: translateX(-50%);
-}
-
-.timeline-item {
-    position: relative;
-    width: 50%;
-    padding: 10px 40px;
-    box-sizing: border-box;
-    margin-bottom: 20px;
-}
-
-.timeline-item:last-child {
+.day-row:last-child {
     margin-bottom: 0;
 }
 
-.timeline-item.left {
-    left: 0;
-    text-align: right;
-}
-
-.timeline-item.right {
-    left: 50%;
+.day-label {
+    width: 35px;
+    flex-shrink: 0;
     text-align: left;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #9CA3AF;
 }
 
-/* The pulsing dot on the timeline */
-@keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
-  100% { box-shadow: 0 0 0 20px rgba(59, 130, 246, 0); }
-}
-
-.timeline-dot {
-    position: absolute;
-    top: 25px;
-    width: 14px;
-    height: 14px;
-    background-color: #3B82F6; /* --accent-color */
-    border-radius: 50%;
-    border: 3px solid #1F2937; /* --card-bg */
-    z-index: 2;
-    box-shadow: 0 0 0 rgba(59, 130, 246, 0.4);
-    animation: pulse 2s infinite cubic-bezier(0.66, 0, 0, 1);
-}
-
-.timeline-item.left .timeline-dot {
-    right: -8px;
-}
-
-.timeline-item.right .timeline-dot {
-    left: -8px;
-}
-
-.timeline-content {
-    padding: 15px;
-    background-color: #374151; /* --secondary-bg */
-    border-radius: 6px;
+.timeline-bar-container {
+    flex-grow: 1;
     position: relative;
+    height: 22px;
+    border-radius: 6px;
+    overflow: hidden; /* Ensures event blocks don't spill out */
 }
 
-.timeline-content .timeline-time {
-    font-weight: 600;
-    color: #60A5FA; /* accent-color variant */
-    display: block;
-    margin-bottom: 8px;
-    font-size: 0.9em;
+@keyframes pulse-bg {
+    0% { background-color: #374151; }
+    50% { background-color: #4B5563; }
+    100% { background-color: #374151; }
 }
 
-.timeline-content p {
-    margin: 0;
-    font-size: 0.95em;
-    color: #F9FAFB; /* --text-primary */
+.timeline-bar-base {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background-color: #374151;
+    border-radius: 6px;
+    animation: pulse-bg 3s infinite ease-in-out;
 }
 
-/* Responsive adjustments for mobile */
-@media (max-width: 768px) {
-    .timeline-line {
-        left: 20px;
-    }
-    .timeline-item {
-        width: 100%;
-        padding-left: 70px;
-        padding-right: 25px;
-    }
-    .timeline-item.left, .timeline-item.right {
-        left: 0;
-        text-align: left;
-    }
-    .timeline-item.left .timeline-dot, .timeline-item.right .timeline-dot {
-        left: 13px;
-    }
+.event-block {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    border-radius: 2px;
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+}
+
+.event-block:hover {
+    transform: scaleY(1.1);
+    filter: brightness(1.2);
 }

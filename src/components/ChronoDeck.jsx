@@ -1,112 +1,116 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import React from 'react';
 
-const ChronoDeck = ({ currentDate }) => {
-  const [events, setEvents] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+const EVENT_CONFIG = {
+    'Workout':    { color: '#38bdf8', duration: 60, icon: '🏋️' },
+    'Meal':       { color: '#facc15', duration: 30, icon: '🍽️' },
+    'Snack':      { color: '#fde047', duration: 15, icon: ' snacking' },
+    'Caffeine':   { color: '#f97316', duration: 10, icon: '☕' },
+    'Sleep':      { color: '#a78bfa', duration: 480, icon: '😴' }, // Default 8 hours, will be start of day
+    'Nap':        { color: '#c4b5fd', duration: 30, icon: '💤' },
+    'Meditation': { color: '#818cf8', duration: 20, icon: '🧘' }
+};
 
-  useEffect(() => {
-    const fetchEventsForDay = async () => {
-      setIsLoading(true);
-      setError(null);
-      setEvents([]);
+// Helper to get the last 7 days, ending with today
+const getLastSevenDays = () => {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        days.push(d);
+    }
+    return days;
+};
 
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-        if (!session) throw new Error("Not authenticated");
+function ChronoDeck({ isLoading, data: eventsData }) {
+    
+    const processEventsForView = (events) => {
+        const sevenDays = getLastSevenDays();
+        const eventsByDay = {};
 
-        const token = session.access_token;
-        
-        // This is the correct endpoint for fetching pre-parsed event data.
-        const response = await fetch(`/.netlify/functions/get-events`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+        // Initialize with empty arrays for each of the last 7 days
+        sevenDays.forEach(day => {
+            const dayString = day.toISOString().split('T')[0];
+            eventsByDay[dayString] = [];
         });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        // Group events into their respective days
+        if (events) {
+            events.forEach(event => {
+                const eventDate = new Date(event.event_time);
+                const dayString = eventDate.toISOString().split('T')[0];
+                if (dayString in eventsByDay) {
+                    eventsByDay[dayString].push(event);
+                }
+            });
         }
-
-        const allEvents = await response.json();
-        const formattedCurrentDate = currentDate.toISOString().split('T')[0];
-
-        // Filter all recent events to show only those matching the selected dashboard date.
-        const filteredEvents = allEvents.filter(event => {
-            const eventDate = new Date(event.event_time).toISOString().split('T')[0];
-            return eventDate === formattedCurrentDate;
-        });
         
-        // Sort the filtered events by time to ensure they appear chronologically on the timeline.
-        const sortedEvents = filteredEvents.sort((a, b) => {
-            return new Date(a.event_time) - new Date(b.event_time);
-        });
-        
-        // Format the event data into a structure that's easy for our new component to render.
-        const displayEvents = sortedEvents.map(event => {
-            const eventConfig = {
-                'Workout': '🏋️', 'Meal': '🍽️', 'Snack': ' snacking', 'Caffeine': '☕', 
-                'Sleep': '😴', 'Nap': '💤', 'Meditation': '🧘'
-            };
-            return {
-                ...event,
-                time: new Date(event.event_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute:'2-digit' }),
-                description: `${eventConfig[event.event_type] || '🗓️'} ${event.event_type}`
-            };
-        });
-        
-        setEvents(displayEvents);
+        // Map over the days to create the final structure for rendering
+        return sevenDays.map(day => {
+            const dayString = day.toISOString().split('T')[0];
+            const dayName = day.toLocaleDateString('en-US', { weekday: 'short' });
+            
+            const processedEvents = eventsByDay[dayString].map(event => {
+                const config = EVENT_CONFIG[event.event_type] || { color: '#6B7280', duration: 30, icon: '🗓️' };
+                const startTime = new Date(event.event_time);
+                
+                const startOfDay = new Date(startTime);
+                startOfDay.setHours(0, 0, 0, 0);
 
-      } catch (err) {
-        console.error("Error fetching ChronoDeck events:", err);
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
+                const minutesFromStartOfDay = (startTime - startOfDay) / 60000;
+                
+                const startPercent = (minutesFromStartOfDay / 1440) * 100; // 1440 minutes in a day
+                const widthPercent = (config.duration / 1440) * 100;
+
+                const timeString = startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+                return {
+                    id: event.event_time, // Use timestamp as a unique key
+                    type: event.event_type,
+                    timeString: timeString,
+                    icon: config.icon,
+                    style: {
+                        left: `${startPercent}%`,
+                        width: `${widthPercent}%`,
+                        backgroundColor: config.color
+                    }
+                };
+            });
+
+            return { dayName, dateString: dayString, events: processedEvents };
+        });
     };
 
-    fetchEventsForDay();
-  }, [currentDate]);
+    const weeklyData = processEventsForView(eventsData);
 
-  const renderContent = () => {
-    if (isLoading) {
-      return <div className="chrono-deck-message">Initializing ChronoDeck...</div>;
-    }
-    if (error) {
-      return <div className="chrono-deck-message error">Error: {error}</div>;
-    }
-    if (events.length === 0) {
-      return <div className="chrono-deck-message">No timed events logged for this date.</div>;
-    }
     return (
-      <div className="timeline-container">
-        <div className="timeline-line"></div>
-        {events.map((event, index) => (
-          <div key={index} className={`timeline-item ${index % 2 === 0 ? 'left' : 'right'}`}>
-            <div className="timeline-dot"></div>
-            <div className="timeline-content">
-              <span className="timeline-time">{event.time}</span>
-              <p>{event.description}</p>
+        <div className="card" id="chronodeck-card">
+            <div className="card-header">
+                <h2>🕰️ ChronoDeck</h2>
             </div>
-          </div>
-        ))}
-      </div>
+            {isLoading ? (
+                <div className="loader" style={{ margin: '3rem auto' }}></div>
+            ) : (
+                <div className="chrono-deck-weekly-view">
+                    {weeklyData.map(day => (
+                        <div className="day-row" key={day.dateString}>
+                            <div className="day-label">{day.dayName}</div>
+                            <div className="timeline-bar-container">
+                                <div className="timeline-bar-base"></div>
+                                {day.events.map(event => (
+                                    <div 
+                                        key={event.id}
+                                        className="event-block"
+                                        style={event.style}
+                                        title={`${event.type} at ${event.timeString}`}
+                                    ></div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
     );
-  };
-
-  return (
-    <div className="card" id="chronodeck-card">
-        <div className="card-header">
-            <h2>🕰️ ChronoDeck</h2>
-        </div>
-        <div className="chrono-deck-wrapper">
-            {renderContent()}
-        </div>
-    </div>
-  );
-};
+}
 
 export default ChronoDeck;
