@@ -3,6 +3,7 @@ const fetch = require('node-fetch');
 
 const createAdminClient = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+// Helper to format the raw context data into a clean string for the AI prompt
 function formatContextForAI(context) {
     let formattedString = "Here is a summary of the user's recent health data:\n\n";
 
@@ -45,30 +46,6 @@ function formatContextForAI(context) {
     return formattedString;
 }
 
-async function buildInitialContext(supabase, userId) {
-    console.log(`Building initial context for user: ${userId}`);
-    const { data: recent_logs } = await supabase.from('daily_logs').select('id, created_at, log, clarity_score, immune_score, physical_readiness_score').eq('user_id', userId).order('created_at', { ascending: false }).limit(30);
-    if (!recent_logs || recent_logs.length === 0) return null;
-
-    const logIds = recent_logs.map(l => l.id);
-    const { data: chrono_events } = await supabase.from('events').select('log_id, event_type, event_time').in('log_id', logIds);
-
-    const initialContext = {
-        user_id: userId,
-        recent_logs: recent_logs || [],
-        chrono_events: chrono_events || [],
-        recent_insights: [],
-        trend_warnings: [],
-        user_summary: "This is the user's first AI-generated summary. They have just started their journey.",
-        ai_persona_memo: "Initial context created. Focus on foundational patterns first."
-    };
-
-    const supabaseAdmin = createAdminClient();
-    await supabaseAdmin.from('lightcore_brain_context').upsert(initialContext, { onConflict: 'user_id' });
-    
-    return initialContext;
-}
-
 exports.handler = async (event, context) => {
     const token = event.headers.authorization?.split(' ')[1];
     if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Not authorized.' }) };
@@ -78,19 +55,17 @@ exports.handler = async (event, context) => {
     if (userError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
 
     try {
-        let { data: contextData, error: contextError } = await supabase
+        // This function now ONLY reads the context. It no longer tries to build it.
+        const { data: contextData, error: contextError } = await supabase
             .from('lightcore_brain_context')
             .select('*')
             .eq('user_id', user.id)
             .single();
 
-        if (contextError && contextError.code === 'PGRST116') {
-             contextData = await buildInitialContext(supabase, user.id);
-             if (!contextData) {
-                 return { statusCode: 200, body: JSON.stringify({ guidance: { current_state: "Log data for a few days to start generating personalized guidance." } }) };
-             }
-        } else if (contextError) {
-            throw new Error(`Context fetch error: ${contextError.message}`);
+        // If no context is found (e.g., before the first log is analyzed), return the default message.
+        if (contextError || !contextData) {
+            console.log("No context found for user, waiting for analyze-log to create it.");
+            return { statusCode: 200, body: JSON.stringify({ guidance: { current_state: "Log data for a few days to start generating personalized guidance." } }) };
         }
         
         const formattedContext = formatContextForAI(contextData);
@@ -143,12 +118,12 @@ ${formattedContext}
             const supabaseAdmin = createAdminClient();
             await supabaseAdmin
                 .from('lightcore_brain_context')
-                .upsert({
-                    user_id: user.id,
+                .update({
                     user_summary: memoryUpdate.new_user_summary,
                     ai_persona_memo: memoryUpdate.new_ai_persona_memo,
                     updated_at: new Date().toISOString()
-                }, { onConflict: 'user_id' });
+                })
+                .eq('user_id', user.id);
         }
 
         return {
