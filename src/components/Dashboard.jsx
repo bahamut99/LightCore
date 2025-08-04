@@ -12,9 +12,12 @@ import NudgeNotice from './NudgeNotice.jsx';
 function Dashboard() {
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [range, setRange] = useState(7); // State for the trends chart range
+  const [range, setRange] = useState(7);
+  // FIX: Add state to manage the currently viewed date for ChronoDeck
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   const fetchDashboardData = useCallback(async () => {
+    // We set isLoading true for the components that depend on this fetch
     setIsLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -30,7 +33,9 @@ function Dashboard() {
         throw new Error("Failed to fetch dashboard data");
       }
       const data = await response.json();
-      setDashboardData(data);
+      // We no longer need chronoDeckData here as the component fetches its own data
+      const { chronoDeckData, ...restOfData } = data;
+      setDashboardData(restOfData);
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
@@ -53,7 +58,8 @@ function Dashboard() {
         <div className="left-column">
           <WeeklySummary isLoading={isLoading} data={dashboardData?.weeklySummaryData} />
           <Trends isLoading={isLoading} data={dashboardData?.trendsData} range={range} setRange={setRange} />
-          <ChronoDeck isLoading={isLoading} data={dashboardData?.chronoDeckData} />
+          {/* FIX: Pass the currentDate prop. ChronoDeck now handles its own loading/data. */}
+          <ChronoDeck currentDate={currentDate} />
         </div>
         <div className="center-column">
           <NudgeNotice data={dashboardData?.nudgeData} onAcknowledge={fetchDashboardData} />
