@@ -13,6 +13,12 @@ function ensureField(field) {
     };
 }
 
+const getDatePart = (date) => {
+    if (!date) return null;
+    const d = new Date(date);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+};
+
 exports.handler = async (event, context) => {
     try {
         if (!event.headers.authorization) {
@@ -31,19 +37,8 @@ exports.handler = async (event, context) => {
 
         const { log, sleep_hours, sleep_quality } = JSON.parse(event.body);
 
-        const { data: recentLogs } = await supabase
-            .from('daily_logs')
-            .select('created_at, clarity_score, immune_score, physical_readiness_score')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(3);
-
-        const { data: activeGoal } = await supabase
-            .from('goals')
-            .select('goal_value')
-            .eq('user_id', user.id)
-            .eq('is_active', true)
-            .single();
+        const { data: recentLogs } = await supabase.from('daily_logs').select('created_at, clarity_score, immune_score, physical_readiness_score').eq('user_id', user.id).order('created_at', { ascending: false }).limit(3);
+        const { data: activeGoal } = await supabase.from('goals').select('goal_value').eq('user_id', user.id).eq('is_active', true).single();
 
         let historyContext = "No recent history available.";
         if (recentLogs && recentLogs.length > 0) {
@@ -62,9 +57,7 @@ exports.handler = async (event, context) => {
         
         const prompt = `
         You are a world-class AI health analyst. Your process is to first think step-by-step inside a <reasoning> XML block. After the reasoning block, you will provide your final analysis as a single, valid JSON object and nothing else.
-
         **MISSION:** Analyze today's data within the broader **USER CONTEXT** to provide nuanced, trend-aware scores and notes.
-
         **SCORING RUBRIC & INSTRUCTIONS:**
         - Clarity Score: Base this on reported focus, energy, and the absence or presence of 'brain fog'.
         - Immune Score: Heavily weigh inferred stress (from the log text) and reported sleep quality as significant negative factors.
@@ -81,10 +74,8 @@ exports.handler = async (event, context) => {
         - Score values are 1-10. Use this color map: 1-2: #ef4444, 3-4: #f97316, 5-6: #eab308, 7-8: #22c55e, 9-10: #3b82f6.
         - "notes" must be empathetic and should acknowledge the user's context.
         - "tags" must be a JSON array of 3-5 relevant, lowercase strings.
-
         ---
         **EXAMPLES TO LEARN FROM:**
-
         **Example 1:**
         * **Log:** "Slept a solid 8 hours and woke up feeling refreshed. Crushed my morning workout at the gym, then had a protein-packed smoothie. The deep work session on the Q3 report was incredibly focused; felt like I was in the zone for hours. Feeling optimistic."
         * **JSON Output:**
@@ -97,7 +88,6 @@ exports.handler = async (event, context) => {
                 "tags": ["good-sleep", "workout", "deep-work", "high-energy", "nutrition"]
             }
             \`\`\`
-
         **Example 2:**
         * **Log:** "Barely slept, maybe 4-5 hours because of a late-night coffee and work stress. Feeling completely drained and foggy today. Skipped lunch to meet a deadline, which probably didn't help. My body feels sluggish and I have zero motivation for the gym."
         * **JSON Output:**
@@ -111,15 +101,12 @@ exports.handler = async (event, context) => {
             }
             \`\`\`
         ---
-
         **USER CONTEXT FOR TODAY'S ANALYSIS:**
         ${historyContext}
         ${goalContext}
-        
         **TODAY'S DATA FOR ANALYSIS:**
         - User Log: "${log}"
         - Automated Health Data: ${healthDataString}
-
         Now, generate the <reasoning> block followed by the final JSON response for today's data.
         `;
 
@@ -143,14 +130,10 @@ exports.handler = async (event, context) => {
         try {
             const rawText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (!rawText) throw new Error("AI returned an empty or invalid response structure.");
-
             const jsonStart = rawText.indexOf('{');
-            if (jsonStart === -1) {
-                throw new Error("No JSON object found in the AI's response.");
-            }
+            if (jsonStart === -1) throw new Error("No JSON object found in the AI's response.");
             const jsonString = rawText.substring(jsonStart);
             analysis = JSON.parse(jsonString);
-
         } catch (parseError) {
             console.error("Failed to parse JSON from AI response:", parseError);
             throw new Error("Failed to parse AI response.");
@@ -173,9 +156,43 @@ exports.handler = async (event, context) => {
         const { data: newLogData, error: dbError } = await supabase.from('daily_logs').insert(logEntry).select().single();
         if (dbError) throw new Error(`Supabase insert error: ${dbError.message}`);
 
+        // --- CONTEXT & STREAK LOGIC REFACTORED FOR ROBUSTNESS ---
         const supabaseAdmin = createAdminClient();
-        const { data: recentLogsForContext } = await supabaseAdmin.from('daily_logs').select('id, created_at, log, clarity_score, immune_score, physical_readiness_score, sleep_hours, sleep_quality, tags').eq('user_id', user.id).order('created_at', { ascending: false }).limit(30);
-        await supabaseAdmin.from('lightcore_brain_context').upsert({ user_id: user.id, recent_logs: recentLogsForContext, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+        
+        // Check if a context already exists
+        const { data: existingContext } = await supabaseAdmin.from('lightcore_brain_context').select('user_id').eq('user_id', user.id).single();
+
+        if (!existingContext) {
+            // If it's the first log, create a complete initial context
+            const initialContext = {
+                user_id: user.id,
+                recent_logs: [newLogData],
+                user_summary: "This is the user's first AI-generated summary. They have just started their journey.",
+                ai_persona_memo: "Initial context created. Focus on foundational patterns first.",
+                updated_at: new Date().toISOString()
+            };
+            await supabaseAdmin.from('lightcore_brain_context').insert(initialContext);
+        } else {
+            // If context exists, just update the logs
+            const { data: recentLogsForContext } = await supabaseAdmin.from('daily_logs').select('id, created_at, log, clarity_score, immune_score, physical_readiness_score, sleep_hours, sleep_quality, tags').eq('user_id', user.id).order('created_at', { ascending: false }).limit(30);
+            await supabaseAdmin.from('lightcore_brain_context').update({ recent_logs: recentLogsForContext, updated_at: new Date().toISOString() }).eq('user_id', user.id);
+        }
+
+        // Streak logic remains the same, but is now more reliable
+        const { data: profile } = await supabaseAdmin.from('profiles').select('streak_count, last_log_date').eq('id', user.id).single();
+        if (profile) {
+            const today = getDatePart(new Date());
+            const lastLogDate = getDatePart(profile.last_log_date);
+            let newStreakCount = profile.streak_count || 0;
+            if (!lastLogDate) {
+                newStreakCount = 1;
+            } else {
+                const diffDays = Math.ceil((today - lastLogDate) / (1000 * 60 * 60 * 24));
+                if (diffDays === 1) newStreakCount++;
+                else if (diffDays > 2) newStreakCount = 1;
+            }
+            await supabaseAdmin.from('profiles').update({ streak_count: newStreakCount, last_log_date: new Date().toISOString().split('T')[0] }).eq('id', user.id);
+        }
 
         return {
             statusCode: 200,
