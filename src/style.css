@@ -714,7 +714,6 @@ td:nth-child(6) {
     overflow: hidden;
 }
 
-/* NEW animation for the blue outer glow */
 @keyframes pulse-glow-blue {
     0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
     50% { box-shadow: 0 0 8px 2px rgba(59, 130, 246, 0.5); }
@@ -727,10 +726,8 @@ td:nth-child(6) {
     height: 100%;
     background-color: #374151;
     border-radius: 6px;
-    /* The generic grey pulse has been removed from here */
 }
 
-/* NEW style to apply the blue pulse only to today's bar */
 .timeline-bar-base.is-today {
     animation: pulse-glow-blue 2.5s infinite ease-in-out;
 }
@@ -747,4 +744,31 @@ td:nth-child(6) {
 .event-block:hover {
     transform: scaleY(1.1);
     filter: brightness(1.2);
+}
+
+/* ========================================
+   ChronoDeck Hour Markers
+======================================== */
+
+.hour-marker-track {
+    display: flex;
+    align-items: center;
+    padding-top: 4px; /* Small space between bars and markers */
+    margin-top: 4px;
+}
+
+.hour-marker-spacer {
+    /* This must match the width + gap of the day-label */
+    width: 35px; 
+    margin-right: 0.75rem; 
+    flex-shrink: 0;
+}
+
+.hour-markers {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: #4B5563; /* Faint grey color */
 }

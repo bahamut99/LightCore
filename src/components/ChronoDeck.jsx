@@ -22,9 +22,8 @@ const getLastSevenDays = () => {
 
 function ChronoDeck({ isLoading, data: eventsData }) {
     
-    // Get today's date in YYYY-MM-DD format for comparison
-    const todayString = new Date().toISOString().split('T')[0];
-    
+    const today = new Date();
+
     const processEventsForView = (events) => {
         const sevenDays = getLastSevenDays();
         const eventsByDay = {};
@@ -48,6 +47,11 @@ function ChronoDeck({ isLoading, data: eventsData }) {
             const dayString = day.toISOString().split('T')[0];
             const dayName = day.toLocaleDateString('en-US', { weekday: 'short' });
             
+            // More robust check for the current day
+            const isToday = day.getFullYear() === today.getFullYear() &&
+                          day.getMonth() === today.getMonth() &&
+                          day.getDate() === today.getDate();
+
             const processedEvents = eventsByDay[dayString].map(event => {
                 const config = EVENT_CONFIG[event.event_type] || { color: '#6B7280', duration: 30, icon: '🗓️' };
                 const startTime = new Date(event.event_time);
@@ -75,7 +79,7 @@ function ChronoDeck({ isLoading, data: eventsData }) {
                 };
             });
 
-            return { dayName, dateString: dayString, events: processedEvents };
+            return { dayName, dateString: dayString, events: processedEvents, isToday };
         });
     };
 
@@ -89,24 +93,35 @@ function ChronoDeck({ isLoading, data: eventsData }) {
             {isLoading ? (
                 <div className="loader" style={{ margin: '3rem auto' }}></div>
             ) : (
-                <div className="chrono-deck-weekly-view">
-                    {weeklyData.map(day => (
-                        <div className="day-row" key={day.dateString}>
-                            <div className="day-label">{day.dayName}</div>
-                            <div className="timeline-bar-container">
-                                <div className={`timeline-bar-base ${day.dateString === todayString ? 'is-today' : ''}`}></div>
-                                {day.events.map(event => (
-                                    <div 
-                                        key={event.id}
-                                        className="event-block"
-                                        style={event.style}
-                                        title={`${event.type} at ${event.timeString}`}
-                                    ></div>
-                                ))}
+                <>
+                    <div className="chrono-deck-weekly-view">
+                        {weeklyData.map(day => (
+                            <div className="day-row" key={day.dateString}>
+                                <div className="day-label">{day.dayName}</div>
+                                <div className="timeline-bar-container">
+                                    <div className={`timeline-bar-base ${day.isToday ? 'is-today' : ''}`}></div>
+                                    {day.events.map(event => (
+                                        <div 
+                                            key={event.id}
+                                            className="event-block"
+                                            style={event.style}
+                                            title={`${event.type} at ${event.timeString}`}
+                                        ></div>
+                                    ))}
+                                </div>
                             </div>
+                        ))}
+                    </div>
+                    <div className="hour-marker-track">
+                        <div className="hour-marker-spacer"></div>
+                        <div className="hour-markers">
+                            <span>12A</span>
+                            <span>6A</span>
+                            <span>12P</span>
+                            <span>6P</span>
                         </div>
-                    ))}
-                </div>
+                    </div>
+                </>
             )}
         </div>
     );
