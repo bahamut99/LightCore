@@ -158,11 +158,10 @@ exports.handler = async (event, context) => {
 
         const supabaseAdmin = createAdminClient();
         
-        // Use .maybeSingle() to gracefully handle cases where no context exists yet
-        const { data: existingContext } = await supabaseAdmin.from('lightcore_brain_context').select('user_id').eq('user_id', user.id).maybeSingle();
+        const { data: existingContext, error: contextCheckError } = await supabaseAdmin.from('lightcore_brain_context').select('user_id').eq('user_id', user.id).maybeSingle();
+        if (contextCheckError) throw new Error(`Error checking for context: ${contextCheckError.message}`);
 
         if (!existingContext) {
-            // If it's the first log, create a complete initial context
             const initialContext = {
                 user_id: user.id,
                 recent_logs: [newLogData],
@@ -170,11 +169,12 @@ exports.handler = async (event, context) => {
                 ai_persona_memo: "Initial context created. Focus on foundational patterns first.",
                 updated_at: new Date().toISOString()
             };
-            await supabaseAdmin.from('lightcore_brain_context').insert(initialContext);
+            const { error: insertError } = await supabaseAdmin.from('lightcore_brain_context').insert(initialContext);
+            if (insertError) throw new Error(`Failed to create initial context: ${insertError.message}`);
         } else {
-            // If context exists, just update the logs
             const { data: recentLogsForContext } = await supabaseAdmin.from('daily_logs').select('id, created_at, log, clarity_score, immune_score, physical_readiness_score, sleep_hours, sleep_quality, tags').eq('user_id', user.id).order('created_at', { ascending: false }).limit(30);
-            await supabaseAdmin.from('lightcore_brain_context').update({ recent_logs: recentLogsForContext, updated_at: new Date().toISOString() }).eq('user_id', user.id);
+            const { error: updateError } = await supabaseAdmin.from('lightcore_brain_context').update({ recent_logs: recentLogsForContext, updated_at: new Date().toISOString() }).eq('user_id', user.id);
+            if (updateError) throw new Error(`Failed to update context: ${updateError.message}`);
         }
 
         const { data: profile } = await supabaseAdmin.from('profiles').select('streak_count, last_log_date').eq('id', user.id).single();
