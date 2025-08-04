@@ -156,11 +156,10 @@ exports.handler = async (event, context) => {
         const { data: newLogData, error: dbError } = await supabase.from('daily_logs').insert(logEntry).select().single();
         if (dbError) throw new Error(`Supabase insert error: ${dbError.message}`);
 
-        // --- CONTEXT & STREAK LOGIC REFACTORED FOR ROBUSTNESS ---
         const supabaseAdmin = createAdminClient();
         
-        // Check if a context already exists
-        const { data: existingContext } = await supabaseAdmin.from('lightcore_brain_context').select('user_id').eq('user_id', user.id).single();
+        // Use .maybeSingle() to gracefully handle cases where no context exists yet
+        const { data: existingContext } = await supabaseAdmin.from('lightcore_brain_context').select('user_id').eq('user_id', user.id).maybeSingle();
 
         if (!existingContext) {
             // If it's the first log, create a complete initial context
@@ -178,7 +177,6 @@ exports.handler = async (event, context) => {
             await supabaseAdmin.from('lightcore_brain_context').update({ recent_logs: recentLogsForContext, updated_at: new Date().toISOString() }).eq('user_id', user.id);
         }
 
-        // Streak logic remains the same, but is now more reliable
         const { data: profile } = await supabaseAdmin.from('profiles').select('streak_count, last_log_date').eq('id', user.id).single();
         if (profile) {
             const today = getDatePart(new Date());
