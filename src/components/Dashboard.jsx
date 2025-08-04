@@ -13,11 +13,10 @@ function Dashboard() {
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [range, setRange] = useState(7);
-  // FIX: Add state to manage the currently viewed date for ChronoDeck
+  // NOTE: This is not used by the new ChronoDeck, but we'll keep it for future date-switching features.
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const fetchDashboardData = useCallback(async () => {
-    // We set isLoading true for the components that depend on this fetch
     setIsLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -33,9 +32,8 @@ function Dashboard() {
         throw new Error("Failed to fetch dashboard data");
       }
       const data = await response.json();
-      // We no longer need chronoDeckData here as the component fetches its own data
-      const { chronoDeckData, ...restOfData } = data;
-      setDashboardData(restOfData);
+      // FIX: Store the ENTIRE data object from the API, including chronoDeckData.
+      setDashboardData(data);
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
@@ -58,8 +56,8 @@ function Dashboard() {
         <div className="left-column">
           <WeeklySummary isLoading={isLoading} data={dashboardData?.weeklySummaryData} />
           <Trends isLoading={isLoading} data={dashboardData?.trendsData} range={range} setRange={setRange} />
-          {/* FIX: Pass the currentDate prop. ChronoDeck now handles its own loading/data. */}
-          <ChronoDeck currentDate={currentDate} />
+          {/* FIX: Pass the isLoading prop and the chronoDeckData from our state. */}
+          <ChronoDeck isLoading={isLoading} data={dashboardData?.chronoDeckData} />
         </div>
         <div className="center-column">
           <NudgeNotice data={dashboardData?.nudgeData} onAcknowledge={fetchDashboardData} />

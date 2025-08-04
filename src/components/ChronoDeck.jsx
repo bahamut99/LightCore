@@ -5,12 +5,11 @@ const EVENT_CONFIG = {
     'Meal':       { color: '#facc15', duration: 30, icon: '🍽️' },
     'Snack':      { color: '#fde047', duration: 15, icon: ' snacking' },
     'Caffeine':   { color: '#f97316', duration: 10, icon: '☕' },
-    'Sleep':      { color: '#a78bfa', duration: 480, icon: '😴' }, // Default 8 hours, will be start of day
+    'Sleep':      { color: '#a78bfa', duration: 480, icon: '😴' },
     'Nap':        { color: '#c4b5fd', duration: 30, icon: '💤' },
     'Meditation': { color: '#818cf8', duration: 20, icon: '🧘' }
 };
 
-// Helper to get the last 7 days, ending with today
 const getLastSevenDays = () => {
     const days = [];
     for (let i = 6; i >= 0; i--) {
@@ -23,17 +22,18 @@ const getLastSevenDays = () => {
 
 function ChronoDeck({ isLoading, data: eventsData }) {
     
+    // Get today's date in YYYY-MM-DD format for comparison
+    const todayString = new Date().toISOString().split('T')[0];
+    
     const processEventsForView = (events) => {
         const sevenDays = getLastSevenDays();
         const eventsByDay = {};
 
-        // Initialize with empty arrays for each of the last 7 days
         sevenDays.forEach(day => {
             const dayString = day.toISOString().split('T')[0];
             eventsByDay[dayString] = [];
         });
 
-        // Group events into their respective days
         if (events) {
             events.forEach(event => {
                 const eventDate = new Date(event.event_time);
@@ -44,7 +44,6 @@ function ChronoDeck({ isLoading, data: eventsData }) {
             });
         }
         
-        // Map over the days to create the final structure for rendering
         return sevenDays.map(day => {
             const dayString = day.toISOString().split('T')[0];
             const dayName = day.toLocaleDateString('en-US', { weekday: 'short' });
@@ -58,13 +57,13 @@ function ChronoDeck({ isLoading, data: eventsData }) {
 
                 const minutesFromStartOfDay = (startTime - startOfDay) / 60000;
                 
-                const startPercent = (minutesFromStartOfDay / 1440) * 100; // 1440 minutes in a day
+                const startPercent = (minutesFromStartOfDay / 1440) * 100;
                 const widthPercent = (config.duration / 1440) * 100;
 
                 const timeString = startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
                 return {
-                    id: event.event_time, // Use timestamp as a unique key
+                    id: event.event_time,
                     type: event.event_type,
                     timeString: timeString,
                     icon: config.icon,
@@ -95,7 +94,7 @@ function ChronoDeck({ isLoading, data: eventsData }) {
                         <div className="day-row" key={day.dateString}>
                             <div className="day-label">{day.dayName}</div>
                             <div className="timeline-bar-container">
-                                <div className="timeline-bar-base"></div>
+                                <div className={`timeline-bar-base ${day.dateString === todayString ? 'is-today' : ''}`}></div>
                                 {day.events.map(event => (
                                     <div 
                                         key={event.id}
