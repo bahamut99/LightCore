@@ -1,13 +1,14 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
+// This admin client is used for updating the AI's memory
 const createAdminClient = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 // --- HELPER FUNCTIONS FOR EACH DATA TYPE ---
 
 async function fetchWeeklySummary(supabase, userId) {
     try {
-        const { data: goalData } = await supabase.from('goals').select('goal_value').eq('user_id', userId).eq('is_active', true).single();
+        const { data: goalData } = await supabase.from('goals').select('goal_value').eq('user_id', userId).eq('is_active', true).maybeSingle();
         if (!goalData) return { goal: null, progress: 0 };
         
         const startOfWeek = new Date();
@@ -20,7 +21,7 @@ async function fetchWeeklySummary(supabase, userId) {
         const distinctDays = new Set((logDays || []).map(log => new Date(log.created_at).toDateString()));
         return { goal: goalData, progress: distinctDays.size };
     } catch (error) {
-        if (error.code !== 'PGRST116') console.error('Error fetching weekly summary:', error.message);
+        console.error('Error fetching weekly summary:', error.message);
         return { goal: null, progress: 0 };
     }
 }
@@ -89,15 +90,45 @@ async function fetchRecentEntries(supabase, userId) {
 
 async function fetchLightcoreGuide(supabase, supabaseAdmin, userId) {
     try {
-        const { data: contextData } = await supabase.from('lightcore_brain_context').select('*').eq('user_id', userId).single();
-        if (!contextData || !contextData.recent_logs || contextData.recent_logs.length < 3) {
+        const { data: contextData, error: contextError } = await supabase.from('lightcore_brain_context').select('*').eq('user_id', userId).single();
+        if (contextError || !contextData || !contextData.recent_logs || contextData.recent_logs.length < 3) {
             return { current_state: "Log data for a few days to start generating personalized guidance." };
         }
-        const formattedContext = `...`; // Re-using prompt logic from analyze-log
-        const prompt = `...`; // Re-using prompt logic from generate-guidance
         
-        // This is a simplified version of the guidance generation for brevity
-        return { current_state: `Analysis based on your ${contextData.recent_logs.length} recent logs.` };
+        let formattedContext = `User's Most Recent Logs:\n` + contextData.recent_logs.slice(0, 7).map(log => {
+             const date = new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+             return `[${date}] Scores: Clarity=${log.clarity_score}, Immune=${log.immune_score}, Physical=${log.physical_readiness_score} | Log: "${log.log.substring(0, 75)}..."`;
+        }).join('\n');
+
+        const prompt = `You are Lightcore – a unified, personalized health AI guide. Review the user's recent data context. Your goal is to synthesize this information into a cohesive guidance message. Your entire response MUST be a single, valid JSON object with two top-level keys: "guidance_for_user" and "memory_update". 1. "guidance_for_user": An object with keys "current_state" (string), "positives" (array of strings), "concerns" (array of strings), "suggestions" (array of strings). 2. "memory_update": An object with keys "new_user_summary" (string) and "new_ai_persona_memo" (string). Analyze the following DATA CONTEXT:\n${formattedContext}`;
+
+        const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+        const aiResponse = await fetch(geminiApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { responseMimeType: "application/json" }
+            })
+        });
+        if (!aiResponse.ok) throw new Error(`Gemini API error`);
+
+        const aiData = await aiResponse.json();
+        const guidanceText = aiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (!guidanceText) throw new Error("No guidance was returned by the AI.");
+        
+        const fullResponse = JSON.parse(guidanceText);
+        
+        // Update the AI's memory with the new summary
+        if(fullResponse.memory_update) {
+            await supabaseAdmin.from('lightcore_brain_context').update({
+                user_summary: fullResponse.memory_update.new_user_summary,
+                ai_persona_memo: fullResponse.memory_update.new_ai_persona_memo,
+                updated_at: new Date().toISOString()
+            }).eq('user_id', userId);
+        }
+
+        return fullResponse.guidance_for_user;
 
     } catch (error) {
         console.error('Error fetching Lightcore guide:', error.message);
@@ -117,9 +148,6 @@ async function fetchChronoDeck(supabase, userId) {
     }
 }
 
-
-// --- Main Handler ---
-
 exports.handler = async (event, context) => {
     const token = event.headers.authorization?.split(' ')[1];
     if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Not authorized.' }) };
@@ -135,7 +163,6 @@ exports.handler = async (event, context) => {
     const range = parseInt(event.queryStringParameters.range) || 7;
 
     try {
-        // Run all data-fetching operations in parallel
         const [
             weeklySummaryData,
             nudgeData,
@@ -148,7 +175,7 @@ exports.handler = async (event, context) => {
             fetchNudge(supabase, user.id),
             fetchTrendsData(supabase, user.id, range),
             fetchRecentEntries(supabase, user.id),
-            fetchLightcoreGuide(supabase, supabaseAdmin, user.id), // Passing admin client
+            fetchLightcoreGuide(supabase, supabaseAdmin, user.id),
             fetchChronoDeck(supabase, user.id)
         ]);
         
