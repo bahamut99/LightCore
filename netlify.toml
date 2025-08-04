@@ -4,3 +4,5 @@
 
 [functions]
   directory = "functions"
+  # Give functions up to 25 seconds to run to prevent timeouts
+  timeout = 25
