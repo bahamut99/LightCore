@@ -1,44 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '../supabaseClient.js';
+import React, { useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import 'chartjs-adapter-date-fns';
 
-function Trends() {
-  const [range, setRange] = useState(7);
-  const [chartData, setChartData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+function Trends({ isLoading, data, range, setRange }) {
   const chartInstances = useRef({});
   
-  const fetchChartData = useCallback(async () => {
-    setIsLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      setIsLoading(false);
-      return;
-    }
-    
-    const aggregate = range > 1 ? 'daily' : 'none';
-    
-    try {
-      const response = await fetch(`/.netlify/functions/get-chart-data?range=${range}&aggregate=${aggregate}`, {
-          headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      const data = await response.json();
-      setChartData(data);
-    } catch (error) {
-      console.error("Error fetching chart data:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [range]);
-
-  useEffect(() => {
-    fetchChartData();
-    const handleNewLog = () => fetchChartData();
-    window.addEventListener('newLogSubmitted', handleNewLog);
-    return () => window.removeEventListener('newLogSubmitted', handleNewLog);
-  }, [fetchChartData]);
-
   useEffect(() => {
     const canvases = {
       clarity: document.getElementById('clarityChart'),
@@ -48,7 +14,7 @@ function Trends() {
 
     Object.values(chartInstances.current).forEach(c => c?.destroy());
 
-    if (chartData && canvases.clarity && canvases.immune && canvases.physical) {
+    if (data && canvases.clarity && canvases.immune && canvases.physical) {
       const timeUnit = range === 1 ? 'hour' : 'day';
       const commonOptions = {
           scales: { 
@@ -57,12 +23,12 @@ function Trends() {
           },
           maintainAspectRatio: false,
       };
-      chartInstances.current.clarity = renderChart(canvases.clarity, 'Mental Clarity', chartData.labels, chartData.clarityData, '#38bdf8', commonOptions);
-      chartInstances.current.immune = renderChart(canvases.immune, 'Immune Risk', chartData.labels, chartData.immuneData, '#facc15', commonOptions);
-      chartInstances.current.physical = renderChart(canvases.physical, 'Physical Output', chartData.labels, chartData.physicalData, '#4ade80', commonOptions);
+      chartInstances.current.clarity = renderChart(canvases.clarity, 'Mental Clarity', data.labels, data.clarityData, '#38bdf8', commonOptions);
+      chartInstances.current.immune = renderChart(canvases.immune, 'Immune Risk', data.labels, data.immuneData, '#facc15', commonOptions);
+      chartInstances.current.physical = renderChart(canvases.physical, 'Physical Output', data.labels, data.physicalData, '#4ade80', commonOptions);
     }
     return () => Object.values(chartInstances.current).forEach(c => c?.destroy());
-  }, [chartData, range]);
+  }, [data, range]);
 
   function renderChart(canvas, label, labels, data, hexColor, options) {
     if (!canvas) return null;

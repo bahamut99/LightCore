@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../supabaseClient.js';
+import React, { useState } from 'react';
 
 const LogDetailModal = ({ log, onClose }) => {
     if (!log) return null;
@@ -28,29 +27,8 @@ const LogDetailModal = ({ log, onClose }) => {
     );
 };
 
-function RecentEntries() {
-  const [logs, setLogs] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+function RecentEntries({ isLoading, data: logs }) {
   const [selectedLog, setSelectedLog] = useState(null);
-
-  const fetchRecentLogs = useCallback(async () => {
-    setIsLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setIsLoading(false); return; }
-    try {
-      const response = await fetch('/.netlify/functions/recent-logs', { headers: { 'Authorization': `Bearer ${session.access_token}` } });
-      if (!response.ok) throw new Error("Failed to load recent logs");
-      const recentLogs = await response.json();
-      setLogs(recentLogs || []);
-    } catch (error) { console.error("Failed to load logs:", error); } 
-    finally { setIsLoading(false); }
-  }, []);
-
-  useEffect(() => {
-    fetchRecentLogs();
-    window.addEventListener('newLogSubmitted', fetchRecentLogs);
-    return () => window.removeEventListener('newLogSubmitted', fetchRecentLogs);
-  }, [fetchRecentLogs]);
   
   const TdScore = ({ children, color }) => {
     const style = color ? { color, backgroundColor: `rgba(${parseInt(color.slice(1, 3), 16)}, ${parseInt(color.slice(3, 5), 16)}, ${parseInt(color.slice(5, 7), 16)}, 0.1)` } : {};
@@ -71,7 +49,7 @@ function RecentEntries() {
             <tbody>
               {isLoading ? (
                 <tr><td colSpan="6" className="subtle-text">Loading entries...</td></tr>
-              ) : logs.length > 0 ? (
+              ) : (logs && logs.length > 0) ? (
                 logs.map(log => (
                   <tr key={log.id} onClick={() => setSelectedLog(log)}>
                     <td>{new Date(log.created_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}</td>

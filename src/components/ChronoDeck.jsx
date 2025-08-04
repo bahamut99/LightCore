@@ -1,39 +1,18 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '../supabaseClient.js';
+import React, { useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
 
-function ChronoDeck() {
-  const [eventData, setEventData] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+function ChronoDeck({ isLoading, data }) {
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
 
-  const fetchEvents = useCallback(async () => {
-    setIsLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setIsLoading(false); return; }
-    try {
-      const response = await fetch('/.netlify/functions/get-events', { headers: { 'Authorization': `Bearer ${session.access_token}` } });
-      const data = await response.json();
-      setEventData(data || []);
-    } catch (error) { console.error("Error fetching ChronoDeck events:", error); } 
-    finally { setIsLoading(false); }
-  }, []);
-
-  useEffect(() => {
-    fetchEvents();
-    window.addEventListener('newLogSubmitted', fetchEvents);
-    return () => window.removeEventListener('newLogSubmitted', fetchEvents);
-  }, [fetchEvents]);
-
   useEffect(() => {
     if (chartInstance.current) chartInstance.current.destroy();
-    if (eventData && chartRef.current) {
+    if (data && chartRef.current) {
         const ctx = chartRef.current.getContext('2d');
-        chartInstance.current = renderChronoDeckChart(ctx, eventData);
+        chartInstance.current = renderChronoDeckChart(ctx, data);
     }
     return () => chartInstance.current?.destroy();
-  }, [eventData]);
+  }, [data]);
 
   function renderChronoDeckChart(ctx, data) {
     const eventConfig = { 'Workout':  { color: 'rgba(56, 189, 248, 0.85)'}, 'Meal': { color: 'rgba(250, 204, 21, 0.85)'}, 'Caffeine': { color: 'rgba(249, 115, 22, 0.85)'}, 'Sleep': { color: 'rgba(167, 139, 250, 0.85)'}, 'Nap': { color: 'rgba(196, 181, 253, 0.85)'}};

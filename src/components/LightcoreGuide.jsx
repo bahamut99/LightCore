@@ -1,37 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../supabaseClient.js';
+import React from 'react';
 
-function LightcoreGuide() {
-  const [guidance, setGuidance] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetchGuidance = useCallback(async () => {
-    setIsLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setIsLoading(false); return; }
-
-    try {
-        const response = await fetch('/.netlify/functions/generate-guidance', {
-            headers: { 'Authorization': `Bearer ${session.access_token}` }
-        });
-        if (!response.ok) throw new Error("Failed to fetch guidance");
-        
-        const data = await response.json();
-        setGuidance(data.guidance);
-    } catch (error) {
-        console.error("Failed to load guidance:", error.message);
-        setGuidance({ error: "Could not load guidance at this time." });
-    } finally {
-        setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchGuidance();
-    window.addEventListener('newLogSubmitted', fetchGuidance);
-    return () => window.removeEventListener('newLogSubmitted', fetchGuidance);
-  }, [fetchGuidance]);
-
+function LightcoreGuide({ isLoading, data: guidance }) {
 
   const renderContent = () => {
     if (isLoading) {

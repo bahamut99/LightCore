@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient.js';
 
-// Self-contained Modal Component
 const NudgeModal = ({ nudge, onClose }) => {
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -21,41 +20,22 @@ const NudgeModal = ({ nudge, onClose }) => {
     );
 };
 
-function NudgeNotice() {
-    const [nudge, setNudge] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isAcknowledged, setIsAcknowledged] = useState(false);
+function NudgeNotice({ data: nudge, onAcknowledge }) {
+    const [isVisible, setIsVisible] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [showFeedback, setShowFeedback] = useState(false);
 
-    const fetchNudge = useCallback(async () => {
-        setIsLoading(true);
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-            setIsLoading(false);
-            return;
-        }
-        try {
-            const response = await fetch('/.netlify/functions/get-nudges', {
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
-            });
-            if (response.ok) {
-                const data = await response.json();
-                setNudge(data);
-            }
-        } catch (error) {
-            console.error("Error fetching nudge:", error);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
     useEffect(() => {
-        fetchNudge();
-    }, [fetchNudge]);
+        if (nudge) {
+            setIsVisible(true);
+        } else {
+            setIsVisible(false);
+        }
+    }, [nudge]);
     
     const handleAcknowledge = async () => {
         if (!nudge) return;
+        setIsVisible(false); // Hide immediately for better UX
 
         const { data: { session } } = await supabase.auth.getSession();
         try {
@@ -67,13 +47,10 @@ function NudgeNotice() {
                 },
                 body: JSON.stringify({ nudgeId: nudge.id })
             });
+            onAcknowledge(); // Trigger a data refresh in the parent
         } catch (error) {
             console.error("Failed to acknowledge nudge:", error);
-        } finally {
-            // Hide the component from the UI immediately
-            setIsAcknowledged(true);
-            setIsModalOpen(false);
-            setShowFeedback(false);
+            setIsVisible(true); // If API call fails, show it again
         }
     };
 
@@ -81,7 +58,7 @@ function NudgeNotice() {
         setShowFeedback(true);
     };
 
-    if (isLoading || !nudge || isAcknowledged) {
+    if (!isVisible) {
         return null;
     }
 
@@ -108,7 +85,7 @@ function NudgeNotice() {
                 )}
             </div>
 
-            {isModalOpen && <NudgeModal nudge={nudge} onClose={handleAcknowledge} />}
+            {isModalOpen && <NudgeModal nudge={nudge} onClose={() => setIsModalOpen(false)} />}
         </>
     );
 }
