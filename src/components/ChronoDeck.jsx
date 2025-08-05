@@ -1,19 +1,20 @@
 import React from 'react';
 
 const EVENT_CONFIG = {
-    'Workout':    { color: '#38bdf8', duration: 60, icon: '🏋️' },
-    'Meal':       { color: '#facc15', duration: 30, icon: '🍽️' },
-    'Snack':      { color: '#fde047', duration: 15, icon: ' snacking' },
-    'Caffeine':   { color: '#f97316', duration: 10, icon: '☕' },
-    'Sleep':      { color: '#a78bfa', duration: 480, icon: '😴' },
-    'Nap':        { color: '#c4b5fd', duration: 30, icon: '💤' },
-    'Meditation': { color: '#818cf8', duration: 20, icon: '🧘' }
+    'Workout':    { color: '#38bdf8', duration: 60 },
+    'Meal':       { color: '#facc15', duration: 30 },
+    'Snack':      { color: '#fde047', duration: 15 },
+    'Caffeine':   { color: '#f97316', duration: 10 },
+    'Sleep':      { color: '#a78bfa', duration: 480 },
+    'Nap':        { color: '#c4b5fd', duration: 30 },
+    'Meditation': { color: '#818cf8', duration: 20 }
 };
 
 const getLastSevenDays = () => {
     const days = [];
     for (let i = 6; i >= 0; i--) {
         const d = new Date();
+        d.setHours(0, 0, 0, 0); // Start at the beginning of the day
         d.setDate(d.getDate() - i);
         days.push(d);
     }
@@ -28,11 +29,17 @@ const hourMarkers = [
     { label: '12A', position: 100 }
 ];
 
+// Helper to get a consistent, local date key (e.g., "2025-7-4")
+const getLocalDateKey = (date) => {
+    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+};
+
+// Rewritten function to be more robust
 function processEventsIntoTracks(dailyEvents) {
     const topTrack = [];
     const bottomTrack = [];
 
-    const sortedEvents = dailyEvents
+    const eventsWithTimes = dailyEvents
         .map(event => {
             const config = EVENT_CONFIG[event.event_type] || { duration: 30 };
             const startTime = new Date(event.event_time).getTime();
@@ -41,14 +48,22 @@ function processEventsIntoTracks(dailyEvents) {
         })
         .sort((a, b) => a.startTime - b.startTime);
 
-    for (const event of sortedEvents) {
+    for (const event of eventsWithTimes) {
         const lastInTop = topTrack[topTrack.length - 1];
         if (!lastInTop || event.startTime >= lastInTop.endTime) {
             topTrack.push(event);
-        } else {
-            // This is the crucial logic: only use the bottom track if there's a conflict
-            bottomTrack.push(event);
+            continue;
         }
+        
+        const lastInBottom = bottomTrack[bottomTrack.length - 1];
+        if (!lastInBottom || event.startTime >= lastInBottom.endTime) {
+            bottomTrack.push(event);
+            continue;
+        }
+
+        // For a 3+ overlap, this gracefully places the third event on top of the first,
+        // which is better than breaking.
+        topTrack.push(event);
     }
     return { topTrack, bottomTrack };
 }
@@ -61,30 +76,29 @@ function ChronoDeck({ isLoading, data: eventsData }) {
         const sevenDays = getLastSevenDays();
         const eventsByDay = {};
 
+        // Use a local date key to initialize the map
         sevenDays.forEach(day => {
-            const dayString = day.toISOString().split('T')[0];
-            eventsByDay[dayString] = [];
+            eventsByDay[getLocalDateKey(day)] = [];
         });
 
         if (events) {
             events.forEach(event => {
+                // All date operations are now done in the user's local timezone
                 const eventDate = new Date(event.event_time);
-                const dayString = eventDate.toISOString().split('T')[0];
-                if (dayString in eventsByDay) {
-                    eventsByDay[dayString].push(event);
+                const eventKey = getLocalDateKey(eventDate);
+                if (eventKey in eventsByDay) {
+                    eventsByDay[eventKey].push(event);
                 }
             });
         }
         
         return sevenDays.map(day => {
-            const dayString = day.toISOString().split('T')[0];
+            const dayKey = getLocalDateKey(day);
             const dayName = day.toLocaleDateString('en-US', { weekday: 'short' });
             
-            const isToday = day.getFullYear() === today.getFullYear() &&
-                          day.getMonth() === today.getMonth() &&
-                          day.getDate() === today.getDate();
+            const isToday = getLocalDateKey(day) === getLocalDateKey(today);
 
-            const { topTrack, bottomTrack } = processEventsIntoTracks(eventsByDay[dayString]);
+            const { topTrack, bottomTrack } = processEventsIntoTracks(eventsByDay[dayKey]);
             const hasOverlap = bottomTrack.length > 0;
 
             const createBlock = (event) => {
@@ -107,7 +121,7 @@ function ChronoDeck({ isLoading, data: eventsData }) {
 
             return { 
                 dayName, 
-                dateString: dayString, 
+                dateString: dayKey,
                 isToday,
                 hasOverlap,
                 topTrackEvents: topTrack.map(createBlock),
