@@ -1,22 +1,44 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
-// This component determines the complexity of the matrix based on log count.
 const LightcoreMatrix = ({ logCount }) => {
-  let matrixClass = 'matrix-level-0'; // Default state (0 logs)
+  const matrixRef = useRef(null);
+
+  useEffect(() => {
+    const handleMouseMove = (event) => {
+      if (matrixRef.current) {
+        const { clientX, clientY } = event;
+        const { innerWidth, innerHeight } = window;
+        // Normalize coordinates from -0.5 to 0.5
+        const mouseX = (clientX / innerWidth) - 0.5;
+        const mouseY = (clientY / innerHeight) - 0.5;
+        
+        matrixRef.current.style.setProperty('--mouse-x', mouseX);
+        matrixRef.current.style.setProperty('--mouse-y', mouseY);
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
+
+  let matrixClass = 'matrix-level-0';
 
   if (logCount >= 30) {
-    matrixClass = 'matrix-level-4'; // Deep Persona Layer
+    matrixClass = 'matrix-level-4';
   } else if (logCount >= 14) {
-    matrixClass = 'matrix-level-3'; // Temporal Drift Map
+    matrixClass = 'matrix-level-3';
   } else if (logCount >= 7) {
-    matrixClass = 'matrix-level-2'; // Pattern Engine
+    matrixClass = 'matrix-level-2';
   } else if (logCount >= 1) {
-    matrixClass = 'matrix-level-1'; // First Signal
+    matrixClass = 'matrix-level-1';
   }
 
   return (
-    <div className={`lightcore-matrix-background ${matrixClass}`}>
-      {/* The CSS will handle rendering the nodes and lines based on the class */}
+    <div ref={matrixRef} className={`lightcore-matrix-background ${matrixClass}`}>
+      {/* The CSS now handles all the new organic visuals */}
     </div>
   );
 };
