@@ -6,9 +6,6 @@ function WeeklySummary({ isLoading, data }) {
   const renderContent = () => {
     if (isLoading) return <div className="loader" style={{margin: '1rem auto'}}></div>;
     
-    // Weekly Review logic would go here if we were to integrate it
-    // For now, focusing on goal progress
-    
     if (data && data.goal) {
         let dots = [];
         for (let i = 0; i < data.goal.goal_value; i++) {
@@ -34,6 +31,10 @@ function WeeklySummary({ isLoading, data }) {
   return (
     <div className="card" id="weekly-summary-card" ref={cardRef}>
       {renderContent()}
+      <hr />
+      <div className="manage-goal-link-container">
+          <a href="goals.html" className="button-set-goal">Set Goal</a>
+      </div>
     </div>
   );
 }

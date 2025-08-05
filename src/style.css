@@ -137,13 +137,14 @@ h2 {
 .card hr {
     border: none;
     border-top: 1px solid #374151;
-    margin: 1.25rem 0 0.25rem 0;
+    margin: 1.25rem 0;
 }
 
 .history-link-container,
 .manage-goal-link-container {
     padding-top: 0.75rem;
     text-align: center;
+    margin-top: -1.25rem; /* Pull up to reduce space created by hr */
 }
 
 
@@ -748,7 +749,7 @@ td:nth-child(6) {
 }
 
 /* ========================================
-   ChronoDeck Overlap Styles (FIXED)
+   ChronoDeck Overlap Styles
 ======================================== */
 
 @keyframes pulse-block {
@@ -768,7 +769,7 @@ td:nth-child(6) {
 
 .event-block.track-top {
     top: 0;
-    height: 100%; /* Default to full height */
+    height: 100%;
 }
 
 .event-block.track-bottom {
@@ -776,10 +777,9 @@ td:nth-child(6) {
     height: 50%;
 }
 
-/* This is the key fix: only shrink the top track when the container has an overlap */
 .has-overlap .event-block.track-top {
     height: 50%;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.3); /* Divider line for clarity */
+    border-bottom: 1px solid rgba(0, 0, 0, 0.3);
 }
 
 
@@ -820,4 +820,24 @@ td:nth-child(6) {
 
 .hour-markers span:last-child {
     transform: translateX(-100%);
+}
+
+/* === NEW STYLE FOR GOAL BUTTON === */
+.button-set-goal {
+    display: inline-block;
+    background-color: transparent;
+    color: #9CA3AF;
+    border: 1px solid #4B5563;
+    padding: 4px 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.button-set-goal:hover {
+    background-color: #374151;
+    color: #F9FAFB;
+    border-color: #60A5FA;
 }
