@@ -14,7 +14,7 @@ const getLastSevenDays = () => {
     const days = [];
     for (let i = 6; i >= 0; i--) {
         const d = new Date();
-        d.setHours(0, 0, 0, 0); // Start at the beginning of the day
+        d.setHours(0, 0, 0, 0);
         d.setDate(d.getDate() - i);
         days.push(d);
     }
@@ -29,44 +29,44 @@ const hourMarkers = [
     { label: '12A', position: 100 }
 ];
 
-// Helper to get a consistent, local date key (e.g., "2025-7-4")
 const getLocalDateKey = (date) => {
     return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 };
 
-// Rewritten function to be more robust
-function processEventsIntoTracks(dailyEvents) {
-    const topTrack = [];
-    const bottomTrack = [];
+// A completely new, more intelligent layout algorithm
+function layoutEventsForDay(dailyEvents) {
+    if (!dailyEvents || dailyEvents.length === 0) {
+        return [];
+    }
 
     const eventsWithTimes = dailyEvents
         .map(event => {
             const config = EVENT_CONFIG[event.event_type] || { duration: 30 };
             const startTime = new Date(event.event_time).getTime();
             const endTime = startTime + config.duration * 60000;
-            return { ...event, startTime, endTime };
+            return { ...event, startTime, endTime, track: 0, hasOverlap: false };
         })
         .sort((a, b) => a.startTime - b.startTime);
 
-    for (const event of eventsWithTimes) {
-        const lastInTop = topTrack[topTrack.length - 1];
-        if (!lastInTop || event.startTime >= lastInTop.endTime) {
-            topTrack.push(event);
-            continue;
-        }
-        
-        const lastInBottom = bottomTrack[bottomTrack.length - 1];
-        if (!lastInBottom || event.startTime >= lastInBottom.endTime) {
-            bottomTrack.push(event);
-            continue;
-        }
+    for (let i = 0; i < eventsWithTimes.length; i++) {
+        for (let j = i + 1; j < eventsWithTimes.length; j++) {
+            const eventA = eventsWithTimes[i];
+            const eventB = eventsWithTimes[j];
 
-        // For a 3+ overlap, this gracefully places the third event on top of the first,
-        // which is better than breaking.
-        topTrack.push(event);
+            // Check for overlap
+            if (eventA.endTime > eventB.startTime) {
+                eventA.hasOverlap = true;
+                eventB.hasOverlap = true;
+                if (eventA.track === eventB.track) {
+                    eventB.track = eventA.track + 1; // Push to the next track
+                }
+            }
+        }
     }
-    return { topTrack, bottomTrack };
+
+    return eventsWithTimes;
 }
+
 
 function ChronoDeck({ isLoading, data: eventsData }) {
     
@@ -76,14 +76,12 @@ function ChronoDeck({ isLoading, data: eventsData }) {
         const sevenDays = getLastSevenDays();
         const eventsByDay = {};
 
-        // Use a local date key to initialize the map
         sevenDays.forEach(day => {
             eventsByDay[getLocalDateKey(day)] = [];
         });
 
         if (events) {
             events.forEach(event => {
-                // All date operations are now done in the user's local timezone
                 const eventDate = new Date(event.event_time);
                 const eventKey = getLocalDateKey(eventDate);
                 if (eventKey in eventsByDay) {
@@ -98,10 +96,10 @@ function ChronoDeck({ isLoading, data: eventsData }) {
             
             const isToday = getLocalDateKey(day) === getLocalDateKey(today);
 
-            const { topTrack, bottomTrack } = processEventsIntoTracks(eventsByDay[dayKey]);
-            const hasOverlap = bottomTrack.length > 0;
+            const laidOutEvents = layoutEventsForDay(eventsByDay[dayKey]);
+            const dayHasOverlap = laidOutEvents.some(e => e.hasOverlap);
 
-            const createBlock = (event) => {
+            const processedBlocks = laidOutEvents.map(event => {
                 const config = EVENT_CONFIG[event.event_type] || { duration: 30 };
                 const startTime = new Date(event.event_time);
                 const startOfDay = new Date(startTime);
@@ -111,21 +109,26 @@ function ChronoDeck({ isLoading, data: eventsData }) {
                 const widthPercent = (config.duration / 1440) * 100;
                 const timeString = startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
+                let trackClass = 'track-full';
+                if (event.hasOverlap) {
+                    trackClass = event.track === 0 ? 'track-top' : 'track-bottom';
+                }
+
                 return {
                     id: event.event_time + event.event_type,
                     type: event.event_type,
                     timeString: timeString,
+                    className: `event-block ${trackClass}`,
                     style: { left: `${startPercent}%`, width: `${widthPercent}%`, backgroundColor: config.color }
                 };
-            };
+            });
 
             return { 
                 dayName, 
                 dateString: dayKey,
                 isToday,
-                hasOverlap,
-                topTrackEvents: topTrack.map(createBlock),
-                bottomTrackEvents: bottomTrack.map(createBlock)
+                hasOverlap: dayHasOverlap,
+                blocks: processedBlocks
             };
         });
     };
@@ -147,20 +150,12 @@ function ChronoDeck({ isLoading, data: eventsData }) {
                                 <div className="day-label">{day.dayName}</div>
                                 <div className={`timeline-bar-container ${day.hasOverlap ? 'has-overlap' : ''}`}>
                                     <div className={`timeline-bar-base ${day.isToday ? 'is-today' : ''}`}></div>
-                                    {day.topTrackEvents.map(event => (
+                                    {day.blocks.map(block => (
                                         <div 
-                                            key={event.id}
-                                            className={`event-block ${day.hasOverlap ? 'track-top' : 'track-full'}`}
-                                            style={event.style}
-                                            title={`${event.type} at ${event.timeString}`}
-                                        ></div>
-                                    ))}
-                                    {day.bottomTrackEvents.map(event => (
-                                        <div 
-                                            key={event.id}
-                                            className="event-block track-bottom"
-                                            style={event.style}
-                                            title={`${event.type} at ${event.timeString}`}
+                                            key={block.id}
+                                            className={block.className}
+                                            style={block.style}
+                                            title={`${block.type} at ${block.timeString}`}
                                         ></div>
                                     ))}
                                 </div>
