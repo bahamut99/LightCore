@@ -12,11 +12,10 @@ exports.handler = async (event, context) => {
 };
 
 function startAuth() {
+    // FIX: Removed scopes for sleep, blood pressure, and blood glucose.
+    // We are now only requesting the permission we actually use.
     const scopes = [
-        'https://www.googleapis.com/auth/fitness.activity.read',
-        'https://www.googleapis.com/auth/fitness.sleep.read',
-        'https://www.googleapis.com/auth/fitness.blood_pressure.read',
-        'https://www.googleapis.com/auth/fitness.blood_glucose.read'
+        'https://www.googleapis.com/auth/fitness.activity.read'
     ];
 
     const params = new URLSearchParams({
