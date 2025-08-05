@@ -3,6 +3,21 @@ const fetch = require('node-fetch');
 
 const createAdminClient = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+// New helper function to get the total log count efficiently
+async function fetchLogCount(supabase, userId) {
+    try {
+        const { count, error } = await supabase
+            .from('daily_logs')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userId);
+        if (error) throw error;
+        return count || 0;
+    } catch (error) {
+        console.error('Error fetching log count:', error.message);
+        return 0;
+    }
+}
+
 async function fetchWeeklySummary(supabase, userId) {
     try {
         const { data: goalData } = await supabase.from('goals').select('goal_value').eq('user_id', userId).eq('is_active', true).maybeSingle();
@@ -34,6 +49,7 @@ async function fetchNudge(supabase, userId) {
 }
 
 async function fetchTrendsData(supabase, userId, range) {
+    // This function remains the same as before
     try {
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - (range - 1));
@@ -85,8 +101,8 @@ async function fetchRecentEntries(supabase, userId) {
     }
 }
 
-// RESTORED self-contained logic for fetching the guide.
 async function fetchLightcoreGuide(supabase, supabaseAdmin, userId) {
+    // This function remains the same as before
     try {
         const { data: contextData, error: contextError } = await supabase.from('lightcore_brain_context').select('*').eq('user_id', userId).single();
         if (contextError || !contextData || !contextData.recent_logs || contextData.recent_logs.length < 1) {
@@ -161,6 +177,7 @@ exports.handler = async (event, context) => {
 
     try {
         const [
+            logCountData, // Added log count fetch
             weeklySummaryData,
             nudgeData,
             trendsData,
@@ -168,6 +185,7 @@ exports.handler = async (event, context) => {
             lightcoreGuideData,
             chronoDeckData
         ] = await Promise.all([
+            fetchLogCount(supabase, user.id),
             fetchWeeklySummary(supabase, user.id),
             fetchNudge(supabase, user.id),
             fetchTrendsData(supabase, user.id, range),
@@ -179,6 +197,7 @@ exports.handler = async (event, context) => {
         return {
             statusCode: 200,
             body: JSON.stringify({
+                logCount: logCountData, // Pass log count to the frontend
                 weeklySummaryData,
                 nudgeData,
                 trendsData,

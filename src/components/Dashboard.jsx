@@ -8,12 +8,12 @@ import LogEntry from './LogEntry.jsx';
 import RecentEntries from './RecentEntries.jsx';
 import LightcoreGuide from './LightcoreGuide.jsx';
 import NudgeNotice from './NudgeNotice.jsx';
+import LightcoreMatrix from './LightcoreMatrix.jsx'; // Import the new component
 
 function Dashboard() {
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [range, setRange] = useState(7);
-  // NOTE: This is not used by the new ChronoDeck, but we'll keep it for future date-switching features.
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const fetchDashboardData = useCallback(async () => {
@@ -32,7 +32,6 @@ function Dashboard() {
         throw new Error("Failed to fetch dashboard data");
       }
       const data = await response.json();
-      // FIX: Store the ENTIRE data object from the API, including chronoDeckData.
       setDashboardData(data);
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -51,12 +50,12 @@ function Dashboard() {
 
   return (
     <div id="app-container">
+      <LightcoreMatrix logCount={dashboardData?.logCount || 0} />
       <Header />
       <main className="main-container">
         <div className="left-column">
           <WeeklySummary isLoading={isLoading} data={dashboardData?.weeklySummaryData} />
           <Trends isLoading={isLoading} data={dashboardData?.trendsData} range={range} setRange={setRange} />
-          {/* FIX: Pass the isLoading prop and the chronoDeckData from our state. */}
           <ChronoDeck isLoading={isLoading} data={dashboardData?.chronoDeckData} />
         </div>
         <div className="center-column">
@@ -65,7 +64,8 @@ function Dashboard() {
           <RecentEntries isLoading={isLoading} data={dashboardData?.recentEntriesData} />
         </div>
         <div className="right-column">
-          <LightcoreGuide isLoading={isLoading} data={dashboardData?.lightcoreGuideData} />
+          {/* Pass the logCount down to the guide */}
+          <LightcoreGuide isLoading={isLoading} data={dashboardData?.lightcoreGuideData} logCount={dashboardData?.logCount || 0} />
         </div>
       </main>
       <div className="footer">
