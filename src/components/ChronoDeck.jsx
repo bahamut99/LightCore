@@ -28,7 +28,6 @@ const hourMarkers = [
     { label: '12A', position: 100 }
 ];
 
-// New helper function to process events into non-overlapping tracks
 function processEventsIntoTracks(dailyEvents) {
     const topTrack = [];
     const bottomTrack = [];
@@ -47,12 +46,12 @@ function processEventsIntoTracks(dailyEvents) {
         if (!lastInTop || event.startTime >= lastInTop.endTime) {
             topTrack.push(event);
         } else {
+            // This is the crucial logic: only use the bottom track if there's a conflict
             bottomTrack.push(event);
         }
     }
     return { topTrack, bottomTrack };
 }
-
 
 function ChronoDeck({ isLoading, data: eventsData }) {
     
@@ -99,7 +98,7 @@ function ChronoDeck({ isLoading, data: eventsData }) {
                 const timeString = startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
                 return {
-                    id: event.event_time + event.event_type, // More unique key
+                    id: event.event_time + event.event_type,
                     type: event.event_type,
                     timeString: timeString,
                     style: { left: `${startPercent}%`, width: `${widthPercent}%`, backgroundColor: config.color }
@@ -137,7 +136,7 @@ function ChronoDeck({ isLoading, data: eventsData }) {
                                     {day.topTrackEvents.map(event => (
                                         <div 
                                             key={event.id}
-                                            className="event-block track-top"
+                                            className={`event-block ${day.hasOverlap ? 'track-top' : 'track-full'}`}
                                             style={event.style}
                                             title={`${event.type} at ${event.timeString}`}
                                         ></div>

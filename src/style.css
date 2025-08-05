@@ -734,7 +734,7 @@ td:nth-child(6) {
         repeating-linear-gradient(to right, 
             transparent 0, 
             transparent calc(4.1667% - 1px), 
-            rgba(31, 41, 55, 0.7) 4.1667%, /* Darker line color for contrast */
+            rgba(31, 41, 55, 0.7) 4.1667%,
             transparent calc(4.1667% + 1px)
         );
 }
@@ -744,7 +744,7 @@ td:nth-child(6) {
     border-radius: 2px;
     transition: all 0.2s ease-in-out;
     cursor: pointer;
-    box-sizing: border-box; /* Important for borders */
+    box-sizing: border-box;
 }
 
 /* ========================================
@@ -757,22 +757,19 @@ td:nth-child(6) {
   }
 }
 
-/* When a day has overlaps, animate all blocks on that day */
 .has-overlap .event-block {
     animation: pulse-block 2.5s infinite ease-in-out;
 }
 
-/* Default state for all blocks */
-.event-block {
+.event-block.track-full {
     top: 0;
     height: 100%;
 }
 
-/* Split-bar styles for overlapping events */
 .event-block.track-top {
     top: 0;
     height: 50%;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.3); /* Divider line */
+    border-bottom: 1px solid rgba(0, 0, 0, 0.3);
 }
 
 .event-block.track-bottom {
