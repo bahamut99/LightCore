@@ -31,12 +31,14 @@ h1 {
 .card h2 {
     margin-top: 0;
     color: #F9FAFB;
+    text-align: center;
 }
 
 .card p {
     color: #9CA3AF;
     line-height: 1.6;
     margin-bottom: 2rem;
+    text-align: center;
 }
 
 label {
@@ -51,6 +53,7 @@ label {
     align-items: center;
     gap: 1rem;
     margin-bottom: 1.5rem;
+    justify-content: center;
 }
 
 .input-group input {
@@ -83,6 +86,7 @@ label {
     padding: 0.6em 1.2em;
     border-radius: 8px;
     transition: background-color 0.2s;
+    border: 1px solid #4B5563;
 }
 
 .button-secondary:hover {
@@ -93,4 +97,60 @@ label {
     margin: 2rem auto;
     width: 24px;
     height: 24px;
+}
+
+/* === NEW: Goal View Mode Styles === */
+
+.view-mode-container {
+    text-align: center;
+    padding-top: 1rem;
+}
+
+.view-mode-container h2 {
+    color: #60A5FA;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+}
+
+.goal-display {
+    font-size: 1.2rem;
+    margin-bottom: 1.5rem;
+    color: #D1D5DB;
+}
+
+.goal-display strong {
+    font-size: 1.5rem;
+    color: #F9FAFB;
+    margin: 0 0.25rem;
+}
+
+.progress-dots {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.progress-dot {
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    background-color: #374151;
+    transition: background-color 0.3s;
+}
+
+.progress-dot.completed {
+    background-color: #22c55e;
+}
+
+.progress-text {
+    color: #9CA3AF;
+    margin: 1rem 0 2rem 0;
+}
+
+.adjust-goal-btn {
+    width: auto;
+    padding: 0.6rem 1.5rem;
 }
