@@ -397,7 +397,7 @@ td:nth-child(6) {
     font-style: italic;
     color: #9CA3AF;
     margin-bottom: 1.5rem;
-    text-align: left; /* Changed from center */
+    text-align: left;
 }
 
 .guidance-section {
@@ -457,7 +457,6 @@ td:nth-child(6) {
         transform: rotate(360deg);
     }
 }
-/* ... (rest of existing modal, highlight, footer, nudge styles remain the same) ... */
 .modal-overlay {
     position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; overflow: auto;
     background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center;
@@ -511,9 +510,6 @@ td:nth-child(6) {
 }
 .button-set-goal:hover { background-color: #374151; color: #F9FAFB; border-color: #60A5FA; }
 
-/* ... (ChronoDeck styles remain the same) ... */
-#chronodeck-card .card-header { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 0.5rem; }
-#chronodeck-card .card-header h2 { margin-bottom: 0; }
 .chrono-deck-weekly-view { padding-top: 0.5rem; }
 .day-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 8px; }
 .day-row:last-child { margin-bottom: 0; }
@@ -540,7 +536,7 @@ td:nth-child(6) {
 .hour-markers span:last-child { transform: translateX(-100%); }
 
 /* ========================================
-   NEW: Lightcore Matrix Background
+   Lightcore Matrix Background
 ======================================== */
 
 @keyframes pulse-node {
@@ -557,28 +553,24 @@ td:nth-child(6) {
     height: 100%;
     z-index: -1;
     overflow: hidden;
-    background-color: #111827; /* Same as body */
+    background-color: #111827;
 }
 
+/* This pseudo-element is the base dot grid */
 .lightcore-matrix-background::before {
     content: '';
     position: absolute;
-    width: 200%;
-    height: 200%;
-    top: -50%;
-    left: -50%;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
     background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
     background-size: 30px 30px;
     opacity: 0;
     transition: opacity 2s ease-in-out;
 }
 
-/* Level 1: First Signal (1+ Logs) */
-.lightcore-matrix-background.matrix-level-1::before {
-    opacity: 1; /* Show the base grid */
-}
-
-/* Add more complex layers for higher levels */
+/* This pseudo-element is the soft glowing nodes */
 .lightcore-matrix-background::after {
     content: '';
     position: absolute;
@@ -591,22 +583,41 @@ td:nth-child(6) {
         radial-gradient(circle at 80% 70%, rgba(59, 130, 246, 0.3) 0%, transparent 5%);
     filter: blur(20px);
     opacity: 0;
-    transition: opacity 2s ease-in-out 1s; /* Fade in after grid */
+    transition: opacity 2s ease-in-out 1s;
 }
 
-/* Level 2: Pattern Engine (7+ Logs) */
-.lightcore-matrix-background.matrix-level-2::after {
+/* --- ADDITIVE STYLES FOR EACH LEVEL --- */
+
+/* Level 1+ (1 log): Show the base grid */
+.matrix-level-1::before,
+.matrix-level-2::before,
+.matrix-level-3::before,
+.matrix-level-4::before {
+    opacity: 1;
+}
+
+/* Level 2+ (7 logs): Show the soft nodes */
+.matrix-level-2::after,
+.matrix-level-3::after,
+.matrix-level-4::after {
     opacity: 0.3;
 }
-/* Levels 3 and 4 would have more pseudo-elements or more complex gradients */
+
+/* Level 3+ (14 logs): Add connecting lines */
+.matrix-level-3,
+.matrix-level-4 {
+    background-image: 
+        repeating-linear-gradient(45deg, rgba(59, 130, 246, 0.05), rgba(59, 130, 246, 0.05) 1px, transparent 1px, transparent 50px),
+        repeating-linear-gradient(-45deg, rgba(59, 130, 246, 0.05), rgba(59, 130, 246, 0.05) 1px, transparent 1px, transparent 50px);
+}
 
 
 /* ========================================
-   NEW: AI Core Calibration
+   AI Core Calibration
 ======================================== */
 
 .ai-core-calibration-container {
-    padding-right: 1rem;
+    padding-right: 1.5rem;
     border-right: 1px solid #374151;
     flex-shrink: 0;
 }
@@ -660,22 +671,22 @@ td:nth-child(6) {
 }
 
 .pathway-node.locked {
-    background-color: #4B5563; /* Grey */
+    background-color: #4B5563;
 }
 .pathway-node.locked .node-icon {
     opacity: 0.5;
 }
 
 .pathway-node.unlocked {
-    background-color: #3B82F6; /* Solid Blue */
+    background-color: #3B82F6;
 }
 
 @keyframes pulse-active-node {
-    0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-    100% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+    0% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.4); }
+    100% { box-shadow: 0 0 0 10px rgba(96, 165, 250, 0); }
 }
 
 .pathway-node.active {
-    background-color: #60A5FA; /* Lighter Blue */
+    background-color: #60A5FA;
     animation: pulse-active-node 2s infinite;
 }
