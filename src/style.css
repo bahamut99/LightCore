@@ -612,7 +612,8 @@ td:nth-child(6) {
 }
 
 .matrix-level-3,
-.matrix-level-4 {}
+.matrix-level-4 {
+}
 
 
 /* ========================================
@@ -703,6 +704,12 @@ td:nth-child(6) {
     justify-content: space-between;
     align-items: center;
     font-weight: 500;
+}
+
+.integration-label {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
 }
 
 .toggle-switch {
