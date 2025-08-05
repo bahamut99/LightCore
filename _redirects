@@ -2,3 +2,4 @@
 /recent-logs /.netlify/functions/recent-logs 200
 /acknowledge-nudge /.netlify/functions/acknowledge-nudge 200
 /get-dashboard-data /.netlify/functions/get-dashboard-data 200
+/delete-integration /.netlify/functions/delete-integration 200

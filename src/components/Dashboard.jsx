@@ -8,7 +8,8 @@ import LogEntry from './LogEntry.jsx';
 import RecentEntries from './RecentEntries.jsx';
 import LightcoreGuide from './LightcoreGuide.jsx';
 import NudgeNotice from './NudgeNotice.jsx';
-import LightcoreMatrix from './LightcoreMatrix.jsx'; // Import the new component
+import LightcoreMatrix from './LightcoreMatrix.jsx';
+import Integrations from './Integrations.jsx'; // Import the new component
 
 function Dashboard() {
   const [dashboardData, setDashboardData] = useState(null);
@@ -64,8 +65,8 @@ function Dashboard() {
           <RecentEntries isLoading={isLoading} data={dashboardData?.recentEntriesData} />
         </div>
         <div className="right-column">
-          {/* Pass the logCount down to the guide */}
           <LightcoreGuide isLoading={isLoading} data={dashboardData?.lightcoreGuideData} logCount={dashboardData?.logCount || 0} />
+          <Integrations /> {/* Add the new component here */}
         </div>
       </main>
       <div className="footer">
