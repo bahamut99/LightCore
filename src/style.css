@@ -555,12 +555,10 @@ td:nth-child(6) {
     z-index: -1;
     overflow: hidden;
     background-color: #111827;
-    /* --mouse-x and --mouse-y will be set by JS */
     transform: translate(calc(var(--mouse-x, 0) * -10px), calc(var(--mouse-y, 0) * -10px));
     transition: transform 0.1s linear;
 }
 
-/* L1: Latent Noise */
 .lightcore-matrix-background::before {
     content: '';
     position: absolute;
@@ -574,7 +572,6 @@ td:nth-child(6) {
     transition: opacity 2s ease-in-out;
 }
 
-/* L2: Synaptic Nodes */
 .lightcore-matrix-background::after {
     content: '';
     position: absolute;
@@ -609,11 +606,10 @@ td:nth-child(6) {
     opacity: 0.4; /* Tuned down from 0.5 */
 }
 
+/* REMOVED the lattice lines from this rule */
 .matrix-level-3,
 .matrix-level-4 {
-    background-image: 
-        repeating-linear-gradient(45deg, rgba(59, 130, 246, 0.03) 0, rgba(59, 130, 246, 0.03) 1px, transparent 1px, transparent 50px),
-        repeating-linear-gradient(-45deg, rgba(59, 130, 246, 0.03) 0, rgba(59, 130, 246, 0.03) 1px, transparent 1px, transparent 50px);
+    /* Styles for L3 and L4 can be added here in the future */
 }
 
 
