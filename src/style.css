@@ -748,7 +748,7 @@ td:nth-child(6) {
 }
 
 /* ========================================
-   ChronoDeck Overlap Styles
+   ChronoDeck Overlap Styles (FIXED)
 ======================================== */
 
 @keyframes pulse-block {
@@ -768,14 +768,20 @@ td:nth-child(6) {
 
 .event-block.track-top {
     top: 0;
-    height: 50%;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+    height: 100%; /* Default to full height */
 }
 
 .event-block.track-bottom {
     top: 50%;
     height: 50%;
 }
+
+/* This is the key fix: only shrink the top track when the container has an overlap */
+.has-overlap .event-block.track-top {
+    height: 50%;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.3); /* Divider line for clarity */
+}
+
 
 /* ========================================
    ChronoDeck Hour Markers
