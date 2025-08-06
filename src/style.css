@@ -109,9 +109,9 @@ h1 {
 h2 {
     display: flex;
     align-items: center;
-    justify-content: center; /* Center header content */
+    justify-content: center;
     gap: 0.5rem;
-    font-family: 'Exo 2', sans-serif; /* Apply new font */
+    font-family: 'Exo 2', sans-serif;
     font-size: 1.1rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -562,3 +562,11 @@ input:checked + .slider:before { transform: translateX(20px); }
 .integration-data { text-align: center; padding-top: 1rem; }
 .step-count-display .steps { display: block; font-size: 2.25rem; font-weight: 700; color: #F9FAFB; line-height: 1; }
 .step-count-display .label { font-size: 0.9rem; color: #9CA3AF; }
+
+/* ========================================
+   Specific Header Styles
+======================================== */
+#log-station-header {
+    font-size: 1.25rem;
+    margin-bottom: 0; /* Reduce space before form */
+}
