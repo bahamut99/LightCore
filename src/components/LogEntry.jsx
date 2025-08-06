@@ -39,13 +39,16 @@ function LogEntry() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) throw new Error("You must be logged in.");
 
+            const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
             const response = await fetchWithRetry('/.netlify/functions/analyze-log', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}`},
                 body: JSON.stringify({ 
                     log,
                     sleep_hours: sleepHours ? parseFloat(sleepHours) : null,
-                    sleep_quality: sleepQuality ? parseInt(sleepQuality, 10) : null
+                    sleep_quality: sleepQuality ? parseInt(sleepQuality, 10) : null,
+                    userTimezone: userTimezone // Send the user's timezone
                 })
             });
 
@@ -56,8 +59,8 @@ function LogEntry() {
             setLog('');
             setSleepHours('');
             setSleepQuality('');
-
-            const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            
+            // The parse-events call already correctly sends the timezone
             fetch('/.netlify/functions/parse-events', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
