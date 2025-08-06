@@ -17,16 +17,19 @@ async function fetchLogCount(supabase, userId) {
     }
 }
 
-// THIS IS THE CORRECTED HELPER FUNCTION
 async function fetchWeeklySummary(supabase, userId, startOfWeek) {
     try {
         const { data: goalData, error: goalError } = await supabase.from('goals').select('goal_value').eq('user_id', userId).eq('is_active', true).maybeSingle();
-        if (goalError) throw goalError;
-        if (!goalData) return { goal: null, progress: 0 };
+        if (goalError) {
+            console.error("Error fetching goal in weekly summary:", goalError.message);
+            return { goal: null, progress: 0 }; // Return gracefully on error
+        }
+        if (!goalData) {
+            return { goal: null, progress: 0 }; // Return gracefully if no goal is set
+        }
 
-        // It now correctly uses the 'startOfWeek' timestamp passed in from the frontend.
         if (!startOfWeek) {
-             throw new Error("startOfWeek parameter was not provided.");
+             throw new Error("startOfWeek parameter was not provided to fetchWeeklySummary.");
         }
 
         const { data: logDays, error: logsError } = await supabase.from('daily_logs')
@@ -39,8 +42,8 @@ async function fetchWeeklySummary(supabase, userId, startOfWeek) {
         const distinctDays = new Set((logDays || []).map(log => new Date(log.created_at).toDateString()));
         return { goal: goalData, progress: distinctDays.size };
     } catch (error) {
-        console.error('Error fetching weekly summary:', error.message);
-        return { goal: null, progress: 0 };
+        console.error('Error in fetchWeeklySummary:', error.message);
+        return { goal: null, progress: 0 }; // Catch-all safety net
     }
 }
 
@@ -142,7 +145,7 @@ async function fetchLightcoreGuide(supabase, supabaseAdmin, userId) {
                 user_summary: fullResponse.memory_update.new_user_summary,
                 ai_persona_memo: fullResponse.memory_update.new_ai_persona_memo,
                 updated_at: new Date().toISOString()
-            }).eq('user_id', user.id);
+            }).eq('user_id', userId);
         }
 
         return fullResponse.guidance_for_user;
