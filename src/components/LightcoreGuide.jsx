@@ -42,17 +42,15 @@ function LightcoreGuide({ isLoading, data: guidance, logCount }) {
 
   return (
     <div className="card card-glass" id="guidance-card">
-      <h2>Your Lightcore Guide</h2>
-      
-      {/* The Calibration component is now here, in the main flow */}
-      <AICoreCalibration logCount={logCount} />
+      <h2>Lightcore Guide</h2>
 
-      {/* The container for the text no longer needs the flex wrapper */}
       <div id="guidance-container">
           {renderContent()}
       </div>
       
-      <hr />
+      {/* The Calibration component has been moved here to act as a separator */}
+      <AICoreCalibration logCount={logCount} />
+      
       <div className="history-link-container">
           <a href="history.html" className="footer-link">View Insight History</a>
       </div>

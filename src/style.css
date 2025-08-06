@@ -388,7 +388,11 @@ td:nth-child(6) {
 
 
 /* === GUIDANCE CARD STYLES === */
-/* This wrapper is no longer needed for flex layout */
+#guidance-card h2 {
+    justify-content: center;
+}
+
+/* This wrapper is no longer used */
 /* #guidance-content-wrapper { ... } */
 
 #guidance-container {
@@ -534,17 +538,15 @@ td:nth-child(6) {
 ======================================== */
 
 .ai-core-calibration-container {
-    padding-right: 0; /* No longer needed */
-    border-right: none; /* No longer needed */
-    flex-shrink: 0;
-    margin-bottom: 1.5rem; /* Space between bar and text */
-    padding-bottom: 1.5rem; /* Space for node titles */
-    border-bottom: 1px solid #374151; /* Separator line */
+    /* REMOVED old vertical styles */
+    /* NEW styles for horizontal separator */
+    margin: 1.25rem 0;
+    padding-bottom: 1rem; /* Space for node tooltips */
 }
 
 .calibration-pathway {
     position: relative;
-    width: 80%; /* Takes up 80% of the card width */
+    width: 90%; /* Takes up most of the card width */
     height: 24px;
     margin: 0 auto; /* Center the pathway */
     display: flex;
@@ -557,25 +559,26 @@ td:nth-child(6) {
     top: 50%;
     transform: translateY(-50%);
     height: 2px;
-    width: 100%;
+    border-radius: 1px;
 }
 
 .pathway-background {
     background-color: #374151;
+    width: 100%;
     z-index: 1;
 }
 
 .pathway-progress {
     background-color: #3B82F6;
     z-index: 2;
-    width: 0%; /* Default width */
+    width: 0%; 
     transition: width 1s ease-out;
 }
 
 .pathway-node {
     position: absolute;
     top: 50%;
-    transform: translate(-50%, -50%); /* Center the node on its position */
+    transform: translate(-50%, -50%);
     width: 20px;
     height: 20px;
     border-radius: 50%;
@@ -585,11 +588,12 @@ td:nth-child(6) {
     z-index: 3;
     transition: all 0.5s ease;
     cursor: help;
+    border: 3px solid #1F2937; /* Creates separation from the line */
 }
 
 .node-icon {
     font-size: 12px;
-    color: #111827;
+    color: #1F2937;
 }
 
 .pathway-node.locked {
