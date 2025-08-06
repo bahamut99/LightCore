@@ -17,33 +17,46 @@ async function fetchLogCount(supabase, userId) {
     }
 }
 
-async function fetchWeeklySummary(supabase, userId, startOfWeek) {
+async function fetchWeeklySummary(supabase, userId, userTimezone) {
     try {
         const { data: goalData, error: goalError } = await supabase.from('goals').select('goal_value').eq('user_id', userId).eq('is_active', true).maybeSingle();
         if (goalError) {
             console.error("Error fetching goal in weekly summary:", goalError.message);
-            return { goal: null, progress: 0 }; // Return gracefully on error
+            return { goal: null, progress: 0 };
         }
         if (!goalData) {
-            return { goal: null, progress: 0 }; // Return gracefully if no goal is set
+            return { goal: null, progress: 0 };
         }
 
-        if (!startOfWeek) {
-             throw new Error("startOfWeek parameter was not provided to fetchWeeklySummary.");
-        }
-
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        
         const { data: logDays, error: logsError } = await supabase.from('daily_logs')
             .select('created_at')
             .eq('user_id', userId)
-            .gte('created_at', startOfWeek);
+            .gte('created_at', sevenDaysAgo.toISOString());
             
         if (logsError) throw logsError;
 
-        const distinctDays = new Set((logDays || []).map(log => new Date(log.created_at).toDateString()));
+        const now = new Date();
+        const userNow = new Date(now.toLocaleString('en-US', { timeZone: userTimezone }));
+        const startOfWeek = new Date(userNow);
+        startOfWeek.setDate(userNow.getDate() - userNow.getDay());
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        const distinctDays = new Set();
+        (logDays || []).forEach(log => {
+            const logDate = new Date(log.created_at);
+            if (logDate >= startOfWeek) {
+                const localDateString = logDate.toLocaleDateString('en-CA', { timeZone: userTimezone });
+                distinctDays.add(localDateString);
+            }
+        });
+
         return { goal: goalData, progress: distinctDays.size };
     } catch (error) {
         console.error('Error in fetchWeeklySummary:', error.message);
-        return { goal: null, progress: 0 }; // Catch-all safety net
+        return { goal: null, progress: 0 };
     }
 }
 
@@ -180,7 +193,7 @@ exports.handler = async (event, context) => {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
     
-    const { range, startOfWeek } = event.queryStringParameters;
+    const { range, tz: userTimezone } = event.queryStringParameters;
 
     try {
         const [
@@ -193,7 +206,7 @@ exports.handler = async (event, context) => {
             chronoDeckData
         ] = await Promise.all([
             fetchLogCount(supabase, user.id),
-            fetchWeeklySummary(supabase, user.id, startOfWeek),
+            fetchWeeklySummary(supabase, user.id, userTimezone || 'UTC'),
             fetchNudge(supabase, user.id),
             fetchTrendsData(supabase, user.id, parseInt(range) || 7),
             fetchRecentEntries(supabase, user.id),

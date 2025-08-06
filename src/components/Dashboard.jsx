@@ -24,19 +24,11 @@ function Dashboard() {
       setIsLoading(false);
       return;
     }
-
-    // --- THIS IS THE FIX ---
-    // Calculate the start of the week in the user's local timezone.
-    const today = new Date();
-    const dayOfWeek = today.getDay(); // 0 for Sunday, 1 for Monday, etc.
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - dayOfWeek);
-    startOfWeek.setHours(0, 0, 0, 0);
-    const startOfWeekISO = startOfWeek.toISOString();
+    
+    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     try {
-      // Pass the calculated startOfWeek timestamp to the backend function.
-      const response = await fetch(`/.netlify/functions/get-dashboard-data?range=${range}&startOfWeek=${encodeURIComponent(startOfWeekISO)}`, {
+      const response = await fetch(`/.netlify/functions/get-dashboard-data?range=${range}&tz=${encodeURIComponent(userTimezone)}`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
       if (!response.ok) {
