@@ -55,8 +55,15 @@ async function fetchAndRenderInsights() {
 
     const offset = (currentPage - 1) * INSIGHTS_PER_PAGE;
     let url = `/.netlify/functions/get-past-insights?limit=${INSIGHTS_PER_PAGE}&offset=${offset}`;
+    
     if (dateRange.start && dateRange.end) {
-        url += `&startDate=${dateRange.start.toISOString()}&endDate=${dateRange.end.toISOString()}`;
+        // --- THIS IS THE FIX ---
+        // Create a new date object for the end date to avoid modifying the original
+        const endOfDay = new Date(dateRange.end);
+        // Set the time to the last millisecond of the day in the user's local timezone
+        endOfDay.setHours(23, 59, 59, 999);
+        
+        url += `&startDate=${dateRange.start.toISOString()}&endDate=${endOfDay.toISOString()}`;
     }
 
     try {
@@ -106,7 +113,6 @@ function renderPagination() {
     nextBtn.disabled = currentPage >= totalPages;
 }
 
-// --- THIS FUNCTION'S CODE HAS BEEN RESTORED ---
 async function exportToCSV() {
     const { data: { session } } = await db.auth.getSession();
     if (!session) { 
@@ -114,10 +120,11 @@ async function exportToCSV() {
         return; 
     }
     
-    // Fetch up to 1000 insights for the export
     let url = `/.netlify/functions/get-past-insights?limit=1000`;
     if (dateRange.start && dateRange.end) {
-        url += `&startDate=${dateRange.start.toISOString()}&endDate=${dateRange.end.toISOString()}`;
+        const endOfDay = new Date(dateRange.end);
+        endOfDay.setHours(23, 59, 59, 999);
+        url += `&startDate=${dateRange.start.toISOString()}&endDate=${endOfDay.toISOString()}`;
     }
 
     try {

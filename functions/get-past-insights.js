@@ -4,15 +4,10 @@ exports.handler = async (event, context) => {
     const token = event.headers.authorization?.split(' ')[1];
     if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Not authorized.' }) };
 
-    // --- THIS IS THE FIX ---
-    // The Supabase client is now initialized with the user's token.
-    // This ensures all subsequent requests (like .from('daily_logs')) are made as the user,
-    // which satisfies the Row-Level Security policy.
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
         global: { headers: { Authorization: `Bearer ${token}` } }
     });
 
-    // We can now get the user directly from the authenticated client
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
 
@@ -30,10 +25,11 @@ exports.handler = async (event, context) => {
             query = query.gte('created_at', startDate);
         }
         
+        // --- THIS IS THE FIX ---
+        // The complex, flawed date logic is removed. We now trust the
+        // precise end-of-day timestamp sent by the frontend.
         if (endDate) {
-            const endOfDay = new Date(endDate);
-            endOfDay.setHours(23, 59, 59, 999);
-            query = query.lte('created_at', endOfDay.toISOString());
+            query = query.lte('created_at', endDate);
         }
 
         query = query.range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
