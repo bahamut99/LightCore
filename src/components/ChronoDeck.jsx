@@ -25,15 +25,13 @@ const hourMarkers = [
     { label: '12A', position: 0 },
     { label: '6A', position: 25 },
     { label: '12P', position: 50 },
-    { label: '6P', position: 75 },
-    { label: '12A', position: 100 }
+    { label: '6P', position: 75 }
 ];
 
 const getLocalDateKey = (date) => {
     return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 };
 
-// A completely new, more intelligent layout algorithm
 function layoutEventsForDay(dailyEvents) {
     if (!dailyEvents || dailyEvents.length === 0) {
         return [];
@@ -53,12 +51,11 @@ function layoutEventsForDay(dailyEvents) {
             const eventA = eventsWithTimes[i];
             const eventB = eventsWithTimes[j];
 
-            // Check for overlap
             if (eventA.endTime > eventB.startTime) {
                 eventA.hasOverlap = true;
                 eventB.hasOverlap = true;
                 if (eventA.track === eventB.track) {
-                    eventB.track = eventA.track + 1; // Push to the next track
+                    eventB.track = eventA.track + 1;
                 }
             }
         }
@@ -137,43 +134,35 @@ function ChronoDeck({ isLoading, data: eventsData }) {
 
     return (
         <div className="card" id="chronodeck-card">
-            <div className="card-header">
-                <h2>🕰️ ChronoDeck</h2>
-            </div>
-            {isLoading ? (
-                <div className="loader" style={{ margin: '3rem auto' }}></div>
-            ) : (
-                <>
-                    <div className="chrono-deck-weekly-view">
-                        {weeklyData.map(day => (
-                            <div className="day-row" key={day.dateString}>
-                                <div className="day-label">{day.dayName}</div>
-                                <div className={`timeline-bar-container ${day.hasOverlap ? 'has-overlap' : ''}`}>
-                                    <div className={`timeline-bar-base ${day.isToday ? 'is-today' : ''}`}></div>
-                                    {day.blocks.map(block => (
-                                        <div 
-                                            key={block.id}
-                                            className={block.className}
-                                            style={block.style}
-                                            title={`${block.type} at ${block.timeString}`}
-                                        ></div>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    <div className="hour-marker-track">
-                        <div className="hour-marker-spacer"></div>
-                        <div className="hour-markers">
-                            {hourMarkers.map(marker => (
-                                <span key={marker.label + marker.position} style={{ left: `${marker.position}%` }}>
-                                    {marker.label}
-                                </span>
+            <h2>ChronoDeck</h2>
+            <div className="chrono-deck-weekly-view">
+                {weeklyData.map(day => (
+                    <div className="day-row" key={day.dateString}>
+                        <div className="day-label">{day.dayName}</div>
+                        <div className={`timeline-bar-container ${day.hasOverlap ? 'has-overlap' : ''}`}>
+                            <div className={`timeline-bar-base ${day.isToday ? 'is-today' : ''}`}></div>
+                            {day.blocks.map(block => (
+                                <div 
+                                    key={block.id}
+                                    className={block.className}
+                                    style={block.style}
+                                    title={`${block.type} at ${block.timeString}`}
+                                ></div>
                             ))}
                         </div>
                     </div>
-                </>
-            )}
+                ))}
+            </div>
+            <div className="hour-marker-track">
+                <div className="hour-marker-spacer"></div>
+                <div className="hour-markers">
+                    {hourMarkers.map(marker => (
+                        <span key={marker.label + marker.position} style={{ left: `${marker.position}%` }}>
+                            {marker.label}
+                        </span>
+                    ))}
+                </div>
+            </div>
         </div>
     );
 }

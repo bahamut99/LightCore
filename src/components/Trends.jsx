@@ -24,8 +24,8 @@ function Trends({ isLoading, data, range, setRange }) {
           maintainAspectRatio: false,
       };
       chartInstances.current.clarity = renderChart(canvases.clarity, 'Mental Clarity', data.labels, data.clarityData, '#38bdf8', commonOptions);
-      chartInstances.current.immune = renderChart(canvases.immune, 'Immune Risk', data.labels, data.immuneData, '#facc15', commonOptions);
-      chartInstances.current.physical = renderChart(canvases.physical, 'Physical Output', data.labels, data.physicalData, '#4ade80', commonOptions);
+      chartInstances.current.immune = renderChart(canvases.immune, 'Immune Defense', data.labels, data.immuneData, '#facc15', commonOptions);
+      chartInstances.current.physical = renderChart(canvases.physical, 'Physical Readiness', data.labels, data.physicalData, '#4ade80', commonOptions);
     }
     return () => Object.values(chartInstances.current).forEach(c => c?.destroy());
   }, [data, range]);
@@ -52,12 +52,12 @@ function Trends({ isLoading, data, range, setRange }) {
 
   return (
     <div className="card">
-      <h2>📊 Trends</h2>
+      <h2>Trends</h2>
       <div className="time-range-buttons">
         <TimeRangeButton value={1} label="1D" />
         <TimeRangeButton value={7} label="7D" />
-        <TimeRangeButton value={30} label="30D" />
-        <TimeRangeButton value={90} label="90D" />
+        <TimeRangeButton value={30} label="1M" />
+        <TimeRangeButton value={90} label="3M" />
       </div>
       {isLoading ? <div className="loader" style={{margin: '1rem auto'}}></div> : (
           <>

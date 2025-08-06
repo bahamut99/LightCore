@@ -9,7 +9,7 @@ import RecentEntries from './RecentEntries.jsx';
 import LightcoreGuide from './LightcoreGuide.jsx';
 import NudgeNotice from './NudgeNotice.jsx';
 import LightcoreMatrix from './LightcoreMatrix.jsx';
-import Integrations from './Integrations.jsx'; // Import the new component
+import Integrations from './Integrations.jsx';
 
 function Dashboard() {
   const [dashboardData, setDashboardData] = useState(null);
@@ -42,8 +42,16 @@ function Dashboard() {
   }, [range]);
 
   useEffect(() => {
+    // Check if the URL contains auth callback params from Google
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('code') && urlParams.has('scope')) {
+        // If so, clear them from the URL and trigger a data refetch
+        window.history.replaceState({}, document.title, "/");
+    }
+    
     fetchDashboardData();
     window.addEventListener('newLogSubmitted', fetchDashboardData);
+
     return () => {
       window.removeEventListener('newLogSubmitted', fetchDashboardData);
     };
@@ -66,7 +74,7 @@ function Dashboard() {
         </div>
         <div className="right-column">
           <LightcoreGuide isLoading={isLoading} data={dashboardData?.lightcoreGuideData} logCount={dashboardData?.logCount || 0} />
-          <Integrations /> {/* Add the new component here */}
+          <Integrations />
         </div>
       </main>
       <div className="footer">
