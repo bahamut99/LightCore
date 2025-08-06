@@ -13,7 +13,7 @@ function WeeklySummary({ isLoading, data }) {
         }
         return (
             <>
-                <h2>🎯 Weekly Progress</h2>
+                <h2>Weekly Progress</h2>
                 <p>Logged {data.progress} / {data.goal.goal_value} days this week</p>
                 <div className="progress-dots">{dots}</div>
             </>
@@ -22,7 +22,7 @@ function WeeklySummary({ isLoading, data }) {
 
     return (
         <>
-            <h2>🎯 Weekly Progress</h2>
+            <h2>Weekly Progress</h2>
             <p className="subtle-text">No weekly goal set.</p>
         </>
     );

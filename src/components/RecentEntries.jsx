@@ -39,7 +39,7 @@ function RecentEntries({ isLoading, data: logs }) {
     <>
       <LogDetailModal log={selectedLog} onClose={() => setSelectedLog(null)} />
       <div className="card">
-        <h2>🕓 Recent Entries</h2>
+        <h2>Recent Entries</h2>
         <p className="subtle-text">Click on a row to see full details.</p>
         <div className="table-container">
           <table id="logTable">

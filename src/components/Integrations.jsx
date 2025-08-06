@@ -80,7 +80,7 @@ function Integrations() {
     
     return (
         <div className="card">
-            <h2>🔗 Connected Services</h2>
+            <h2>Connected Services</h2>
             <div className="integration-row">
                 <div className="integration-label">
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="google-logo">
@@ -90,7 +90,7 @@ function Integrations() {
                         <path d="M4.63455 11.1805C4.42636 10.5664 4.30909 9.90409 4.30909 9.20455C4.30909 8.505 4.42636 7.84273 4.63455 7.22864V4.89909H1.61636C0.978182 6.13773 0.6 7.62591 0.6 9.20455C0.6 10.7832 0.978182 12.2714 1.61636 13.5091L4.63455 11.1805Z" fill="#FBBC05"/>
                         <path d="M9 3.98864C10.3209 3.98864 11.5077 4.45591 12.4782 5.385L15.0218 2.84045C13.4673 1.37818 11.43 0.409091 9 0.409091C5.82727 0.409091 3.10636 2.15909 1.61636 4.90091L4.63455 7.22864C5.22091 5.39182 6.96273 3.98864 9 3.98864Z" fill="#EA4335"/>
                     </svg>
-                    <span>Health</span>
+                    <span>Google Health</span>
                 </div>
                 <label className="toggle-switch">
                     <input type="checkbox" checked={isConnected} onChange={handleToggle} disabled={isLoading} />
