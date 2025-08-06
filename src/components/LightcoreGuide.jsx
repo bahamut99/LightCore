@@ -36,18 +36,22 @@ function LightcoreGuide({ isLoading, data: guidance, logCount }) {
             </>
         );
     }
+    // Default message when there are no logs yet.
     return <p className="subtle-text">Log your first entry to begin AI calibration.</p>;
   };
 
   return (
     <div className="card card-glass" id="guidance-card">
       <h2>Your Lightcore Guide</h2>
-      <div id="guidance-content-wrapper">
-          <AICoreCalibration logCount={logCount} />
-          <div id="guidance-container">
-              {renderContent()}
-          </div>
+      
+      {/* The Calibration component is now here, in the main flow */}
+      <AICoreCalibration logCount={logCount} />
+
+      {/* The container for the text no longer needs the flex wrapper */}
+      <div id="guidance-container">
+          {renderContent()}
       </div>
+      
       <hr />
       <div className="history-link-container">
           <a href="history.html" className="footer-link">View Insight History</a>

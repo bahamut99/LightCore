@@ -20,6 +20,10 @@ const AICoreCalibration = ({ logCount }) => {
         }
     }
     
+    // If user has 0 logs, progress is 0
+    if (logCount === 0) return 0;
+
+    // If user has logs but hasn't unlocked the first stage yet
     if (currentStageIndex === -1) return (logCount / STAGES[0].logsRequired) * 100;
 
     const currentStage = STAGES[currentStageIndex];
@@ -37,7 +41,7 @@ const AICoreCalibration = ({ logCount }) => {
     <div className="ai-core-calibration-container">
       <div className="calibration-pathway">
         <div className="pathway-background"></div>
-        <div className="pathway-progress" style={{ height: `${progressPercent}%` }}></div>
+        <div className="pathway-progress" style={{ width: `${progressPercent}%` }}></div>
         
         {STAGES.map((stage, index) => {
           const isUnlocked = logCount >= stage.logsRequired;
@@ -46,9 +50,17 @@ const AICoreCalibration = ({ logCount }) => {
           let statusClass = 'locked';
           if (isActive) statusClass = 'active';
           else if (isUnlocked) statusClass = 'unlocked';
+          
+          // Position nodes horizontally based on index
+          const position = (index / (STAGES.length - 1)) * 100;
 
           return (
-            <div key={stage.id} className={`pathway-node ${statusClass}`} title={`${stage.name} (Unlocks at ${stage.logsRequired} logs)`}>
+            <div 
+              key={stage.id} 
+              className={`pathway-node ${statusClass}`} 
+              style={{ left: `${position}%` }}
+              title={`${stage.name} (Unlocks at ${stage.logsRequired} logs)`}
+            >
               <div className="node-icon">{stage.icon}</div>
             </div>
           );
