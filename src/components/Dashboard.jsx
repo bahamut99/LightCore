@@ -25,8 +25,18 @@ function Dashboard() {
       return;
     }
 
+    // --- THIS IS THE FIX ---
+    // Calculate the start of the week in the user's local timezone.
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 for Sunday, 1 for Monday, etc.
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - dayOfWeek);
+    startOfWeek.setHours(0, 0, 0, 0);
+    const startOfWeekISO = startOfWeek.toISOString();
+
     try {
-      const response = await fetch(`/.netlify/functions/get-dashboard-data?range=${range}`, {
+      // Pass the calculated startOfWeek timestamp to the backend function.
+      const response = await fetch(`/.netlify/functions/get-dashboard-data?range=${range}&startOfWeek=${encodeURIComponent(startOfWeekISO)}`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
       if (!response.ok) {
@@ -36,16 +46,15 @@ function Dashboard() {
       setDashboardData(data);
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
+      setDashboardData({}); 
     } finally {
       setIsLoading(false);
     }
   }, [range]);
 
   useEffect(() => {
-    // Check if the URL contains auth callback params from Google
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('code') && urlParams.has('scope')) {
-        // If so, clear them from the URL and trigger a data refetch
         window.history.replaceState({}, document.title, "/");
     }
     
