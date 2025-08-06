@@ -74,7 +74,7 @@ function LogEntry() {
         <>
             <div className="card">
                 <form onSubmit={handleSubmit}>
-                    <label htmlFor="log">📝 Daily Log Entry</label>
+                    <label htmlFor="log">Daily Log Entry</label>
                     <textarea id="log" rows="5" placeholder="I woke up feeling clear-headed..." value={log} onChange={(e) => setLog(e.target.value)}></textarea>
                     
                     <div className="sleep-inputs-container">

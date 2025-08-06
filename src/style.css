@@ -2,7 +2,7 @@
     box-sizing: border-box;
 }
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@500;700&family=Inter:wght@400;500;700&display=swap');
 
 body {
     font-family: 'Inter', sans-serif;
@@ -109,7 +109,9 @@ h1 {
 h2 {
     display: flex;
     align-items: center;
+    justify-content: center; /* Center header content */
     gap: 0.5rem;
+    font-family: 'Exo 2', sans-serif; /* Apply new font */
     font-size: 1.1rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -392,9 +394,6 @@ td:nth-child(6) {
     justify-content: center;
 }
 
-/* This wrapper is no longer used */
-/* #guidance-content-wrapper { ... } */
-
 #guidance-container {
     flex-grow: 1;
 }
@@ -536,86 +535,18 @@ td:nth-child(6) {
 /* ========================================
    AI Core Calibration (HORIZONTAL RE-DESIGN)
 ======================================== */
-
-.ai-core-calibration-container {
-    /* REMOVED old vertical styles */
-    /* NEW styles for horizontal separator */
-    margin: 1.25rem 0;
-    padding-bottom: 1rem; /* Space for node tooltips */
-}
-
-.calibration-pathway {
-    position: relative;
-    width: 90%; /* Takes up most of the card width */
-    height: 24px;
-    margin: 0 auto; /* Center the pathway */
-    display: flex;
-    align-items: center;
-}
-
-.pathway-background, .pathway-progress {
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    height: 2px;
-    border-radius: 1px;
-}
-
-.pathway-background {
-    background-color: #374151;
-    width: 100%;
-    z-index: 1;
-}
-
-.pathway-progress {
-    background-color: #3B82F6;
-    z-index: 2;
-    width: 0%; 
-    transition: width 1s ease-out;
-}
-
-.pathway-node {
-    position: absolute;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 3;
-    transition: all 0.5s ease;
-    cursor: help;
-    border: 3px solid #1F2937; /* Creates separation from the line */
-}
-
-.node-icon {
-    font-size: 12px;
-    color: #1F2937;
-}
-
-.pathway-node.locked {
-    background-color: #4B5563;
-}
-.pathway-node.locked .node-icon {
-    opacity: 0.5;
-}
-
-.pathway-node.unlocked {
-    background-color: #3B82F6;
-}
-
-@keyframes pulse-active-node {
-    0% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.4); }
-    100% { box-shadow: 0 0 0 10px rgba(96, 165, 250, 0); }
-}
-
-.pathway-node.active {
-    background-color: #60A5FA;
-    animation: pulse-active-node 2s infinite;
-}
+.ai-core-calibration-container { margin: 1.25rem 0; padding-bottom: 1rem; }
+.calibration-pathway { position: relative; width: 90%; height: 24px; margin: 0 auto; display: flex; align-items: center; }
+.pathway-background, .pathway-progress { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 2px; border-radius: 1px; }
+.pathway-background { background-color: #374151; width: 100%; z-index: 1; }
+.pathway-progress { background-color: #3B82F6; z-index: 2; width: 0%; transition: width 1s ease-out; }
+.pathway-node { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 3; transition: all 0.5s ease; cursor: help; border: 3px solid #1F2937; }
+.node-icon { font-size: 12px; color: #1F2937; }
+.pathway-node.locked { background-color: #4B5563; }
+.pathway-node.locked .node-icon { opacity: 0.5; }
+.pathway-node.unlocked { background-color: #3B82F6; }
+@keyframes pulse-active-node { 0% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.4); } 100% { box-shadow: 0 0 0 10px rgba(96, 165, 250, 0); } }
+.pathway-node.active { background-color: #60A5FA; animation: pulse-active-node 2s infinite; }
 
 /* ========================================
    Integrations Card
