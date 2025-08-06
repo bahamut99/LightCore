@@ -40,21 +40,49 @@ body {
     gap: 1.5rem;
 }
 
-.filter-group {
+/* === NEW Date Filter Display Styles === */
+.date-filter {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    background-color: #374151;
+    border: 1px solid #4B5563;
+    border-radius: 0.5rem;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 280px;
 }
 
-.filter-group label {
-    margin: 0;
-    font-weight: 500;
+.date-filter:hover {
+    border-color: #60A5FA;
+    background-color: #4B5563;
+}
+
+.date-filter-label {
     color: #9CA3AF;
+    margin-right: 0.5rem;
+    font-size: 0.9rem;
 }
 
-#date-range-picker {
-    width: 280px;
-    margin: 0;
+.date-filter-text {
+    color: #F9FAFB;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.clear-btn {
+    background: none;
+    border: none;
+    color: #9CA3AF;
+    font-size: 1.25rem;
+    margin-left: auto;
+    padding: 0 0 0 1rem;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.clear-btn:hover {
+    color: #F9FAFB;
 }
 
 .control-btn {

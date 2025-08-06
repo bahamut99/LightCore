@@ -1,5 +1,5 @@
 import React from 'react';
-import AICoreCalibration from './AICoreCalibration.jsx'; // Import the new component
+import AICoreCalibration from './AICoreCalibration.jsx';
 
 function LightcoreGuide({ isLoading, data: guidance, logCount }) {
 
@@ -36,7 +36,6 @@ function LightcoreGuide({ isLoading, data: guidance, logCount }) {
             </>
         );
     }
-    // Default message when there are no logs yet.
     return <p className="subtle-text">Log your first entry to begin AI calibration.</p>;
   };
 
@@ -51,7 +50,7 @@ function LightcoreGuide({ isLoading, data: guidance, logCount }) {
       </div>
       <hr />
       <div className="history-link-container">
-          <a href="history.html" className="footer-link">View Full Insights History</a>
+          <a href="history.html" className="footer-link">View Insight History</a>
       </div>
     </div>
   );

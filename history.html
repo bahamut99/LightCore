@@ -25,13 +25,10 @@
 
       <div class="card controls-card">
         <div class="controls-container">
-          <div class="filter-group">
-            <label for="date-range">Filter by Date Range:</label>
-            <input
-              type="text"
-              id="date-range-picker"
-              placeholder="Select a date range..."
-            />
+          <div id="date-filter-container" class="date-filter">
+            <span class="date-filter-label">Displaying:</span>
+            <span id="date-display-text" class="date-filter-text">All Time</span>
+            <button id="clear-date-filter" class="clear-btn" style="display: none;" title="Clear filter">&times;</button>
           </div>
           <button id="export-csv-btn" class="control-btn">Export as CSV</button>
         </div>
