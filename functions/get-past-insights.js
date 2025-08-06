@@ -21,10 +21,13 @@ exports.handler = async (event, context) => {
         if (startDate) {
             query = query.gte('created_at', startDate);
         }
+        
+        // --- THIS IS THE FIX ---
+        // Replaced the old logic with a more precise "end of day" calculation.
         if (endDate) {
-            const inclusiveEndDate = new Date(endDate);
-            inclusiveEndDate.setDate(inclusiveEndDate.getDate() + 1);
-            query = query.lte('created_at', inclusiveEndDate.toISOString());
+            const endOfDay = new Date(endDate);
+            endOfDay.setHours(23, 59, 59, 999); // Set to the last millisecond of the selected day
+            query = query.lte('created_at', endOfDay.toISOString());
         }
 
         query = query.range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
