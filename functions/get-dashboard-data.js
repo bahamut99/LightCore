@@ -17,14 +17,14 @@ async function fetchLogCount(supabase, userId) {
     }
 }
 
-// --- THIS IS THE FIX ---
-// This function now accepts the pre-calculated startOfWeek timestamp.
+// THIS IS THE CORRECTED HELPER FUNCTION
 async function fetchWeeklySummary(supabase, userId, startOfWeek) {
     try {
         const { data: goalData, error: goalError } = await supabase.from('goals').select('goal_value').eq('user_id', userId).eq('is_active', true).maybeSingle();
         if (goalError) throw goalError;
         if (!goalData) return { goal: null, progress: 0 };
 
+        // It now correctly uses the 'startOfWeek' timestamp passed in from the frontend.
         if (!startOfWeek) {
              throw new Error("startOfWeek parameter was not provided.");
         }
@@ -32,7 +32,7 @@ async function fetchWeeklySummary(supabase, userId, startOfWeek) {
         const { data: logDays, error: logsError } = await supabase.from('daily_logs')
             .select('created_at')
             .eq('user_id', userId)
-            .gte('created_at', startOfWeek); // It uses the timestamp directly.
+            .gte('created_at', startOfWeek);
             
         if (logsError) throw logsError;
 
@@ -110,7 +110,7 @@ async function fetchLightcoreGuide(supabase, supabaseAdmin, userId) {
     try {
         const { data: contextData, error: contextError } = await supabase.from('lightcore_brain_context').select('*').eq('user_id', userId).single();
         if (contextError || !contextData || !contextData.recent_logs || !contextData.recent_logs.length) {
-            return { current_state: "Log data for a few days to start generating personalized guidance." };
+            return { current_state: "Log your first entry to begin AI calibration." };
         }
         
         let formattedContext = `User's Most Recent Logs:\n` + contextData.recent_logs.slice(0, 7).map(log => {
