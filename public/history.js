@@ -17,13 +17,12 @@ const loadingSpinner = document.getElementById('loading-spinner');
 const dateDisplay = document.getElementById('date-display-text');
 const clearDateBtn = document.getElementById('clear-date-filter');
 
-let flatpickrInstance; // To hold the calendar instance
+let flatpickrInstance;
 
-// Initialize the date picker on our new container
 flatpickrInstance = flatpickr("#date-filter-container", {
     mode: "range",
     dateFormat: "Y-m-d",
-    altInput: false, // We are creating our own display
+    altInput: false,
     onClose: function(selectedDates) {
         if (selectedDates.length === 2) {
             dateRange.start = selectedDates[0];
@@ -107,8 +106,47 @@ function renderPagination() {
     nextBtn.disabled = currentPage >= totalPages;
 }
 
+// --- THIS FUNCTION'S CODE HAS BEEN RESTORED ---
 async function exportToCSV() {
-    // ... (This function remains unchanged)
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) { 
+        alert('You must be logged in to export data.'); 
+        return; 
+    }
+    
+    // Fetch up to 1000 insights for the export
+    let url = `/.netlify/functions/get-past-insights?limit=1000`;
+    if (dateRange.start && dateRange.end) {
+        url += `&startDate=${dateRange.start.toISOString()}&endDate=${dateRange.end.toISOString()}`;
+    }
+
+    try {
+        const response = await fetch(url, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
+        if (!response.ok) throw new Error('Failed to fetch data for export.');
+        
+        const { insights } = await response.json();
+        if (insights.length === 0) { 
+            alert('No data to export for the selected period.'); 
+            return; 
+        }
+
+        let csvContent = "data:text/csv;charset=utf-8,Date,Insight\r\n";
+        insights.forEach(row => {
+            const date = new Date(row.created_at).toISOString().split('T')[0];
+            const insight = `"${row.insight_text.replace(/"/g, '""')}"`;
+            csvContent += `${date},${insight}\r\n`;
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "lightcore_insights.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (error) {
+        alert(`Export failed: ${error.message}`);
+    }
 }
 
 function clearFilter() {
