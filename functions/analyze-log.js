@@ -51,7 +51,9 @@ exports.handler = async (event, context) => {
         let healthDataString = "Not available";
         
         const prompt = `
-        You are a world-class AI health analyst. Your process is to first think step-by-step inside a <reasoning> XML block. After the reasoning block, you will provide your final analysis as a single, valid JSON object and nothing else.
+        You are a world-class AI health analyst. Your process is to first think step-by-step inside a <reasoning> XML block. After the reasoning block, you will provide your final analysis as a single, valid JSON object.
+        **CRITICAL:** Do not wrap your final output in markdown fences (\`\`\`) or any other formatting. Only the raw JSON object is allowed.
+        
         **MISSION:** Analyze today's data within the broader **USER CONTEXT** to provide nuanced, trend-aware scores and notes.
         **SCORING RUBRIC & INSTRUCTIONS:**
         - Clarity Score: Base this on reported focus, energy, and the absence or presence of 'brain fog'.
@@ -76,7 +78,7 @@ exports.handler = async (event, context) => {
         **TODAY'S DATA FOR ANALYSIS:**
         - User Log: "${log}"
         - Automated Health Data: ${healthDataString}
-        Now, generate the <reasoning> block followed by the final JSON response for today's data.
+        Now, generate the <reasoning> block followed by the final JSON response.
         `;
 
         const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -85,7 +87,13 @@ exports.handler = async (event, context) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" }
+                // FIX: Updated generationConfig as per your debug instructions for a more reliable response.
+                generationConfig: {
+                    temperature: 0.7,
+                    topP: 1,
+                    topK: 1,
+                    responseMimeType: "text/plain"
+                }
             })
         });
 
@@ -99,7 +107,16 @@ exports.handler = async (event, context) => {
         try {
             const rawText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (!rawText) throw new Error("AI returned an empty or invalid response structure.");
-            analysis = JSON.parse(rawText);
+            
+            // This logic finds the first '{' and the last '}' to make parsing more robust
+            const jsonStart = rawText.indexOf('{');
+            const jsonEnd = rawText.lastIndexOf('}');
+            if (jsonStart === -1 || jsonEnd === -1) {
+                throw new Error("No valid JSON object found in AI response.");
+            }
+            const jsonString = rawText.substring(jsonStart, jsonEnd + 1);
+            analysis = JSON.parse(jsonString);
+
         } catch (parseError) {
             console.error("Failed to parse JSON from AI response:", parseError);
             throw new Error("Failed to parse AI response.");
@@ -124,20 +141,16 @@ exports.handler = async (event, context) => {
 
         const supabaseAdmin = createAdminClient();
         
-        // --- PERFORMANCE OPTIMIZATION ---
-        // Step 1: Ensure a context row exists. This creates it on the first log.
         await supabaseAdmin.rpc('upsert_lightcore_context', {
             p_user_id: user.id,
             p_new_log: newLogData
         });
         
-        // Step 2: Prepend the new log to the array in a separate, clean step.
         await supabaseAdmin.rpc('prepend_to_recent_logs', {
             p_user_id: user.id,
             p_new_log_entry: newLogData
         });
 
-        // --- Streak Counter Logic ---
         const { data: profile, error: profileError } = await supabaseAdmin.from('profiles').select('streak_count, last_log_date').eq('id', user.id).single();
         if (profileError) throw new Error(`Could not fetch user profile: ${profileError.message}`);
 
