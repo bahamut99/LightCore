@@ -64,10 +64,11 @@ exports.handler = async (event, context) => {
 
         const requestBody = {
             aggregateBy: [{
-                dataTypeName: "com.google.step_count.delta",
-                dataSourceId: "derived:com.google.step_count.delta:com.google.android.gms:estimated_steps"
+                // By only specifying dataTypeName and NOT dataSourceId,
+                // we ask Google to aggregate steps from ALL available sources.
+                dataTypeName: "com.google.step_count.delta"
             }],
-            bucketByTime: { durationMillis: 86400000 },
+            bucketByTime: { durationMillis: 86400000 }, // 24 hours in milliseconds
             startTimeMillis: startTime.getTime(),
             endTimeMillis: now.getTime()
         };
@@ -84,6 +85,7 @@ exports.handler = async (event, context) => {
         const fitnessData = await fitnessResponse.json();
         
         let stepCount = 0;
+        // Check if the response structure contains the data as expected
         if (fitnessData.bucket && fitnessData.bucket.length > 0 && fitnessData.bucket[0].dataset[0].point.length > 0) {
             stepCount = fitnessData.bucket[0].dataset[0].point[0].value[0].intVal;
         }
