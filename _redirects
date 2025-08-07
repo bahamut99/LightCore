@@ -3,3 +3,4 @@
 /acknowledge-nudge /.netlify/functions/acknowledge-nudge 200
 /get-dashboard-data /.netlify/functions/get-dashboard-data 200
 /delete-integration /.netlify/functions/delete-integration 200
+/get-chart-data /.netlify/functions/get-chart-data 200

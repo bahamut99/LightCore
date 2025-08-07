@@ -70,48 +70,6 @@ async function fetchNudge(supabase, userId) {
     }
 }
 
-async function fetchTrendsData(supabase, userId, range) {
-    try {
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - (range - 1));
-        startDate.setHours(0, 0, 0, 0);
-
-        const { data } = await supabase.from('daily_logs').select('created_at, clarity_score, immune_score, physical_readiness_score').eq('user_id', userId).gte('created_at', startDate.toISOString()).order('created_at', { ascending: true });
-        
-        let processedData = data || [];
-        if (range > 1 && processedData.length > 0) {
-            const groups = processedData.reduce((acc, log) => {
-                const date = new Date(log.created_at).toISOString().split('T')[0];
-                if (!acc[date]) acc[date] = [];
-                acc[date].push(log);
-                return acc;
-            }, {});
-            processedData = Object.values(groups).map(logs => {
-                const avg = logs.reduce((acc, log) => ({
-                    clarity: acc.clarity + (log.clarity_score || 0),
-                    immune: acc.immune + (log.immune_score || 0),
-                    physical: acc.physical + (log.physical_readiness_score || 0),
-                }), { clarity: 0, immune: 0, physical: 0 });
-                return {
-                    created_at: logs[0].created_at,
-                    clarity_score: avg.clarity / logs.length,
-                    immune_score: avg.immune / logs.length,
-                    physical_readiness_score: avg.physical / logs.length,
-                };
-            });
-        }
-        return {
-            labels: processedData.map(log => log.created_at),
-            clarityData: processedData.map(log => log.clarity_score),
-            immuneData: processedData.map(log => log.immune_score),
-            physicalData: processedData.map(log => log.physical_readiness_score),
-        };
-    } catch (error) {
-        console.error('Error fetching trends data:', error.message);
-        return { labels: [], clarityData: [], immuneData: [], physicalData: [] };
-    }
-}
-
 async function fetchRecentEntries(supabase, userId) {
     try {
         const { data } = await supabase.from('daily_logs').select('id, created_at, log, clarity_label, clarity_color, clarity_score, immune_label, immune_color, immune_score, physical_readiness_label, physical_readiness_color, physical_readiness_score, ai_notes, sleep_hours, sleep_quality').eq('user_id', userId).order('created_at', { ascending: false }).limit(10);
@@ -130,8 +88,8 @@ async function fetchLightcoreGuide(supabase, supabaseAdmin, userId) {
         }
         
         let formattedContext = `User's Most Recent Logs:\n` + contextData.recent_logs.slice(0, 7).map(log => {
-             const date = new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-             return `[${date}] Scores: Clarity=${log.clarity_score}, Immune=${log.immune_score}, Physical=${log.physical_readiness_score} | Log: "${log.log.substring(0, 75)}..."`;
+            const date = new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            return `[${date}] Scores: Clarity=${log.clarity_score}, Immune=${log.immune_score}, Physical=${log.physical_readiness_score} | Log: "${log.log.substring(0, 75)}..."`;
         }).join('\n');
 
         const prompt = `You are Lightcore – a unified, personalized health AI guide. Review the user's recent data context. Your goal is to synthesize this information into a cohesive guidance message. Your entire response MUST be a single, valid JSON object with two top-level keys: "guidance_for_user" and "memory_update". 1. "guidance_for_user": An object with keys "current_state" (string), "positives" (array of strings), "concerns" (array of strings), "suggestions" (array of strings). 2. "memory_update": An object with keys "new_user_summary" (string) and "new_ai_persona_memo" (string). Analyze the following DATA CONTEXT:\n${formattedContext}`;
@@ -193,14 +151,13 @@ exports.handler = async (event, context) => {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
     
-    const { range, tz: userTimezone } = event.queryStringParameters;
+    const { tz: userTimezone } = event.queryStringParameters;
 
     try {
         const [
             logCountData,
             weeklySummaryData,
             nudgeData,
-            trendsData,
             recentEntriesData,
             lightcoreGuideData,
             chronoDeckData
@@ -208,7 +165,6 @@ exports.handler = async (event, context) => {
             fetchLogCount(supabase, user.id),
             fetchWeeklySummary(supabase, user.id, userTimezone || 'UTC'),
             fetchNudge(supabase, user.id),
-            fetchTrendsData(supabase, user.id, parseInt(range) || 7),
             fetchRecentEntries(supabase, user.id),
             fetchLightcoreGuide(supabase, supabaseAdmin, user.id),
             fetchChronoDeck(supabase, user.id)
@@ -220,7 +176,6 @@ exports.handler = async (event, context) => {
                 logCount: logCountData,
                 weeklySummaryData,
                 nudgeData,
-                trendsData,
                 recentEntriesData,
                 lightcoreGuideData,
                 chronoDeckData
