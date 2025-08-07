@@ -124,19 +124,15 @@ exports.handler = async (event, context) => {
 
         const supabaseAdmin = createAdminClient();
         
-        // --- PERFORMANCE OPTIMIZATION ---
-        // Replace the slow SELECT then UPDATE with a single, fast RPC call.
         const { error: rpcError } = await supabaseAdmin.rpc('append_to_recent_logs', {
             target_user_id: user.id,
             new_log_entry: newLogData
         });
 
         if (rpcError) {
-            // Log this error but don't fail the whole function, as the primary log was saved.
             console.error("Error updating AI context via RPC:", rpcError.message);
         }
 
-        // --- Streak Counter Logic ---
         const { data: profile, error: profileError } = await supabaseAdmin.from('profiles').select('streak_count, last_log_date').eq('id', user.id).single();
         if (profileError) throw new Error(`Could not fetch user profile: ${profileError.message}`);
 
