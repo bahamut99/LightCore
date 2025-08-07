@@ -2,7 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 
 function Integrations() {
+    // We now use two state variables. `isConnected` tracks the real database state,
+    // and `isChecked` controls the immediate visual state of the toggle.
     const [isConnected, setIsConnected] = useState(false);
+    const [isChecked, setIsChecked] = useState(false); 
     const [stepCount, setStepCount] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -27,11 +30,14 @@ function Integrations() {
         if (checkError) {
             setError('Could not verify integration status.');
             setIsConnected(false);
+            setIsChecked(false);
         } else if (data) {
             setIsConnected(true);
+            setIsChecked(true);
             fetchSteps(session.access_token);
         } else {
             setIsConnected(false);
+            setIsChecked(false);
         }
         setIsLoading(false);
     }, []);
@@ -53,11 +59,21 @@ function Integrations() {
     useEffect(() => {
         checkIntegrationStatus();
     }, [checkIntegrationStatus]);
+    
+    // This new useEffect handles the redirect AFTER the state has changed
+    useEffect(() => {
+        // If the toggle is checked but we aren't actually connected yet, redirect.
+        if (isChecked && !isConnected) {
+            window.location.href = '/.netlify/functions/google-auth';
+        }
+    }, [isChecked, isConnected]);
 
     const handleToggle = async (e) => {
-        if (e.target.checked) {
-            window.location.href = '/.netlify/functions/google-auth';
-        } else {
+        const isNowChecked = e.target.checked;
+        setIsChecked(isNowChecked); // This updates the UI immediately
+
+        if (!isNowChecked) {
+            // Disconnect logic remains the same
             setIsLoading(true);
             const { data: { session } } = await supabase.auth.getSession();
             try {
@@ -73,6 +89,7 @@ function Integrations() {
                 setStepCount(null);
             } catch (err) {
                 setError("Failed to disconnect.");
+                setIsChecked(true); // Revert UI on failure
             }
             setIsLoading(false);
         }
@@ -93,7 +110,8 @@ function Integrations() {
                     <span>Google Health</span>
                 </div>
                 <label className="toggle-switch">
-                    <input type="checkbox" checked={isConnected} onChange={handleToggle} disabled={isLoading} />
+                    {/* The input now uses the local `isChecked` state */}
+                    <input type="checkbox" checked={isChecked} onChange={handleToggle} disabled={isLoading} />
                     <span className="slider"></span>
                 </label>
             </div>
