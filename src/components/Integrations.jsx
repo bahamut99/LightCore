@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 
 function Integrations() {
-    // We now use two state variables. `isConnected` tracks the real database state,
-    // and `isChecked` controls the immediate visual state of the toggle.
     const [isConnected, setIsConnected] = useState(false);
     const [isChecked, setIsChecked] = useState(false); 
     const [stepCount, setStepCount] = useState(null);
@@ -56,24 +54,39 @@ function Integrations() {
         }
     };
 
+    // This is the initial check on component mount.
     useEffect(() => {
         checkIntegrationStatus();
     }, [checkIntegrationStatus]);
     
     // This new useEffect handles the redirect AFTER the state has changed
     useEffect(() => {
-        // If the toggle is checked but we aren't actually connected yet, redirect.
         if (isChecked && !isConnected) {
             window.location.href = '/.netlify/functions/google-auth';
         }
     }, [isChecked, isConnected]);
 
+    // ** THIS IS THE NEW LOGIC TO FIX THE RACE CONDITION **
+    // This effect runs once when the component first loads.
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        // Check if we've just been redirected back from Google
+        if (urlParams.has('code')) {
+            // Clean the URL to remove the code
+            window.history.replaceState({}, document.title, "/");
+            // Set a brief timeout to allow the database write to complete
+            setTimeout(() => {
+                // Manually trigger a re-check of the integration status
+                checkIntegrationStatus();
+            }, 1500); // 1.5 second delay
+        }
+    }, [checkIntegrationStatus]); // Dependency array ensures checkIntegrationStatus is available
+
     const handleToggle = async (e) => {
         const isNowChecked = e.target.checked;
-        setIsChecked(isNowChecked); // This updates the UI immediately
+        setIsChecked(isNowChecked); 
 
         if (!isNowChecked) {
-            // Disconnect logic remains the same
             setIsLoading(true);
             const { data: { session } } = await supabase.auth.getSession();
             try {
@@ -89,7 +102,7 @@ function Integrations() {
                 setStepCount(null);
             } catch (err) {
                 setError("Failed to disconnect.");
-                setIsChecked(true); // Revert UI on failure
+                setIsChecked(true); 
             }
             setIsLoading(false);
         }
@@ -110,7 +123,6 @@ function Integrations() {
                     <span>Google Health</span>
                 </div>
                 <label className="toggle-switch">
-                    {/* The input now uses the local `isChecked` state */}
                     <input type="checkbox" checked={isChecked} onChange={handleToggle} disabled={isLoading} />
                     <span className="slider"></span>
                 </label>

@@ -14,10 +14,9 @@ import Integrations from './Integrations.jsx';
 function Dashboard() {
     const [dashboardData, setDashboardData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [range, setRange] = useState(7); // Range state still lives here
+    const [range, setRange] = useState(7); 
 
     const fetchDashboardData = useCallback(async (isRefresh = false) => {
-        // On subsequent refreshes, don't show a full-page loader
         if (!isRefresh) {
             setIsLoading(true);
         }
@@ -31,7 +30,6 @@ function Dashboard() {
         const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
         try {
-            // The range query parameter is no longer needed here
             const response = await fetch(`/.netlify/functions/get-dashboard-data?tz=${encodeURIComponent(userTimezone)}`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
@@ -49,11 +47,7 @@ function Dashboard() {
     }, []);
 
     useEffect(() => {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('code') && urlParams.has('scope')) {
-            window.history.replaceState({}, document.title, "/");
-        }
-        
+        // The URL cleaning logic has been removed from here
         fetchDashboardData(false);
         
         const handleNewLog = () => fetchDashboardData(true);
@@ -71,7 +65,6 @@ function Dashboard() {
             <main className="main-container">
                 <div className="left-column">
                     <WeeklySummary isLoading={isLoading} data={dashboardData?.weeklySummaryData} />
-                    {/* Trends now only needs range and setRange */}
                     <Trends range={range} setRange={setRange} />
                     <ChronoDeck isLoading={isLoading} data={dashboardData?.chronoDeckData} />
                 </div>
