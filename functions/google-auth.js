@@ -14,6 +14,7 @@ exports.handler = async (event, context) => {
 };
 
 function startAuth() {
+    // This part is for the initial redirect TO Google
     const scopes = [
         'https://www.googleapis.com/auth/fitness.activity.read'
     ];
@@ -30,11 +31,15 @@ function startAuth() {
 }
 
 async function handleCallback(event) {
+    // THIS IS THE NEW, CRITICAL LOG
+    console.log('--- GOOGLE AUTH CALLBACK INITIATED ---');
+
     const { code } = event.queryStringParameters;
     const cookieHeader = event.headers.cookie || '';
     const user_jwt = cookieHeader.split('; ').find(c => c.startsWith('nf_jwt='))?.split('=')[1];
     
     if (!user_jwt) {
+        console.error('Callback error: Netlify JWT not found.');
         return { statusCode: 302, headers: { Location: 'https://lightcorehealth.netlify.app' } };
     }
 
@@ -87,7 +92,6 @@ async function saveTokensToSupabase(user_jwt, tokenData) {
     
     const supabaseAdmin = createAdminClient();
     
-    // ** ROBUST LOGIC: Delete any existing record first **
     const { error: deleteError } = await supabaseAdmin
         .from('user_integrations')
         .delete()
@@ -99,7 +103,6 @@ async function saveTokensToSupabase(user_jwt, tokenData) {
         throw new Error(`Supabase delete error: ${deleteError.message}`);
     }
 
-    // ** Now insert the new record **
     const { error: insertError } = await supabaseAdmin
         .from('user_integrations')
         .insert(integrationData);
