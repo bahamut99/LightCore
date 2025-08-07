@@ -4,7 +4,6 @@ const { createClient } = require('@supabase/supabase-js');
 
 const REDIRECT_URI = 'https://lightcorehealth.netlify.app/.netlify/functions/google-auth';
 
-// Admin client to bypass RLS for saving tokens
 const createAdminClient = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 exports.handler = async (event, context) => {
@@ -88,7 +87,6 @@ async function exchangeCodeForTokens(code) {
 }
 
 async function saveTokensToSupabase(user_jwt, tokenData) {
-    // First, use the user's JWT to securely identify them
     const supabaseUserClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: `Bearer ${user_jwt}` } }
     });
@@ -106,13 +104,15 @@ async function saveTokensToSupabase(user_jwt, tokenData) {
         expires_at: expires_at,
     };
     
-    // Now, use the admin client to write the data, bypassing RLS
     const supabaseAdmin = createAdminClient();
     const { error } = await supabaseAdmin
         .from('user_integrations')
         .upsert(integrationData, { onConflict: 'user_id, provider' });
 
     if (error) {
+        console.error('[DEBUG] Supabase upsert error:', error.message);
         throw new Error(`Supabase error saving tokens: ${error.message}`);
+    } else {
+        console.log(`[DEBUG] Successfully saved tokens for user ${user.id}`);
     }
 }
