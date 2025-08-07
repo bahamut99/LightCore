@@ -3,7 +3,6 @@ import { supabase } from '../supabaseClient';
 
 function Integrations() {
     const [isConnected, setIsConnected] = useState(false);
-    const [isChecked, setIsChecked] = useState(false); 
     const [stepCount, setStepCount] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -28,14 +27,11 @@ function Integrations() {
         if (checkError) {
             setError('Could not verify integration status.');
             setIsConnected(false);
-            setIsChecked(false);
         } else if (data) {
             setIsConnected(true);
-            setIsChecked(true);
             fetchSteps(session.access_token);
         } else {
             setIsConnected(false);
-            setIsChecked(false);
         }
         setIsLoading(false);
     }, []);
@@ -54,41 +50,41 @@ function Integrations() {
         }
     };
 
-    // This is the initial check on component mount.
-    useEffect(() => {
-        checkIntegrationStatus();
-    }, [checkIntegrationStatus]);
-    
-    // This new useEffect handles the redirect AFTER the state has changed
-    useEffect(() => {
-        if (isChecked && !isConnected) {
-            window.location.href = '/.netlify/functions/google-auth';
-        }
-    }, [isChecked, isConnected]);
-
-    // ** THIS IS THE NEW LOGIC TO FIX THE RACE CONDITION **
-    // This effect runs once when the component first loads.
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
-        // Check if we've just been redirected back from Google
-        if (urlParams.has('code')) {
-            // Clean the URL to remove the code
+        if (urlParams.has('code') || urlParams.has('error')) {
             window.history.replaceState({}, document.title, "/");
-            // Set a brief timeout to allow the database write to complete
-            setTimeout(() => {
-                // Manually trigger a re-check of the integration status
-                checkIntegrationStatus();
-            }, 1500); // 1.5 second delay
+            // After redirect, always re-check status
+            checkIntegrationStatus();
+        } else {
+            // Normal page load check
+            checkIntegrationStatus();
         }
-    }, [checkIntegrationStatus]); // Dependency array ensures checkIntegrationStatus is available
+    }, [checkIntegrationStatus]);
 
     const handleToggle = async (e) => {
         const isNowChecked = e.target.checked;
-        setIsChecked(isNowChecked); 
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
 
-        if (!isNowChecked) {
+        if (isNowChecked) {
+            try {
+                // 1. Ask our backend for the special Google URL
+                const response = await fetch('/.netlify/functions/google-auth', {
+                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                });
+                if (!response.ok) throw new Error('Could not get auth URL.');
+                
+                const data = await response.json();
+                
+                // 2. Redirect the user to that URL
+                window.location.href = data.authUrl;
+            } catch (err) {
+                setError("Failed to start connection process.");
+            }
+        } else {
+            // Disconnect logic
             setIsLoading(true);
-            const { data: { session } } = await supabase.auth.getSession();
             try {
                 await fetch('/.netlify/functions/delete-integration', {
                     method: 'POST',
@@ -102,7 +98,6 @@ function Integrations() {
                 setStepCount(null);
             } catch (err) {
                 setError("Failed to disconnect.");
-                setIsChecked(true); 
             }
             setIsLoading(false);
         }
@@ -123,7 +118,7 @@ function Integrations() {
                     <span>Google Health</span>
                 </div>
                 <label className="toggle-switch">
-                    <input type="checkbox" checked={isChecked} onChange={handleToggle} disabled={isLoading} />
+                    <input type="checkbox" checked={isConnected} onChange={handleToggle} disabled={isLoading} />
                     <span className="slider"></span>
                 </label>
             </div>
