@@ -30,7 +30,7 @@ exports.handler = async (event, context) => {
         }
 
         const { log, sleep_hours, sleep_quality, userTimezone } = JSON.parse(event.body);
-        const tz = userTimezone || 'UTC'; // Fallback to UTC if not provided
+        const tz = userTimezone || 'UTC';
 
         const { data: recentLogs } = await supabase.from('daily_logs').select('created_at, clarity_score, immune_score, physical_readiness_score').eq('user_id', user.id).order('created_at', { ascending: false }).limit(3);
         const { data: activeGoal } = await supabase.from('goals').select('goal_value').eq('user_id', user.id).eq('is_active', true).single();
@@ -51,12 +51,43 @@ exports.handler = async (event, context) => {
         let healthDataString = "Not available";
         
         const prompt = `
-        You are a world-class AI health analyst...
-        [Omitting the long prompt string as it is unchanged]
+        You are a world-class AI health analyst. Your process is to first think step-by-step inside a <reasoning> XML block. After the reasoning block, you will provide your final analysis as a single, valid JSON object and nothing else.
+        **MISSION:** Analyze today's data within the broader **USER CONTEXT** to provide nuanced, trend-aware scores and notes.
+        **SCORING RUBRIC & INSTRUCTIONS:**
+        - Clarity Score: Base this on reported focus, energy, and the absence or presence of 'brain fog'.
+        - Immune Score: Heavily weigh inferred stress (from the log text) and reported sleep quality as significant negative factors.
+        - Physical Score: This score represents physical readiness and recovery. Be strict and analytical.
+            - **Primary Factors (High Importance):**
+                - Sleep: Poor or insufficient sleep (<6 hours) MUST result in a low score (< 5), regardless of subjective energy. Excellent sleep is a prerequisite for a high score.
+                - Recovery Status: Look for words like "sore", "achy", "fatigued from yesterday's workout". High soreness MUST lower the score significantly to reflect the need for recovery. Conversely, mentions of "recovered", "fresh", or "rest day" are positive signals.
+            - **Secondary Factors (Moderate Importance):**
+                - Subjective Energy: Use reported energy ("energetic", "sluggish", "drained") to fine-tune the score, but it cannot override the primary factors.
+                - Inferred Stress: High mental/emotional stress also negatively impacts physical readiness.
+            - **Tertiary Factors (Minor Importance):**
+                - Use mentions of good nutrition/hydration or high step counts as minor positive adjustments.
+            - **High Scores (9-10) should be reserved for days where sleep, recovery, AND subjective energy are all clearly excellent.**
+        - Score values are 1-10. Use this color map: 1-2: #ef4444, 3-4: #f97316, 5-6: #eab308, 7-8: #22c55e, 9-10: #3b82f6.
+        - "notes" must be empathetic and should acknowledge the user's context.
+        - "tags" must be a JSON array of 3-5 relevant, lowercase strings.
+        ---
+        **USER CONTEXT FOR TODAY'S ANALYSIS:**
+        ${historyContext}
+        ${goalContext}
+        **TODAY'S DATA FOR ANALYSIS:**
+        - User Log: "${log}"
+        - Automated Health Data: ${healthDataString}
+        Now, generate the <reasoning> block followed by the final JSON response for today's data.
         `;
 
         const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
-        const aiResponse = await fetch(geminiApiUrl, { /* ... Omitted for brevity ... */ });
+        const aiResponse = await fetch(geminiApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { responseMimeType: "application/json" }
+            })
+        });
 
         if (!aiResponse.ok) {
             const errorBody = await aiResponse.text();
@@ -68,10 +99,7 @@ exports.handler = async (event, context) => {
         try {
             const rawText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (!rawText) throw new Error("AI returned an empty or invalid response structure.");
-            const jsonStart = rawText.indexOf('{');
-            if (jsonStart === -1) throw new Error("No JSON object found in the AI's response.");
-            const jsonString = rawText.substring(jsonStart);
-            analysis = JSON.parse(jsonString);
+            analysis = JSON.parse(rawText);
         } catch (parseError) {
             console.error("Failed to parse JSON from AI response:", parseError);
             throw new Error("Failed to parse AI response.");
@@ -96,22 +124,30 @@ exports.handler = async (event, context) => {
 
         const supabaseAdmin = createAdminClient();
         
-        // ... (lightcore_brain_context update logic remains the same)
+        // --- PERFORMANCE OPTIMIZATION ---
+        // Replace the slow SELECT then UPDATE with a single, fast RPC call.
+        const { error: rpcError } = await supabaseAdmin.rpc('append_to_recent_logs', {
+            target_user_id: user.id,
+            new_log_entry: newLogData
+        });
 
-        // --- THIS IS THE STREAK COUNTER FIX ---
+        if (rpcError) {
+            // Log this error but don't fail the whole function, as the primary log was saved.
+            console.error("Error updating AI context via RPC:", rpcError.message);
+        }
+
+        // --- Streak Counter Logic ---
         const { data: profile, error: profileError } = await supabaseAdmin.from('profiles').select('streak_count, last_log_date').eq('id', user.id).single();
         if (profileError) throw new Error(`Could not fetch user profile: ${profileError.message}`);
 
         if (profile) {
             const now = new Date();
-            // Get today's date string in the user's local timezone (e.g., "2025-08-06")
             const todayLocalString = now.toLocaleDateString('en-CA', { timeZone: tz });
             
             let newStreakCount = profile.streak_count || 0;
             
             if (profile.last_log_date) {
                 const lastLogDate = new Date(profile.last_log_date);
-                // Get the last log's date string in the user's local timezone
                 const lastLogLocalString = lastLogDate.toLocaleDateString('en-CA', { timeZone: tz });
 
                 if (todayLocalString !== lastLogLocalString) {
@@ -121,19 +157,18 @@ exports.handler = async (event, context) => {
                     const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
                     if (diffDays === 1) {
-                        newStreakCount++; // It was yesterday, increment streak
+                        newStreakCount++;
                     } else {
-                        newStreakCount = 1; // It's been more than a day, reset streak
+                        newStreakCount = 1;
                     }
                 }
-                // If the date strings are the same, do nothing to the streak.
             } else {
-                newStreakCount = 1; // This is the user's first log ever.
+                newStreakCount = 1;
             }
             
             await supabaseAdmin.from('profiles').update({ 
                 streak_count: newStreakCount, 
-                last_log_date: now.toISOString() // Always store the full UTC timestamp
+                last_log_date: now.toISOString()
             }).eq('id', user.id);
         }
 
