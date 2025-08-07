@@ -2,8 +2,12 @@ const fetch = require('node-fetch');
 const { URLSearchParams } = require('url');
 const { createClient } = require('@supabase/supabase-js');
 
-async function getValidAccessToken(supabase, userId) {
-    let { data: tokens, error } = await supabase
+// Add the admin client creator here as well
+const createAdminClient = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+async function getValidAccessToken(supabaseAdmin, userId) {
+    // This function now uses the admin client to bypass RLS for reading tokens
+    let { data: tokens, error } = await supabaseAdmin
         .from('user_integrations')
         .select('access_token, refresh_token, expires_at')
         .eq('user_id', userId)
@@ -34,7 +38,9 @@ async function getValidAccessToken(supabase, userId) {
     if (newTokens.error) throw new Error(`Google token refresh error: ${newTokens.error_description}`);
 
     const new_expires_at = new Date(Date.now() + newTokens.expires_in * 1000).toISOString();
-    const { error: updateError } = await supabase
+    
+    // Use the admin client to update the new token
+    await supabaseAdmin
         .from('user_integrations')
         .update({
             access_token: newTokens.access_token,
@@ -42,8 +48,6 @@ async function getValidAccessToken(supabase, userId) {
         })
         .eq('user_id', userId)
         .eq('provider', 'google-health');
-
-    if (updateError) console.error('Error updating new token:', updateError.message);
     
     return newTokens.access_token;
 }
@@ -53,22 +57,23 @@ exports.handler = async (event, context) => {
         if (!event.headers.authorization) throw new Error('No auth header');
         const token = event.headers.authorization.split(' ')[1];
 
-        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        // We use the user's token just to identify them
+        const supabaseUserClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+        const { data: { user }, error: userError } = await supabaseUserClient.auth.getUser(token);
         if (userError || !user) throw new Error('User not found for provided token.');
         
-        const accessToken = await getValidAccessToken(supabase, user.id);
+        // We create an admin client to perform the sensitive operations
+        const supabaseAdmin = createAdminClient();
+        const accessToken = await getValidAccessToken(supabaseAdmin, user.id);
 
         const now = new Date();
         const startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
 
         const requestBody = {
             aggregateBy: [{
-                // By only specifying dataTypeName and NOT dataSourceId,
-                // we ask Google to aggregate steps from ALL available sources.
                 dataTypeName: "com.google.step_count.delta"
             }],
-            bucketByTime: { durationMillis: 86400000 }, // 24 hours in milliseconds
+            bucketByTime: { durationMillis: 86400000 },
             startTimeMillis: startTime.getTime(),
             endTimeMillis: now.getTime()
         };
@@ -85,7 +90,6 @@ exports.handler = async (event, context) => {
         const fitnessData = await fitnessResponse.json();
         
         let stepCount = 0;
-        // Check if the response structure contains the data as expected
         if (fitnessData.bucket && fitnessData.bucket.length > 0 && fitnessData.bucket[0].dataset[0].point.length > 0) {
             stepCount = fitnessData.bucket[0].dataset[0].point[0].value[0].intVal;
         }
@@ -97,12 +101,6 @@ exports.handler = async (event, context) => {
 
     } catch (error) {
         console.error("Error fetching health data:", error.message);
-        if (error.message.includes('No Google Health integration tokens found')) {
-            return {
-                statusCode: 200,
-                body: JSON.stringify({ steps: null, message: 'No integration found.' }),
-            };
-        }
         return {
             statusCode: 500,
             body: JSON.stringify({ error: error.message }),
