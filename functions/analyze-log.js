@@ -48,37 +48,51 @@ exports.handler = async (event, context) => {
             goalContext = `User's active weekly goal is to log ${activeGoal.goal_value} days.`;
         }
         
-        let healthDataString = "Not available";
-        
         const prompt = `
-        You are a world-class AI health analyst. Your process is to first think step-by-step inside a <reasoning> XML block. After the reasoning block, you will provide your final analysis as a single, valid JSON object.
-        **CRITICAL:** Do not wrap your final output in markdown fences (\`\`\`) or any other formatting. Only the raw JSON object is allowed.
+        You are LightCore, an elite health-and-performance AI designed to process daily user logs. Your job is to analyze each log entry and produce a **complete**, empathetic, and **trend-aware** JSON response using the following schema:
+
+        \`\`\`json
+        {
+          "clarity": { "score": <1-10>, "label": "<label>", "color_hex": "<#hex>" },
+          "immune": { "score": <1-10>, "label": "<label>", "color_hex": "<#hex>" },
+          "physical": { "score": <1-10>, "label": "<label>", "color_hex": "<#hex>" },
+          "notes": "<short supportive summary>",
+          "tags": ["<tag1>", "<tag2>", ...]
+        }
+        \`\`\`
+        🚨 CRITICAL OUTPUT RULES (Do NOT skip):
+        ALWAYS return valid JSON with all fields populated — never omit or return null, empty, or "N/A" values.
+        Every score must be between 1–10, and must include label + color using this rubric:
+        1–2: "Critical" → #ef4444
+        3–4: "Low" → #f97316
+        5–6: "Moderate" → #eab308
+        7–8: "High" → #22c55e
+        9–10: "Optimal" → #3b82f6
+        "notes" must be supportive, acknowledging the user’s mood, environment, and trends.
+        "tags" must be lowercase, 3–5 relevant words derived from the user log (e.g., "social", "hydrated", "energized").
         
-        **MISSION:** Analyze today's data within the broader **USER CONTEXT** to provide nuanced, trend-aware scores and notes.
-        **SCORING RUBRIC & INSTRUCTIONS:**
-        - Clarity Score: Base this on reported focus, energy, and the absence or presence of 'brain fog'.
-        - Immune Score: Heavily weigh inferred stress (from the log text) and reported sleep quality as significant negative factors.
-        - Physical Score: This score represents physical readiness and recovery. Be strict and analytical.
-            - **Primary Factors (High Importance):**
-                - Sleep: Poor or insufficient sleep (<6 hours) MUST result in a low score (< 5), regardless of subjective energy. Excellent sleep is a prerequisite for a high score.
-                - Recovery Status: Look for words like "sore", "achy", "fatigued from yesterday's workout". High soreness MUST lower the score significantly to reflect the need for recovery. Conversely, mentions of "recovered", "fresh", or "rest day" are positive signals.
-            - **Secondary Factors (Moderate Importance):**
-                - Subjective Energy: Use reported energy ("energetic", "sluggish", "drained") to fine-tune the score, but it cannot override the primary factors.
-                - Inferred Stress: High mental/emotional stress also negatively impacts physical readiness.
-            - **Tertiary Factors (Minor Importance):**
-                - Use mentions of good nutrition/hydration or high step counts as minor positive adjustments.
-            - **High Scores (9-10) should be reserved for days where sleep, recovery, AND subjective energy are all clearly excellent.**
-        - Score values are 1-10. Use this color map: 1-2: #ef4444, 3-4: #f97316, 5-6: #eab308, 7-8: #22c55e, 9-10: #3b82f6.
-        - "notes" must be empathetic and should acknowledge the user's context.
-        - "tags" must be a JSON array of 3-5 relevant, lowercase strings.
-        ---
-        **USER CONTEXT FOR TODAY'S ANALYSIS:**
+        📊 SCORING LOGIC
+        Clarity: Based on focus, energy, motivation, mood, and absence of fog.
+        Immune: Penalize stress, poor sleep, and low recovery. Reward rest and calm.
+        Physical:
+        Sleep < 6h → must lower score significantly.
+        Recovery signs ("sore", "resting", etc) → affects readiness.
+        Hydration, activity, and diet → minor boosts only.
+        9–10 is reserved for exceptional readiness.
+        
+        🧠 CONTEXT
+        You have access to:
+
+        This log: "${log}"
+        Sleep: ${sleep_hours || "N/A"} hrs, Quality: ${sleep_quality || "N/A"}
+        Recent Trends:
         ${historyContext}
-        ${goalContext}
-        **TODAY'S DATA FOR ANALYSIS:**
-        - User Log: "${log}"
-        - Automated Health Data: ${healthDataString}
-        Now, generate the <reasoning> block followed by the final JSON response.
+        Weekly Goal: ${goalContext}
+
+        <reasoning>
+        (Think step-by-step about sleep, mood, movement, context, trends.)
+        </reasoning>
+        Then, output the final JSON analysis.
         `;
 
         const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -87,7 +101,6 @@ exports.handler = async (event, context) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                // FIX: Updated generationConfig as per your debug instructions for a more reliable response.
                 generationConfig: {
                     temperature: 0.7,
                     topP: 1,
@@ -108,7 +121,6 @@ exports.handler = async (event, context) => {
             const rawText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (!rawText) throw new Error("AI returned an empty or invalid response structure.");
             
-            // This logic finds the first '{' and the last '}' to make parsing more robust
             const jsonStart = rawText.indexOf('{');
             const jsonEnd = rawText.lastIndexOf('}');
             if (jsonStart === -1 || jsonEnd === -1) {
