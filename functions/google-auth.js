@@ -4,6 +4,9 @@ const { createClient } = require('@supabase/supabase-js');
 
 const REDIRECT_URI = 'https://lightcorehealth.netlify.app/.netlify/functions/google-auth';
 
+// Admin client to bypass RLS for saving tokens
+const createAdminClient = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
 exports.handler = async (event, context) => {
     if (event.queryStringParameters.code) {
         return handleCallback(event);
@@ -12,8 +15,6 @@ exports.handler = async (event, context) => {
 };
 
 function startAuth() {
-    // FIX: Removed scopes for sleep, blood pressure, and blood glucose.
-    // We are now only requesting the permission we actually use.
     const scopes = [
         'https://www.googleapis.com/auth/fitness.activity.read'
     ];
@@ -87,11 +88,12 @@ async function exchangeCodeForTokens(code) {
 }
 
 async function saveTokensToSupabase(user_jwt, tokenData) {
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+    // First, use the user's JWT to securely identify them
+    const supabaseUserClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: `Bearer ${user_jwt}` } }
     });
     
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await supabaseUserClient.auth.getUser();
     if (!user) throw new Error('Could not find user.');
 
     const expires_at = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
@@ -104,7 +106,9 @@ async function saveTokensToSupabase(user_jwt, tokenData) {
         expires_at: expires_at,
     };
     
-    const { error } = await supabase
+    // Now, use the admin client to write the data, bypassing RLS
+    const supabaseAdmin = createAdminClient();
+    const { error } = await supabaseAdmin
         .from('user_integrations')
         .upsert(integrationData, { onConflict: 'user_id, provider' });
 
