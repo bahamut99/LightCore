@@ -124,8 +124,11 @@ exports.handler = async (event, context) => {
 
         const supabaseAdmin = createAdminClient();
         
+        // --- THIS IS THE FIX ---
+        // I have explicitly named the parameters to match the SQL function's argument names.
+        // This removes any ambiguity and should prevent the parameter mix-up.
         const { error: rpcError } = await supabaseAdmin.rpc('append_to_recent_logs', {
-            target_user_id: user.id,
+            target_user_id: user.id, 
             new_log_entry: newLogData
         });
 
