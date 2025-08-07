@@ -124,18 +124,20 @@ exports.handler = async (event, context) => {
 
         const supabaseAdmin = createAdminClient();
         
-        // --- THIS IS THE FIX ---
-        // I have explicitly named the parameters to match the SQL function's argument names.
-        // This removes any ambiguity and should prevent the parameter mix-up.
-        const { error: rpcError } = await supabaseAdmin.rpc('append_to_recent_logs', {
-            target_user_id: user.id, 
-            new_log_entry: newLogData
+        // --- PERFORMANCE OPTIMIZATION ---
+        // Step 1: Ensure a context row exists. This creates it on the first log.
+        await supabaseAdmin.rpc('upsert_lightcore_context', {
+            p_user_id: user.id,
+            p_new_log: newLogData
+        });
+        
+        // Step 2: Prepend the new log to the array in a separate, clean step.
+        await supabaseAdmin.rpc('prepend_to_recent_logs', {
+            p_user_id: user.id,
+            p_new_log_entry: newLogData
         });
 
-        if (rpcError) {
-            console.error("Error updating AI context via RPC:", rpcError.message);
-        }
-
+        // --- Streak Counter Logic ---
         const { data: profile, error: profileError } = await supabaseAdmin.from('profiles').select('streak_count, last_log_date').eq('id', user.id).single();
         if (profileError) throw new Error(`Could not fetch user profile: ${profileError.message}`);
 
