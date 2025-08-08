@@ -35,7 +35,7 @@
     <div id="diagnostic-panel" class="absolute top-4 right-4 w-full max-w-md h-[calc(100vh-2rem)] rounded-lg shadow-2xl p-4 flex flex-col text-sm overflow-hidden border border-cyan-400/20">
         <div class="flex-shrink-0 pb-4 border-b border-cyan-400/20">
             <h1 class="font-orbitron text-2xl glowing-text">RESONANCE CORE</h1>
-            <p class="text-xs text-cyan-300">LIGHTCORE BDT v.2077.5.gamma</p>
+            <p class="text-xs text-cyan-300">LIGHTCORE BDT v.2077.6.zeta</p>
         </div>
         
         <div class="flex-shrink-0 py-4 grid grid-cols-2 gap-4">
@@ -44,7 +44,7 @@
                 <p id="subject-id" class="text-cyan-200 truncate">SYNCING...</p>
             </div>
              <div>
-                <p class="font-bold">BIO-CORE STATUS:</p>
+                <p class="font-bold">SYSTEM STATE:</p>
                 <p id="system-status" class="font-bold status-nominal">CALIBRATING...</p>
             </div>
         </div>
@@ -68,9 +68,9 @@
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6YmphZGl6YWhxbGZyZHFvZnl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMDE1OTksImV4cCI6MjA2OTc3NzU5OX0.sCoMYav2kGtopZsmijAJojBgoN_ay-ddAVYT3I-l6o0';
 
         const ANOMALY_MAP = {
-            'stress': { name: 'Cortisol Hotspot', color: 0xffa500, severity: 'WARNING' },
-            'anxious': { name: 'Cortisol Hotspot', color: 0xffa500, severity: 'WARNING' },
-            'fatigue': { name: 'Lactic Acid Cluster', color: 0xff4500, severity: 'WARNING' },
+            'stress': { name: 'Cortisol Cluster', color: 0xffa500, severity: 'WARNING' },
+            'anxious': { name: 'Cortisol Cluster', color: 0xffa500, severity: 'WARNING' },
+            'fatigue': { name: 'Lactic Acid Cloud', color: 0xff4500, severity: 'WARNING' },
             'sore': { name: 'Myofibril Tearing', color: 0xff4500, severity: 'WARNING' },
             'poor sleep': { name: 'Melatonin Imbalance', color: 0x8A2BE2, severity: 'CRITICAL' },
             'brain fog': { name: 'Neural Misfiring', color: 0xffffff, severity: 'CRITICAL' },
@@ -78,21 +78,18 @@
             'energized': { name: 'Mitochondrial Efficiency', color: 0x00ff88, severity: 'INFO' },
         };
 
-        let scene, camera, renderer, bioCoreModel, nanobots, anomalies;
+        let scene, camera, renderer, singularity, stardust, anomalyNodes, constellationGroup;
         const container = document.getElementById('container');
         const logContainer = document.getElementById('log-container');
         const systemStatusEl = document.getElementById('system-status');
         const subjectIdEl = document.getElementById('subject-id');
         const resyncButton = document.getElementById('resync-data');
-        let supabaseClient; // Renamed variable to avoid conflict
+        let supabaseClient;
         let currentAuthToken = null;
 
         async function fetchAndInitialize(authToken) {
             addLogEntry('INFO', 'Establishing secure link to LightCore Brain...');
             currentAuthToken = authToken;
-            
-            // ** FIX: Use the global 'supabase' object from the script tag **
-            // and assign the created client to our renamed local variable.
             supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
                 global: { headers: { Authorization: `Bearer ${authToken}` } }
             });
@@ -113,15 +110,15 @@
             
             if (error || !logs || logs.length === 0) {
                 addLogEntry('WARNING', 'No user data found. Running baseline simulation.');
-                updateSystemStatus('UNKNOWN', '#9CA3AF');
-                const defaultScores = { clarity: 7, immune: 7, physical: 7 };
+                updateSystemStatus('NOMINAL', '#00ff88');
+                const defaultScores = { clarity: 8, immune: 8, physical: 8 };
                 if (scene) {
                    while(scene.children.length > 0){ scene.remove(scene.children[0]); }
                 }
                 initScene();
-                createBioCore(defaultScores);
-                createNanobots(defaultScores);
-                createAnomaliesFromLogs([]);
+                createSingularity(defaultScores);
+                createStardustField(defaultScores);
+                createAnomalyNodesFromLogs([]);
                 animate(defaultScores);
                 return;
             }
@@ -139,16 +136,16 @@
             initScene();
             
             populateHistoricalLogs(logs);
-            createBioCore(latestScores);
-            createNanobots(latestScores);
-            createAnomaliesFromLogs(logs);
+            createSingularity(latestScores);
+            createStardustField(latestScores);
+            createAnomalyNodesFromLogs(logs);
             animate(latestScores);
         }
         
         function initScene() {
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.z = 15;
+            camera.position.z = 25;
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
@@ -162,74 +159,69 @@
             const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
             directionalLight.position.set(10, 10, 10);
             scene.add(directionalLight);
+            
+            constellationGroup = new THREE.Group();
+            scene.add(constellationGroup);
         }
 
-        function createBioCore(scores) {
+        function createSingularity(scores) {
             const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
-            const coreColor = new THREE.Color().lerpColors(new THREE.Color(0xff0000), new THREE.Color(0x00f0ff), avgScore / 10);
-            const geometry = new THREE.IcosahedronGeometry(5, 4);
+            const coreColor = new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avgScore / 10);
+
+            const geometry = new THREE.IcosahedronGeometry(4, 5);
             const material = new THREE.MeshStandardMaterial({
                 color: coreColor,
                 emissive: coreColor,
-                emissiveIntensity: 0.3,
+                emissiveIntensity: 0.5,
                 metalness: 0.8,
-                roughness: 0.4,
-                transparent: true,
-                opacity: 0.7,
-                wireframe: true,
+                roughness: 0.2,
             });
-            bioCoreModel = new THREE.Mesh(geometry, material);
-            scene.add(bioCoreModel);
+            singularity = new THREE.Mesh(geometry, material);
+            scene.add(singularity);
         }
 
-        function createNanobots(scores) {
+        function createStardustField(scores) {
             const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
-            const botColor = new THREE.Color().lerpColors(new THREE.Color(0xffd700), new THREE.Color(0x00f0ff), avgScore / 7);
+            const particleColor = new THREE.Color().lerpColors(new THREE.Color(0xffd700), new THREE.Color(0x00f0ff), avgScore / 7);
             const count = 5000;
             const geometry = new THREE.BufferGeometry();
             const positions = new Float32Array(count * 3);
             const velocities = [];
-            const radius = 12;
+            const radius = 30;
 
             for (let i = 0; i < count; i++) {
+                const r = radius * Math.cbrt(Math.random());
                 const theta = Math.random() * 2 * Math.PI;
                 const phi = Math.acos(2 * Math.random() - 1);
-                positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
-                positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
-                positions[i * 3 + 2] = radius * Math.cos(phi);
-                const agitation = 1 - (avgScore / 10);
-                velocities.push(new THREE.Vector3(
-                    (Math.random() - 0.5) * (0.02 + agitation * 0.05),
-                    (Math.random() - 0.5) * (0.02 + agitation * 0.05),
-                    (Math.random() - 0.5) * (0.02 + agitation * 0.05)
-                ));
+                positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+                positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+                positions[i * 3 + 2] = r * Math.cos(phi);
+                
+                velocities.push(new THREE.Vector3());
             }
 
             geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             geometry.velocities = velocities;
-            const material = new THREE.PointsMaterial({ size: 0.08, color: botColor, blending: THREE.AdditiveBlending });
-            nanobots = new THREE.Points(geometry, material);
-            scene.add(nanobots);
+            const material = new THREE.PointsMaterial({ size: 0.05, color: particleColor, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.8 });
+            stardust = new THREE.Points(geometry, material);
+            scene.add(stardust);
         }
 
-        function createAnomaliesFromLogs(logs) {
-            anomalies = [];
+        function createAnomalyNodesFromLogs(logs) {
+            anomalyNodes = [];
             let addedAnomalies = new Set();
             logs.forEach(log => {
                 if (!log.tags) return;
                 log.tags.forEach(tag => {
                     const anomalyType = ANOMALY_MAP[tag];
                     if (anomalyType && !addedAnomalies.has(anomalyType.name)) {
-                        const geometry = new THREE.SphereGeometry(0.3, 16, 16);
-                        const material = new THREE.MeshBasicMaterial({ color: anomalyType.color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending });
-                        const anomaly = new THREE.Mesh(geometry, material);
-                        const radius = 6 + Math.random();
+                        const anomalyNode = new THREE.Object3D();
+                        const radius = 8 + Math.random() * 5;
                         const theta = Math.random() * 2 * Math.PI;
                         const phi = Math.acos(2 * Math.random() - 1);
-                        anomaly.position.set(radius * Math.sin(phi) * Math.cos(theta), radius * Math.sin(phi) * Math.sin(theta), radius * Math.cos(phi));
-                        anomaly.userData = { type: anomalyType.name, severity: anomalyType.severity, detected: false, detectionProgress: 0 };
-                        anomalies.push(anomaly);
-                        scene.add(anomaly);
+                        anomalyNode.position.set(radius * Math.sin(phi) * Math.cos(theta), radius * Math.sin(phi) * Math.sin(theta), radius * Math.cos(phi));
+                        anomalyNode.userData = { type: anomalyType.name, severity: anomalyType.severity, color: anomalyType.color };
+                        anomalyNodes.push(anomalyNode);
                         addedAnomalies.add(anomalyType.name);
                     }
                 });
@@ -239,45 +231,79 @@
         function animate(scores) {
             if (!scores || !renderer) return;
             requestAnimationFrame(() => animate(scores));
-            const time = Date.now() * 0.001;
-            if (bioCoreModel) {
-                const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
-                const pulseSpeed = 0.5 + (avgScore / 10);
-                const pulseStrength = 0.01 + (avgScore / 10) * 0.03;
-                const pulse = Math.sin(time * pulseSpeed) * pulseStrength + 1;
-                bioCoreModel.scale.set(pulse, pulse, pulse);
-                bioCoreModel.rotation.y += 0.001;
+            const time = Date.now() * 0.0005;
+            
+            if (singularity) {
+                singularity.rotation.y = time * 0.1;
+                singularity.rotation.x = time * 0.05;
             }
-            if (nanobots) updateNanobots();
+
+            if (stardust) {
+                updateStardustField();
+            }
+
             renderer.render(scene, camera);
         }
 
-        function updateNanobots() {
-            const positions = nanobots.geometry.attributes.position;
-            const velocities = nanobots.geometry.velocities;
-            const bounds = 12;
+        function updateStardustField() {
+            const positions = stardust.geometry.attributes.position;
+            const velocities = stardust.geometry.velocities;
+            const center = new THREE.Vector3(0, 0, 0);
+
+            constellationGroup.children = [];
+
             for (let i = 0; i < positions.count; i++) {
                 const pos = new THREE.Vector3(positions.getX(i), positions.getY(i), positions.getZ(i));
-                pos.add(velocities[i]);
-                if (pos.length() > bounds) {
-                    pos.normalize().multiplyScalar(bounds);
-                    velocities[i].reflect(pos.clone().normalize());
-                }
+                const vel = velocities[i];
+
+                const toCenter = center.clone().sub(pos);
+                const distance = pos.length();
+                
+                // Gravitational pull towards the center
+                const gravity = toCenter.normalize().multiplyScalar(0.001);
+                vel.add(gravity);
+                
+                // Orbital velocity to prevent falling into the singularity
+                const orbitalVel = new THREE.Vector3(-pos.y, pos.x, 0).normalize().multiplyScalar(0.01 / distance);
+                vel.add(orbitalVel);
+
+                vel.multiplyScalar(0.98); // Drag
+                pos.add(vel);
+
                 positions.setXYZ(i, pos.x, pos.y, pos.z);
-                anomalies.forEach(anomaly => {
-                    if (pos.distanceTo(anomaly.position) < 1.5) {
-                        if (!anomaly.userData.detected) {
-                            anomaly.userData.detectionProgress += 0.005;
-                            if (anomaly.userData.detectionProgress > 1) {
-                                anomaly.userData.detected = true;
-                                anomaly.material.opacity = 0.7;
-                                addLogEntry(anomaly.userData.severity, `Swarm Alert: ${anomaly.userData.type} detected.`);
-                                updateSystemStatusFromAnomalies();
-                            }
+            }
+
+            // Emergent Constellations
+            anomalyNodes.forEach(node => {
+                const nearbyParticles = [];
+                for (let i = 0; i < positions.count; i++) {
+                    const pos = new THREE.Vector3(positions.getX(i), positions.getY(i), positions.getZ(i));
+                    if (pos.distanceTo(node.position) < 2.5) {
+                        nearbyParticles.push(pos);
+                    }
+                    if (nearbyParticles.length > 5) break; // Limit constellation size
+                }
+
+                if (nearbyParticles.length > 2) {
+                    const points = [];
+                    for(let j = 0; j < nearbyParticles.length; j++){
+                        for(let k = j + 1; k < nearbyParticles.length; k++){
+                            points.push(nearbyParticles[j]);
+                            points.push(nearbyParticles[k]);
                         }
                     }
-                });
-            }
+                    const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+                    const lineMaterial = new THREE.LineBasicMaterial({ 
+                        color: node.userData.color,
+                        blending: THREE.AdditiveBlending,
+                        transparent: true,
+                        opacity: 0.5
+                    });
+                    const constellation = new THREE.LineSegments(lineGeometry, lineMaterial);
+                    constellationGroup.add(constellation);
+                }
+            });
+
             positions.needsUpdate = true;
         }
 
@@ -311,12 +337,7 @@
         }
         
         function updateSystemStatusFromAnomalies() {
-            const detectedAnomalies = anomalies.filter(a => a.userData.detected);
-            if (detectedAnomalies.some(a => a.userData.severity === 'CRITICAL')) {
-                updateSystemStatus('CRITICAL', '#ff4d4d');
-            } else if (detectedAnomalies.length > 0) {
-                updateSystemStatus('WARNING', '#ffd700');
-            }
+            // This could be enhanced to reflect constellation detection in the future
         }
 
         window.addEventListener('resize', () => {
