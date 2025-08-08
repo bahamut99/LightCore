@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bio-Metric Resonance Chamber [LightCore]</title>
+    <title>Resonance Core [LightCore]</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -34,7 +34,7 @@
 
     <div id="diagnostic-panel" class="absolute top-4 right-4 w-full max-w-md h-[calc(100vh-2rem)] rounded-lg shadow-2xl p-4 flex flex-col text-sm overflow-hidden border border-cyan-400/20">
         <div class="flex-shrink-0 pb-4 border-b border-cyan-400/20">
-            <h1 class="font-orbitron text-2xl glowing-text">RESONANCE CHAMBER</h1>
+            <h1 class="font-orbitron text-2xl glowing-text">RESONANCE CORE</h1>
             <p class="text-xs text-cyan-300">LIGHTCORE BDT v.2077.5.gamma</p>
         </div>
         
@@ -84,17 +84,20 @@
         const systemStatusEl = document.getElementById('system-status');
         const subjectIdEl = document.getElementById('subject-id');
         const resyncButton = document.getElementById('resync-data');
-        let supabase;
+        let supabaseClient; // Renamed variable to avoid conflict
         let currentAuthToken = null;
 
         async function fetchAndInitialize(authToken) {
             addLogEntry('INFO', 'Establishing secure link to LightCore Brain...');
             currentAuthToken = authToken;
-            supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            
+            // ** FIX: Use the global 'supabase' object from the script tag **
+            // and assign the created client to our renamed local variable.
+            supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
                 global: { headers: { Authorization: `Bearer ${authToken}` } }
             });
 
-            const { data: { user } } = await supabase.auth.getUser();
+            const { data: { user } } = await supabaseClient.auth.getUser();
             if (!user) {
                 addLogEntry('CRITICAL', 'Authentication failed. Please log in to the main dashboard and refresh.');
                 updateSystemStatus('ERROR', '#ff4d4d');
@@ -102,7 +105,7 @@
             }
             subjectIdEl.textContent = user.id.split('-')[0];
 
-            const { data: logs, error } = await supabase
+            const { data: logs, error } = await supabaseClient
                 .from('daily_logs')
                 .select('created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes')
                 .order('created_at', { ascending: false })
@@ -328,20 +331,13 @@
             if(currentAuthToken) fetchAndInitialize(currentAuthToken);
         });
 
-        // --- AUTOMATIC STARTUP LOGIC ---
         function start() {
             try {
-                // 1. Read the token from sessionStorage
                 const userToken = sessionStorage.getItem('supabase.auth.token');
-                
-                // 2. IMPORTANT: Remove the token immediately after reading for security
                 sessionStorage.removeItem('supabase.auth.token');
-
                 if (userToken) {
-                    // 3. If found, initialize the simulation.
                     fetchAndInitialize(userToken);
                 } else {
-                    // 4. If not found, show an error.
                     throw new Error("Active session token not found.");
                 }
             } catch (error) {

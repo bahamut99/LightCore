@@ -29,8 +29,8 @@ function Header() {
       />
       <h1>LightCore - Your Bio Digital Twin</h1>
       <div className="header-actions">
-        {/* New Button to Access the Resonance Chamber */}
-        <a href="#" className="header-btn" onClick={handleNavigateToChamber}>Resonance Chamber</a>
+        {/* Updated Button Text */}
+        <a href="#" className="header-btn" onClick={handleNavigateToChamber}>Resonance Core</a>
         <a href="#" id="logout-link" className="header-btn" onClick={handleLogout}>Log Out</a>
       </div>
     </div>
