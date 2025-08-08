@@ -4,43 +4,117 @@ import { OrbitControls } from '@react-three/drei';
 import { supabase } from '../supabaseClient';
 import * as THREE from 'three';
 
-// NEW: A component for each individual historical log node
-function LogNode({ log, position }) {
+// NEW: The HUD component for displaying 2D information over the 3D scene
+function Hud({ log, onClose }) {
+  if (!log) return null;
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric', month: 'long', day: 'numeric'
+    });
+  };
+
+  return (
+    <div 
+      style={{ 
+        position: 'absolute', 
+        top: '2rem', 
+        left: '2rem', 
+        width: '400px',
+        color: '#00f0ff',
+        background: 'rgba(10, 25, 47, 0.6)',
+        border: '1px solid rgba(0, 240, 255, 0.2)',
+        backdropFilter: 'blur(10px)',
+        borderRadius: '0.5rem',
+        padding: '1.5rem',
+        fontFamily: "'Roboto Mono', monospace",
+        fontSize: '14px',
+        animation: 'fadeIn 0.5s ease-out'
+      }}
+    >
+      <button onClick={onClose} style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', background: 'none', border: 'none', color: '#00f0ff', fontSize: '1.5rem', cursor: 'pointer' }}>
+        &times;
+      </button>
+      
+      <h2 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '1.25rem', textShadow: '0 0 5px #00f0ff', marginBottom: '1rem' }}>
+        LOG ENTRY: {formatDate(log.created_at)}
+      </h2>
+      
+      <div style={{ maxHeight: '200px', overflowY: 'auto', paddingRight: '1rem', marginBottom: '1rem' }}>
+        <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{log.ai_notes}</p>
+      </div>
+
+      <div style={{ borderTop: '1px solid rgba(0, 240, 255, 0.2)', paddingTop: '1rem' }}>
+        <h3 style={{ fontFamily: "'Orbitron', sans-serif", marginBottom: '0.75rem' }}>TAGS</h3>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+          {log.tags?.map(tag => (
+            <span key={tag} style={{ background: 'rgba(0, 240, 255, 0.1)', padding: '0.25rem 0.75rem', borderRadius: '99px', fontSize: '12px' }}>
+              {tag}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// UPDATE: LogNode is now interactive
+function LogNode({ log, position, onNodeClick, isSelected }) {
   const meshRef = useRef();
 
-  // Calculate the color based on this specific log's average score
   const materialProps = useMemo(() => {
     const avgScore = (log.clarity_score + log.immune_score + log.physical_readiness_score) / 30;
     const color = new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avgScore);
-    return { color, emissive: color };
-  }, [log]);
+    return { color, emissive: color, emissiveIntensity: isSelected ? 2.5 : 1 };
+  }, [log, isSelected]);
+
+  // Animate scale on selection
+  useFrame(() => {
+    if (meshRef.current) {
+        meshRef.current.scale.lerp(new THREE.Vector3(1, 1, 1).multiplyScalar(isSelected ? 1.8 : 1), 0.1);
+    }
+  });
 
   return (
-    <mesh ref={meshRef} position={position}>
+    <mesh 
+      ref={meshRef} 
+      position={position}
+      onClick={(e) => {
+        e.stopPropagation(); // Prevents clicks from going through to the background
+        onNodeClick(log);
+      }}
+    >
       <sphereGeometry args={[0.2, 16, 16]} />
-      <meshStandardMaterial {...materialProps} emissiveIntensity={1} />
+      <meshStandardMaterial {...materialProps} />
     </mesh>
   );
 }
 
-// NEW: A component to arrange all the log nodes into a constellation
-function Constellation({ logs }) {
+// UPDATE: Constellation now passes click handlers down
+function Constellation({ logs, onNodeClick, selectedLog }) {
   const nodes = useMemo(() => {
-    // We'll arrange the nodes in a circle around the Locus
     const radius = 6;
     return logs.map((log, index) => {
       const angle = (index / logs.length) * Math.PI * 2;
       const x = radius * Math.cos(angle);
       const y = radius * Math.sin(angle);
-      const z = 0; // All on the same plane for now
-      return <LogNode key={log.created_at} log={log} position={[x, y, z]} />;
+      const z = 0; 
+      return (
+        <LogNode 
+          key={log.created_at} 
+          log={log} 
+          position={[x, y, z]} 
+          onNodeClick={onNodeClick}
+          isSelected={selectedLog?.created_at === log.created_at}
+        />
+      );
     });
-  }, [logs]);
+  }, [logs, onNodeClick, selectedLog]);
 
   return <group>{nodes}</group>;
 }
 
-// The Locus orb remains the same
 function Locus() {
   const meshRef = useRef();
   useFrame((state, delta) => {
@@ -57,11 +131,12 @@ function Locus() {
   );
 }
 
-// The main component now fetches the full history
+// UPDATE: Main component now manages selection state
 function NeuralCortex() {
-  const [logHistory, setLogHistory] = useState([]); // Stores all 30 logs
+  const [logHistory, setLogHistory] = useState([]); 
   const [latestScores, setLatestScores] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedLog, setSelectedLog] = useState(null); // NEW state for selected log
 
   useEffect(() => {
     const fetchAllData = async () => {
@@ -69,18 +144,16 @@ function NeuralCortex() {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-        // Fetch the last 30 logs instead of just one
         const { data: logs, error } = await supabase
           .from('daily_logs')
-          .select('created_at, clarity_score, immune_score, physical_readiness_score')
+          .select('created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes') // Fetching more data now
           .order('created_at', { ascending: false })
           .limit(30);
 
         if (error) {
           console.error("Error fetching logs:", error);
         } else if (logs && logs.length > 0) {
-          setLogHistory(logs); // Store the entire history
-          // The "latest" scores are still from the first item in the sorted array
+          setLogHistory(logs);
           setLatestScores({
             clarity: logs[0].clarity_score,
             immune: logs[0].immune_score,
@@ -107,6 +180,9 @@ function NeuralCortex() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
+      {/* The HUD is rendered outside the Canvas, as a sibling */}
+      <Hud log={selectedLog} onClose={() => setSelectedLog(null)} />
+      
       <Canvas camera={{ position: [0, 0, 12], fov: 75 }}>
         <ambientLight intensity={0.2} />
         <pointLight position={[-10, 5, 5]} intensity={lightIntensities.clarity} color="#00f0ff" />
@@ -116,7 +192,11 @@ function NeuralCortex() {
         {!isLoading && (
           <>
             <Locus />
-            <Constellation logs={logHistory} />
+            <Constellation 
+              logs={logHistory} 
+              onNodeClick={setSelectedLog}
+              selectedLog={selectedLog}
+            />
           </>
         )}
 
