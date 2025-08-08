@@ -4,32 +4,23 @@ import { OrbitControls } from '@react-three/drei';
 import { supabase } from '../supabaseClient';
 import * as THREE from 'three';
 
-// NEW: The HUD component for displaying 2D information over the 3D scene
+// The HUD component for displaying 2D information
 function Hud({ log, onClose }) {
   if (!log) return null;
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric', month: 'long', day: 'numeric'
-    });
-  };
+  console.log('HUD is rendering for log:', log.created_at); // Diagnostic log
+
+  const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
     <div 
       style={{ 
-        position: 'absolute', 
-        top: '2rem', 
-        left: '2rem', 
-        width: '400px',
-        color: '#00f0ff',
-        background: 'rgba(10, 25, 47, 0.6)',
-        border: '1px solid rgba(0, 240, 255, 0.2)',
-        backdropFilter: 'blur(10px)',
-        borderRadius: '0.5rem',
-        padding: '1.5rem',
-        fontFamily: "'Roboto Mono', monospace",
-        fontSize: '14px',
-        animation: 'fadeIn 0.5s ease-out'
+        position: 'absolute', top: '2rem', left: '2rem', width: '400px',
+        color: '#00f0ff', background: 'rgba(10, 25, 47, 0.7)',
+        border: '1px solid rgba(0, 240, 255, 0.2)', backdropFilter: 'blur(10px)',
+        borderRadius: '0.5rem', padding: '1.5rem',
+        fontFamily: "'Roboto Mono', monospace", fontSize: '14px',
+        animation: 'fadeIn 0.5s ease-out', zIndex: 10
       }}
     >
       <button onClick={onClose} style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', background: 'none', border: 'none', color: '#00f0ff', fontSize: '1.5rem', cursor: 'pointer' }}>
@@ -58,22 +49,18 @@ function Hud({ log, onClose }) {
   );
 }
 
-
-// UPDATE: LogNode is now interactive
-function LogNode({ log, position, onNodeClick, isSelected }) {
+// The interactive historical log node
+function LogNode({ log, position, setSelectedLog, isSelected }) {
   const meshRef = useRef();
 
   const materialProps = useMemo(() => {
-    const avgScore = (log.clarity_score + log.immune_score + log.physical_readiness_score) / 30;
+    const avgScore = ((log.clarity_score || 0) + (log.immune_score || 0) + (log.physical_readiness_score || 0)) / 30;
     const color = new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avgScore);
     return { color, emissive: color, emissiveIntensity: isSelected ? 2.5 : 1 };
   }, [log, isSelected]);
 
-  // Animate scale on selection
   useFrame(() => {
-    if (meshRef.current) {
-        meshRef.current.scale.lerp(new THREE.Vector3(1, 1, 1).multiplyScalar(isSelected ? 1.8 : 1), 0.1);
-    }
+    meshRef.current.scale.lerp(new THREE.Vector3(1, 1, 1).multiplyScalar(isSelected ? 1.8 : 1), 0.1);
   });
 
   return (
@@ -81,8 +68,9 @@ function LogNode({ log, position, onNodeClick, isSelected }) {
       ref={meshRef} 
       position={position}
       onClick={(e) => {
-        e.stopPropagation(); // Prevents clicks from going through to the background
-        onNodeClick(log);
+        e.stopPropagation();
+        console.log('Node clicked:', log.created_at); // Diagnostic log
+        setSelectedLog(log);
       }}
     >
       <sphereGeometry args={[0.2, 16, 16]} />
@@ -91,30 +79,26 @@ function LogNode({ log, position, onNodeClick, isSelected }) {
   );
 }
 
-// UPDATE: Constellation now passes click handlers down
-function Constellation({ logs, onNodeClick, selectedLog }) {
-  const nodes = useMemo(() => {
+// The component to arrange all nodes
+function Constellation({ logs, setSelectedLog, selectedLog }) {
+  return useMemo(() => {
     const radius = 6;
     return logs.map((log, index) => {
       const angle = (index / logs.length) * Math.PI * 2;
-      const x = radius * Math.cos(angle);
-      const y = radius * Math.sin(angle);
-      const z = 0; 
       return (
         <LogNode 
           key={log.created_at} 
           log={log} 
-          position={[x, y, z]} 
-          onNodeClick={onNodeClick}
+          position={[radius * Math.cos(angle), radius * Math.sin(angle), 0]} 
+          setSelectedLog={setSelectedLog}
           isSelected={selectedLog?.created_at === log.created_at}
         />
       );
     });
-  }, [logs, onNodeClick, selectedLog]);
-
-  return <group>{nodes}</group>;
+  }, [logs, setSelectedLog, selectedLog]);
 }
 
+// The central Locus orb
 function Locus() {
   const meshRef = useRef();
   useFrame((state, delta) => {
@@ -131,12 +115,12 @@ function Locus() {
   );
 }
 
-// UPDATE: Main component now manages selection state
+// The main component that manages state
 function NeuralCortex() {
   const [logHistory, setLogHistory] = useState([]); 
   const [latestScores, setLatestScores] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedLog, setSelectedLog] = useState(null); // NEW state for selected log
+  const [selectedLog, setSelectedLog] = useState(null);
 
   useEffect(() => {
     const fetchAllData = async () => {
@@ -146,41 +130,34 @@ function NeuralCortex() {
       if (session) {
         const { data: logs, error } = await supabase
           .from('daily_logs')
-          .select('created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes') // Fetching more data now
+          .select('created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes')
           .order('created_at', { ascending: false })
           .limit(30);
 
-        if (error) {
-          console.error("Error fetching logs:", error);
-        } else if (logs && logs.length > 0) {
+        if (error) console.error("Error fetching logs:", error);
+        else if (logs && logs.length > 0) {
           setLogHistory(logs);
-          setLatestScores({
-            clarity: logs[0].clarity_score,
-            immune: logs[0].immune_score,
-            physical: logs[0].physical_readiness_score
-          });
+          setLatestScores({ ...logs[0] });
         } else {
           setLatestScores({ clarity: 8, immune: 8, physical: 8 });
         }
       }
       setIsLoading(false);
     };
-
     fetchAllData();
   }, []);
 
   const lightIntensities = useMemo(() => {
     if (!latestScores) return { clarity: 0, immune: 0, physical: 0 };
     return {
-      clarity: latestScores.clarity * 150,
-      immune: latestScores.immune * 150,
-      physical: latestScores.physical * 150,
+      clarity: (latestScores.clarity_score || 0) * 150,
+      immune: (latestScores.immune_score || 0) * 150,
+      physical: (latestScores.physical_readiness_score || 0) * 150,
     };
   }, [latestScores]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
-      {/* The HUD is rendered outside the Canvas, as a sibling */}
       <Hud log={selectedLog} onClose={() => setSelectedLog(null)} />
       
       <Canvas camera={{ position: [0, 0, 12], fov: 75 }}>
@@ -194,12 +171,11 @@ function NeuralCortex() {
             <Locus />
             <Constellation 
               logs={logHistory} 
-              onNodeClick={setSelectedLog}
+              setSelectedLog={setSelectedLog}
               selectedLog={selectedLog}
             />
           </>
         )}
-
         <OrbitControls enablePan={false} enableZoom={true} autoRotate={true} autoRotateSpeed={0.3}/>
       </Canvas>
     </div>
