@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import Auth from './components/Auth.jsx';
-import Dashboard from './components/Dashboard.jsx';
+// Import our new NeuralCortex component
+import NeuralCortex from './components/NeuralCortex.jsx';
 
 function App() {
   const [session, setSession] = useState(null);
@@ -26,7 +27,8 @@ function App() {
 
   return (
     <div>
-      {!session ? <Auth /> : <Dashboard key={session.user.id} />}
+      {/* We are temporarily replacing the Dashboard with the NeuralCortex */}
+      {!session ? <Auth /> : <NeuralCortex />}
     </div>
   );
 }
