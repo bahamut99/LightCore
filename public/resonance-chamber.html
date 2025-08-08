@@ -84,15 +84,12 @@
         const systemStatusEl = document.getElementById('system-status');
         const subjectIdEl = document.getElementById('subject-id');
         const resyncButton = document.getElementById('resync-data');
-        let supabaseClient; // Renamed variable to avoid conflict
+        let supabaseClient;
         let currentAuthToken = null;
 
         async function fetchAndInitialize(authToken) {
             addLogEntry('INFO', 'Establishing secure link to LightCore Brain...');
             currentAuthToken = authToken;
-            
-            // ** FIX: Use the global 'supabase' object from the script tag **
-            // and assign the created client to our renamed local variable.
             supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
                 global: { headers: { Authorization: `Bearer ${authToken}` } }
             });
@@ -185,7 +182,8 @@
         function createNanobots(scores) {
             const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
             const botColor = new THREE.Color().lerpColors(new THREE.Color(0xffd700), new THREE.Color(0x00f0ff), avgScore / 7);
-            const count = 5000;
+
+            const count = 3000; // Reduced count for a cleaner look
             const geometry = new THREE.BufferGeometry();
             const positions = new Float32Array(count * 3);
             const velocities = [];
@@ -197,17 +195,20 @@
                 positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
                 positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
                 positions[i * 3 + 2] = radius * Math.cos(phi);
+                
+                // **FIREFLY UPDATE**: Slower, less agitated base velocity
                 const agitation = 1 - (avgScore / 10);
                 velocities.push(new THREE.Vector3(
-                    (Math.random() - 0.5) * (0.02 + agitation * 0.05),
-                    (Math.random() - 0.5) * (0.02 + agitation * 0.05),
-                    (Math.random() - 0.5) * (0.02 + agitation * 0.05)
+                    (Math.random() - 0.5) * (0.005 + agitation * 0.01),
+                    (Math.random() - 0.5) * (0.005 + agitation * 0.01),
+                    (Math.random() - 0.5) * (0.005 + agitation * 0.01)
                 ));
             }
 
             geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             geometry.velocities = velocities;
-            const material = new THREE.PointsMaterial({ size: 0.08, color: botColor, blending: THREE.AdditiveBlending });
+            // **FIREFLY UPDATE**: Slightly larger, more prominent points
+            const material = new THREE.PointsMaterial({ size: 0.1, color: botColor, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.8 });
             nanobots = new THREE.Points(geometry, material);
             scene.add(nanobots);
         }
@@ -240,6 +241,7 @@
             if (!scores || !renderer) return;
             requestAnimationFrame(() => animate(scores));
             const time = Date.now() * 0.001;
+            
             if (bioCoreModel) {
                 const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
                 const pulseSpeed = 0.5 + (avgScore / 10);
@@ -248,22 +250,36 @@
                 bioCoreModel.scale.set(pulse, pulse, pulse);
                 bioCoreModel.rotation.y += 0.001;
             }
-            if (nanobots) updateNanobots();
+
+            if (nanobots) {
+                 // **FIREFLY UPDATE**: Add a gentle, collective pulse to the swarm's opacity
+                nanobots.material.opacity = Math.sin(time * 0.7) * 0.2 + 0.7; // Fades between 0.5 and 0.9
+                updateNanobots(time);
+            }
+
             renderer.render(scene, camera);
         }
 
-        function updateNanobots() {
+        function updateNanobots(time) {
             const positions = nanobots.geometry.attributes.position;
             const velocities = nanobots.geometry.velocities;
             const bounds = 12;
+
             for (let i = 0; i < positions.count; i++) {
                 const pos = new THREE.Vector3(positions.getX(i), positions.getY(i), positions.getZ(i));
                 pos.add(velocities[i]);
+                
+                // **FIREFLY UPDATE**: Add a gentle, curving motion to the flight path
+                const sineWaveFactor = 0.002;
+                velocities[i].x += Math.sin(time + i * 0.5) * sineWaveFactor;
+                velocities[i].y += Math.cos(time + i * 0.3) * sineWaveFactor;
+
                 if (pos.length() > bounds) {
                     pos.normalize().multiplyScalar(bounds);
                     velocities[i].reflect(pos.clone().normalize());
                 }
                 positions.setXYZ(i, pos.x, pos.y, pos.z);
+
                 anomalies.forEach(anomaly => {
                     if (pos.distanceTo(anomaly.position) < 1.5) {
                         if (!anomaly.userData.detected) {
