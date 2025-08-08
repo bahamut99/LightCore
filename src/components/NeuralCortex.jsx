@@ -1,15 +1,14 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
+import { supabase } from '../supabaseClient';
+import * as THREE from 'three';
 
-// This component will be our central "Locus" orb
+// The Locus orb is now simpler. Its job is to be a beautiful, reflective surface.
 function Locus() {
-  // useRef is a React hook to get a direct reference to the 3D object
   const meshRef = useRef();
 
-  // useFrame is a hook from React Three Fiber that runs on every single frame
   useFrame((state, delta) => {
-    // Gently rotate the orb on every frame
     if (meshRef.current) {
       meshRef.current.rotation.y += delta * 0.1;
       meshRef.current.rotation.x += delta * 0.05;
@@ -18,37 +17,91 @@ function Locus() {
 
   return (
     <mesh ref={meshRef}>
-      {/* This is the shape of our orb. An Icosahedron is a 20-sided sphere-like shape. */}
-      <icosahedronGeometry args={[3, 4]} />
-      {/* This is the material, or "skin," of the orb. */}
+      <icosahedronGeometry args={[3, 5]} />
+      {/* This new material is like polished chrome, perfect for reflecting colored light */}
       <meshStandardMaterial 
-        color="#00f0ff"
-        emissive="#00f0ff" // Makes the material glow
-        emissiveIntensity={0.7}
-        metalness={0.8}
-        roughness={0.2}
-        wireframe={true} // Renders the geometric wireframe for that "2077" look
+        color="#f0f0f0" // A neutral, bright base color
+        metalness={0.9}   // Highly metallic
+        roughness={0.05}  // Very smooth and reflective
       />
     </mesh>
   );
 }
 
-// This is the main component that holds the entire 3D scene
+// The main component now fetches data and controls the lighting
 function NeuralCortex() {
+  const [latestScores, setLatestScores] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLatestData = async () => {
+      setIsLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        const { data: logs, error } = await supabase
+          .from('daily_logs')
+          .select('clarity_score, immune_score, physical_readiness_score')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (error) {
+          console.error("Error fetching latest log:", error);
+        } else if (logs && logs.length > 0) {
+          setLatestScores({
+            clarity: logs[0].clarity_score,
+            immune: logs[0].immune_score,
+            physical: logs[0].physical_readiness_score
+          });
+        } else {
+          setLatestScores({ clarity: 8, immune: 8, physical: 8 });
+        }
+      }
+      setIsLoading(false);
+    };
+
+    fetchLatestData();
+  }, []);
+
+  // Calculate light intensities based on scores
+  const lightIntensities = useMemo(() => {
+    if (!latestScores) return { clarity: 0, immune: 0, physical: 0 };
+    // We multiply the 1-10 score to get a brighter, more impactful intensity
+    return {
+      clarity: latestScores.clarity * 150,
+      immune: latestScores.immune * 150,
+      physical: latestScores.physical * 150,
+    };
+  }, [latestScores]);
+
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
-      <Canvas camera={{ position: [0, 0, 10], fov: 75 }}>
-        {/* --- LIGHTING --- */}
-        {/* Ambient light provides a soft, base illumination to the whole scene */}
-        <ambientLight intensity={0.5} />
-        {/* Point light acts like a lightbulb, casting light from a single point */}
-        <pointLight position={[15, 15, 15]} intensity={1000} color="#00f0ff" />
-        
-        {/* --- OBJECTS --- */}
-        <Locus />
+      <Canvas camera={{ position: [0, 0, 12], fov: 75 }}>
+        {/* A soft ambient light to ensure the orb is never fully black */}
+        <ambientLight intensity={0.2} />
 
-        {/* --- CONTROLS --- */}
-        {/* This gives you mouse controls to zoom, pan, and rotate the scene */}
+        {/* --- TRI-METRIC LIGHTING --- */}
+        {/* Each point light is positioned differently and has a unique color. */}
+        {/* Its intensity is now directly tied to a specific health score. */}
+        
+        <pointLight 
+          position={[-10, 5, 5]} 
+          intensity={lightIntensities.clarity} 
+          color="#00f0ff" // Cyan for Clarity
+        />
+        <pointLight 
+          position={[10, 5, 5]} 
+          intensity={lightIntensities.immune} 
+          color="#ffd700" // Gold for Immune
+        />
+        <pointLight 
+          position={[0, -10, 5]} 
+          intensity={lightIntensities.physical} 
+          color="#00ff88" // Green for Physical
+        />
+        
+        {!isLoading && <Locus />}
+
         <OrbitControls enablePan={false} enableZoom={true} autoRotate={true} autoRotateSpeed={0.3}/>
       </Canvas>
     </div>
