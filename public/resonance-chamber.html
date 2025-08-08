@@ -168,15 +168,30 @@
             const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
             const coreColor = new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avgScore / 10);
 
-            const geometry = new THREE.IcosahedronGeometry(4, 5);
-            const material = new THREE.MeshStandardMaterial({
+            // **VISUAL FIX**: Use a particle system for a more "nebula" like core
+            const count = 2000;
+            const positions = new Float32Array(count * 3);
+            const geometry = new THREE.BufferGeometry();
+            const radius = 4;
+            for(let i=0; i < count; i++) {
+                const r = Math.random() * radius;
+                const theta = Math.random() * 2 * Math.PI;
+                const phi = Math.acos(2 * Math.random() - 1);
+                positions[i*3] = r * Math.sin(phi) * Math.cos(theta);
+                positions[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+                positions[i*3+2] = r * Math.cos(phi);
+            }
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            
+            const material = new THREE.PointsMaterial({
+                size: 0.05,
                 color: coreColor,
-                emissive: coreColor,
-                emissiveIntensity: 0.5,
-                metalness: 0.8,
-                roughness: 0.2,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+                opacity: 0.8
             });
-            singularity = new THREE.Mesh(geometry, material);
+
+            singularity = new THREE.Points(geometry, material);
             scene.add(singularity);
         }
 
@@ -190,7 +205,7 @@
             const radius = 30;
 
             for (let i = 0; i < count; i++) {
-                const r = radius * Math.cbrt(Math.random());
+                const r = 8 + Math.random() * (radius - 8); // Start further out
                 const theta = Math.random() * 2 * Math.PI;
                 const phi = Math.acos(2 * Math.random() - 1);
                 positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
@@ -250,59 +265,64 @@
             const velocities = stardust.geometry.velocities;
             const center = new THREE.Vector3(0, 0, 0);
 
-            constellationGroup.children = [];
+            constellationGroup.children.forEach(child => {
+                child.material.opacity *= 0.9; // Fade out old constellations
+                if(child.material.opacity < 0.01) constellationGroup.remove(child);
+            });
 
             for (let i = 0; i < positions.count; i++) {
                 const pos = new THREE.Vector3(positions.getX(i), positions.getY(i), positions.getZ(i));
                 const vel = velocities[i];
 
                 const toCenter = center.clone().sub(pos);
-                const distance = pos.length();
+                const distance = Math.max(pos.length(), 1); // Avoid division by zero
                 
-                // Gravitational pull towards the center
-                const gravity = toCenter.normalize().multiplyScalar(0.001);
+                // **PHYSICS FIX**: Dampened gravitational pull
+                const gravity = toCenter.normalize().multiplyScalar(1 / distance * 0.0005);
                 vel.add(gravity);
                 
-                // Orbital velocity to prevent falling into the singularity
-                const orbitalVel = new THREE.Vector3(-pos.y, pos.x, 0).normalize().multiplyScalar(0.01 / distance);
+                // **PHYSICS FIX**: More stable orbital velocity
+                const orbitalVel = new THREE.Vector3(-pos.z, 0, pos.x).normalize().multiplyScalar(0.005);
                 vel.add(orbitalVel);
 
-                vel.multiplyScalar(0.98); // Drag
+                vel.multiplyScalar(0.99); // Drag
                 pos.add(vel);
 
                 positions.setXYZ(i, pos.x, pos.y, pos.z);
             }
 
-            // Emergent Constellations
-            anomalyNodes.forEach(node => {
-                const nearbyParticles = [];
-                for (let i = 0; i < positions.count; i++) {
-                    const pos = new THREE.Vector3(positions.getX(i), positions.getY(i), positions.getZ(i));
-                    if (pos.distanceTo(node.position) < 2.5) {
-                        nearbyParticles.push(pos);
-                    }
-                    if (nearbyParticles.length > 5) break; // Limit constellation size
-                }
-
-                if (nearbyParticles.length > 2) {
-                    const points = [];
-                    for(let j = 0; j < nearbyParticles.length; j++){
-                        for(let k = j + 1; k < nearbyParticles.length; k++){
-                            points.push(nearbyParticles[j]);
-                            points.push(nearbyParticles[k]);
+            // Emergent Constellations (less frequent update for performance)
+            if (Math.random() > 0.95) {
+                anomalyNodes.forEach(node => {
+                    const nearbyParticles = [];
+                    for (let i = 0; i < positions.count; i+=10) { // Check fewer particles
+                        const pos = new THREE.Vector3(positions.getX(i), positions.getY(i), positions.getZ(i));
+                        if (pos.distanceTo(node.position) < 2.5) {
+                            nearbyParticles.push(pos);
                         }
+                        if (nearbyParticles.length > 5) break;
                     }
-                    const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
-                    const lineMaterial = new THREE.LineBasicMaterial({ 
-                        color: node.userData.color,
-                        blending: THREE.AdditiveBlending,
-                        transparent: true,
-                        opacity: 0.5
-                    });
-                    const constellation = new THREE.LineSegments(lineGeometry, lineMaterial);
-                    constellationGroup.add(constellation);
-                }
-            });
+
+                    if (nearbyParticles.length > 2) {
+                        const points = [];
+                        for(let j = 0; j < nearbyParticles.length; j++){
+                            for(let k = j + 1; k < nearbyParticles.length; k++){
+                                points.push(nearbyParticles[j]);
+                                points.push(nearbyParticles[k]);
+                            }
+                        }
+                        const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+                        const lineMaterial = new THREE.LineBasicMaterial({ 
+                            color: node.userData.color,
+                            blending: THREE.AdditiveBlending,
+                            transparent: true,
+                            opacity: 0.6
+                        });
+                        const constellation = new THREE.LineSegments(lineGeometry, lineMaterial);
+                        constellationGroup.add(constellation);
+                    }
+                });
+            }
 
             positions.needsUpdate = true;
         }
@@ -334,10 +354,6 @@
             systemStatusEl.innerText = status;
             systemStatusEl.style.color = color;
             systemStatusEl.className = `font-bold status-${status.toLowerCase()}`;
-        }
-        
-        function updateSystemStatusFromAnomalies() {
-            // This could be enhanced to reflect constellation detection in the future
         }
 
         window.addEventListener('resize', () => {
