@@ -67,7 +67,9 @@
         // --- CONFIGURATION ---
         const SUPABASE_URL = 'https://izbjadizahqlfrdqofyw.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6YmphZGl6YWhxbGZyZHFvZnl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMDE1OTksImV4cCI6MjA2OTc3NzU5OX0.sCoMYav2kGtopZsmijAJojBgoN_ay-ddAVYT3I-l6o0';
-        let USER_TOKEN = ''; // Populated by prompt
+        
+        // The localStorage key for your Supabase project's auth token
+        const AUTH_TOKEN_KEY = 'sb-izbjadizahqlfrdqofyw-auth-token';
 
         // Mapping log tags to anomaly types
         const ANOMALY_MAP = {
@@ -88,24 +90,24 @@
         const systemStatusEl = document.getElementById('system-status');
         const subjectIdEl = document.getElementById('subject-id');
         const resyncButton = document.getElementById('resync-data');
-        
         let supabase;
+        let currentAuthToken = null;
 
         // --- MAIN LOGIC ---
-
         async function fetchAndInitialize(authToken) {
             addLogEntry('INFO', 'Establishing secure link to LightCore Brain...');
+            currentAuthToken = authToken;
             supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
                 global: { headers: { Authorization: `Bearer ${authToken}` } }
             });
 
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) {
-                addLogEntry('CRITICAL', 'Authentication failed. Invalid token.');
+                addLogEntry('CRITICAL', 'Authentication failed. Please log in to the main dashboard and refresh.');
                 updateSystemStatus('ERROR', '#ff4d4d');
                 return;
             }
-            subjectIdEl.textContent = user.id;
+            subjectIdEl.textContent = user.id.split('-')[0]; // Show first part of UUID
 
             const { data: logs, error } = await supabase
                 .from('daily_logs')
@@ -116,7 +118,17 @@
             if (error || !logs || logs.length === 0) {
                 addLogEntry('WARNING', 'No user data found. Running baseline simulation.');
                 updateSystemStatus('UNKNOWN', '#9CA3AF');
-                // In a real scenario, you'd initialize with default data here.
+                // Initialize with default data if no logs are found
+                const defaultScores = { clarity: 7, immune: 7, physical: 7 };
+                if (scene) {
+                   while(scene.children.length > 0){ scene.remove(scene.children[0]); }
+                } else {
+                   initScene();
+                }
+                createBioCore(defaultScores);
+                createNanobots(defaultScores);
+                createAnomaliesFromLogs([]);
+                animate(defaultScores);
                 return;
             }
             
@@ -128,11 +140,10 @@
             };
             
             // Re-initialize the 3D scene with real data
-            if (scene) {
+            if(scene) {
                 while(scene.children.length > 0){ scene.remove(scene.children[0]); }
-            } else {
-                initScene();
             }
+            initScene();
             
             populateHistoricalLogs(logs);
             createBioCore(latestScores);
@@ -194,7 +205,7 @@
                 positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
                 positions[i * 3 + 2] = radius * Math.cos(phi);
                 
-                const agitation = 1 - (avgScore / 10); // More agitation for lower scores
+                const agitation = 1 - (avgScore / 10);
                 velocities.push(new THREE.Vector3(
                     (Math.random() - 0.5) * (0.02 + agitation * 0.05),
                     (Math.random() - 0.5) * (0.02 + agitation * 0.05),
@@ -238,13 +249,14 @@
         
         // --- Animation Loop ---
         function animate(scores) {
+            if (!scores) return; // Stop animation if no scores
             requestAnimationFrame(() => animate(scores));
 
             const time = Date.now() * 0.001;
             
             if (bioCoreModel) {
                 const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
-                const pulseSpeed = 0.5 + (avgScore / 10); // Slower pulse for lower scores
+                const pulseSpeed = 0.5 + (avgScore / 10);
                 const pulseStrength = 0.01 + (avgScore / 10) * 0.03;
                 const pulse = Math.sin(time * pulseSpeed) * pulseStrength + 1;
                 bioCoreModel.scale.set(pulse, pulse, pulse);
@@ -340,16 +352,29 @@
         }, false);
         
         resyncButton.addEventListener('click', () => {
-            if(USER_TOKEN) fetchAndInitialize(USER_TOKEN);
+            if(currentAuthToken) fetchAndInitialize(currentAuthToken);
         });
 
-        // --- Initial Load ---
+        // --- AUTOMATIC STARTUP LOGIC ---
         function start() {
-            USER_TOKEN = prompt("Please paste your Supabase Auth Token (JWT) to link with the LightCore Brain.\n\n(You can get this from your browser's developer tools: Application -> Local Storage -> sb-....-auth-token -> session -> access_token)");
-            if (USER_TOKEN) {
-                fetchAndInitialize(USER_TOKEN);
-            } else {
-                addLogEntry('CRITICAL', 'No auth token provided. Cannot connect to LightCore Brain.');
+            try {
+                // 1. Try to get the auth token from localStorage.
+                const authDataString = localStorage.getItem(AUTH_TOKEN_KEY);
+                if (!authDataString) throw new Error("Auth token not found in localStorage.");
+
+                const authData = JSON.parse(authDataString);
+                const userToken = authData?.session?.access_token;
+                
+                if (userToken) {
+                    // 2. If found, initialize the simulation.
+                    fetchAndInitialize(userToken);
+                } else {
+                    // 3. If not found, show an error.
+                    throw new Error("Access token missing from session data.");
+                }
+            } catch (error) {
+                console.error("Initialization Error:", error);
+                addLogEntry('CRITICAL', 'No active session found. Please log in to the main dashboard and then refresh this page.');
                 updateSystemStatus('OFFLINE', '#6B7280');
             }
         }
