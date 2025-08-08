@@ -29,7 +29,7 @@ exports.handler = async (event, context) => {
             throw new Error('User not found or token invalid.');
         }
 
-        const { log, sleep_hours, sleep_quality, userTimezone } = JSON.parse(event.body);
+        const { log, sleep_hours, sleep_quality, step_count, userTimezone } = JSON.parse(event.body);
         const tz = userTimezone || 'UTC';
 
         const { data: recentLogs } = await supabase.from('daily_logs').select('created_at, clarity_score, immune_score, physical_readiness_score').eq('user_id', user.id).order('created_at', { ascending: false }).limit(3);
@@ -78,19 +78,21 @@ exports.handler = async (event, context) => {
         Sleep < 6h → must lower score significantly.
         Recovery signs ("sore", "resting", etc) → affects readiness.
         Hydration, activity, and diet → minor boosts only.
+        A high step count (>8000) can provide a minor boost to the Physical score.
         9–10 is reserved for exceptional readiness.
         
         🧠 CONTEXT
         You have access to:
 
         This log: "${log}"
-        Sleep: ${sleep_hours || "N/A"} hrs, Quality: ${sleep_quality || "N/A"}
+        Sleep: ${sleep_hours ?? "N/A"} hrs, Quality: ${sleep_quality ?? "N/A"}
+        Today's Steps (from Google Health): ${step_count ?? "N/A"}
         Recent Trends:
         ${historyContext}
         Weekly Goal: ${goalContext}
 
         <reasoning>
-        (Think step-by-step about sleep, mood, movement, context, trends.)
+        (Think step-by-step about sleep, mood, movement, steps, context, trends.)
         </reasoning>
         Then, output the final JSON analysis.
         `;
@@ -116,11 +118,11 @@ exports.handler = async (event, context) => {
         }
 
         const aiData = await aiResponse.json();
+        const rawText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!rawText) throw new Error("AI returned an empty or invalid response structure.");
+        
         let analysis;
         try {
-            const rawText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!rawText) throw new Error("AI returned an empty or invalid response structure.");
-            
             const jsonStart = rawText.indexOf('{');
             const jsonEnd = rawText.lastIndexOf('}');
             if (jsonStart === -1 || jsonEnd === -1) {
@@ -130,8 +132,11 @@ exports.handler = async (event, context) => {
             analysis = JSON.parse(jsonString);
 
         } catch (parseError) {
-            console.error("Failed to parse JSON from AI response:", parseError);
-            throw new Error("Failed to parse AI response.");
+            console.error("--- FAILED TO PARSE AI RESPONSE ---");
+            console.error("Parse Error:", parseError.message);
+            console.error("Raw AI Text:", rawText); // Log the problematic text
+            console.error("------------------------------------");
+            throw new Error("Failed to parse AI response. See function logs for details.");
         }
 
         const clarity = ensureField(analysis.clarity);
@@ -145,7 +150,8 @@ exports.handler = async (event, context) => {
             physical_readiness_score: physical.score, physical_readiness_label: physical.label, physical_readiness_color: physical.color_hex,
             ai_notes: analysis.notes || "No specific notes generated.",
             sleep_hours: sleep_hours || null, sleep_quality: sleep_quality || null,
-            tags: analysis.tags || []
+            tags: analysis.tags || [],
+            health_api_steps: step_count || null
         };
         
         const { data: newLogData, error: dbError } = await supabase.from('daily_logs').insert(logEntry).select().single();

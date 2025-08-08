@@ -1,6 +1,17 @@
-/analyze-log /.netlify/functions/analyze-log 200
-/recent-logs /.netlify/functions/recent-logs 200
-/acknowledge-nudge /.netlify/functions/acknowledge-nudge 200
-/get-dashboard-data /.netlify/functions/get-dashboard-data 200
-/delete-integration /.netlify/functions/delete-integration 200
-/get-chart-data /.netlify/functions/get-chart-data 200
+# Main API endpoints
+/analyze-log          /.netlify/functions/analyze-log          200
+/get-dashboard-data   /.netlify/functions/get-dashboard-data   200
+/get-chart-data       /.netlify/functions/get-chart-data       200
+/parse-events         /.netlify/functions/parse-events         200
+
+# Goal endpoints
+/get-goal-progress    /.netlify/functions/get-goal-progress    200
+/set-goal             /.netlify/functions/set-goal             200
+
+# Integration endpoints
+/google-auth          /.netlify/functions/google-auth          200
+/delete-integration   /.netlify/functions/delete-integration   200
+/fetch-health-data    /.netlify/functions/fetch-health-data    200
+
+# Nudge endpoint
+/acknowledge-nudge    /.netlify/functions/acknowledge-nudge    200
