@@ -35,7 +35,7 @@
     <div id="diagnostic-panel" class="absolute top-4 right-4 w-full max-w-md h-[calc(100vh-2rem)] rounded-lg shadow-2xl p-4 flex flex-col text-sm overflow-hidden border border-cyan-400/20">
         <div class="flex-shrink-0 pb-4 border-b border-cyan-400/20">
             <h1 class="font-orbitron text-2xl glowing-text">RESONANCE CORE</h1>
-            <p class="text-xs text-cyan-300">LIGHTCORE BDT v.2077.6.zeta</p>
+            <p class="text-xs text-cyan-300">LIGHTCORE BDT v.2077.7.epsilon</p>
         </div>
         
         <div class="flex-shrink-0 py-4 grid grid-cols-2 gap-4">
@@ -51,8 +51,7 @@
 
         <div class="flex-grow mt-2 overflow-y-auto pr-2">
             <h2 class="font-orbitron text-lg glowing-text mb-2 sticky top-0 bg-[rgba(10,25,47,0.9)] py-1 z-10">AI MEMORY FEED</h2>
-            <div id="log-container" class="space-y-3">
-                </div>
+            <div id="log-container" class="space-y-3"></div>
         </div>
         
         <div class="flex-shrink-0 pt-4 mt-4 border-t border-cyan-400/20 space-y-2">
@@ -68,24 +67,35 @@
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6YmphZGl6YWhxbGZyZHFvZnl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMDE1OTksImV4cCI6MjA2OTc3NzU5OX0.sCoMYav2kGtopZsmijAJojBgoN_ay-ddAVYT3I-l6o0';
 
         const ANOMALY_MAP = {
-            'stress': { name: 'Cortisol Cluster', color: 0xffa500, severity: 'WARNING' },
-            'anxious': { name: 'Cortisol Cluster', color: 0xffa500, severity: 'WARNING' },
-            'fatigue': { name: 'Lactic Acid Cloud', color: 0xff4500, severity: 'WARNING' },
-            'sore': { name: 'Myofibril Tearing', color: 0xff4500, severity: 'WARNING' },
-            'poor sleep': { name: 'Melatonin Imbalance', color: 0x8A2BE2, severity: 'CRITICAL' },
-            'brain fog': { name: 'Neural Misfiring', color: 0xffffff, severity: 'CRITICAL' },
-            'hydrated': { name: 'Optimal Osmosis', color: 0x00ffff, severity: 'INFO' },
-            'energized': { name: 'Mitochondrial Efficiency', color: 0x00ff88, severity: 'INFO' },
+            'stress': { name: 'Cortisol Cluster', color: 0xffa500, severity: 'WARNING' }, 'anxious': { name: 'Cortisol Cluster', color: 0xffa500, severity: 'WARNING' },
+            'fatigue': { name: 'Lactic Acid Cloud', color: 0xff4500, severity: 'WARNING' }, 'sore': { name: 'Myofibril Tearing', color: 0xff4500, severity: 'WARNING' },
+            'poor sleep': { name: 'Melatonin Imbalance', color: 0x8A2BE2, severity: 'CRITICAL' }, 'brain fog': { name: 'Neural Misfiring', color: 0xffffff, severity: 'CRITICAL' },
+            'hydrated': { name: 'Optimal Osmosis', color: 0x00ffff, severity: 'INFO' }, 'energized': { name: 'Mitochondrial Efficiency', color: 0x00ff88, severity: 'INFO' },
         };
 
-        let scene, camera, renderer, singularity, stardust, anomalyNodes, constellationGroup;
+        // **NEW**: Pre-defined constellation shapes
+        const CONSTELLATION_DATA = {
+            orionBelt: {
+                points: [[-1.5, 0, 0], [0, 0.2, 0], [1.5, 0, 0]],
+                lines: [[0, 1], [1, 2]]
+            },
+            dipper: {
+                points: [[-2, 0.5, 0], [-1, 0, 0], [0, 0, 0], [1, 0, 0], [1.2, 1, 0], [0, 1.5, 0], [-1, 1, 0]],
+                lines: [[0, 1], [1, 2], [2, 3], [3, 4], [6, 0]]
+            },
+            customPenta: {
+                points: [[0, 1.5, 0], [1.4, 0.5, 0], [0.9, -1.2, 0], [-0.9, -1.2, 0], [-1.4, 0.5, 0]],
+                lines: [[0,1], [1,2], [2,3], [3,4], [4,0]]
+            }
+        };
+
+        let scene, camera, renderer, singularity, stardust, constellationGroup;
         const container = document.getElementById('container');
         const logContainer = document.getElementById('log-container');
         const systemStatusEl = document.getElementById('system-status');
         const subjectIdEl = document.getElementById('subject-id');
         const resyncButton = document.getElementById('resync-data');
-        let supabaseClient;
-        let currentAuthToken = null;
+        let supabaseClient, currentAuthToken = null;
 
         async function fetchAndInitialize(authToken) {
             addLogEntry('INFO', 'Establishing secure link to LightCore Brain...');
@@ -96,54 +106,38 @@
 
             const { data: { user } } = await supabaseClient.auth.getUser();
             if (!user) {
-                addLogEntry('CRITICAL', 'Authentication failed. Please log in to the main dashboard and refresh.');
-                updateSystemStatus('ERROR', '#ff4d4d');
-                return;
+                addLogEntry('CRITICAL', 'Authentication failed.');
+                return updateSystemStatus('ERROR', '#ff4d4d');
             }
             subjectIdEl.textContent = user.id.split('-')[0];
 
-            // **BUG FIX**: Added `tags` to the select query
-            const { data: logs, error } = await supabaseClient
-                .from('daily_logs')
-                .select('created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes')
-                .order('created_at', { ascending: false })
-                .limit(15);
+            const { data: logs, error } = await supabaseClient.from('daily_logs').select('created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes').order('created_at', { ascending: false }).limit(15);
             
-            if (error || !logs || logs.length === 0) {
+            if (error || !logs || !logs.length) {
                 addLogEntry('WARNING', 'No user data found. Running baseline simulation.');
-                updateSystemStatus('NOMINAL', '#00ff88');
-                const defaultScores = { clarity: 8, immune: 8, physical: 8 };
-                if (scene) {
-                   while(scene.children.length > 0){ scene.remove(scene.children[0]); }
-                }
-                initScene();
-                createSingularity(defaultScores);
-                createStardustField(defaultScores);
-                createAnomalyNodesFromLogs([]);
-                animate(defaultScores);
-                return;
+                const defaults = { clarity: 8, immune: 8, physical: 8 };
+                return initializeScene(defaults, []);
             }
             
             addLogEntry('INFO', 'Bio-metric data stream acquired. Initializing simulation...');
-            const latestScores = {
-                clarity: logs[0].clarity_score,
-                immune: logs[0].immune_score,
-                physical: logs[0].physical_readiness_score
-            };
-            
+            const latestScores = { clarity: logs[0].clarity_score, immune: logs[0].immune_score, physical: logs[0].physical_readiness_score };
+            initializeScene(latestScores, logs);
+        }
+
+        function initializeScene(scores, logs) {
             if(scene) {
                 while(scene.children.length > 0){ scene.remove(scene.children[0]); }
             }
             initScene();
             
-            populateHistoricalLogs(logs);
-            createSingularity(latestScores);
-            createStardustField(latestScores);
-            createAnomalyNodesFromLogs(logs);
-            animate(latestScores);
+            if (logs.length > 0) populateHistoricalLogs(logs);
+
+            createSingularity(scores);
+            createStardustField(scores);
+            createConstellationsFromLogs(logs);
+            animate(scores);
             
-            // Set final system status based on fetched scores
-            const avgScore = (latestScores.clarity + latestScores.immune + latestScores.physical) / 3;
+            const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
             if (avgScore < 4) updateSystemStatus('CRITICAL', '#ff4d4d');
             else if (avgScore < 7) updateSystemStatus('WARNING', '#ffd700');
             else updateSystemStatus('NOMINAL', '#00ff88');
@@ -152,20 +146,19 @@
         function initScene() {
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.z = 25;
+            camera.position.set(0, 5, 20); // **ORBIT FIX**: Tilted camera view
+            camera.lookAt(0,0,0);
+
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
-            if (container.firstChild) {
-                container.removeChild(container.firstChild);
-            }
+            if (container.firstChild) container.removeChild(container.firstChild);
             container.appendChild(renderer.domElement);
             
-            const ambientLight = new THREE.AmbientLight(0x404040, 2);
-            scene.add(ambientLight);
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
-            directionalLight.position.set(10, 10, 10);
-            scene.add(directionalLight);
+            scene.add(new THREE.AmbientLight(0x404040, 2));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            dirLight.position.set(10, 10, 10);
+            scene.add(dirLight);
             
             constellationGroup = new THREE.Group();
             scene.add(constellationGroup);
@@ -174,9 +167,7 @@
         function createSingularity(scores) {
             const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
             const coreColor = new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avgScore / 10);
-            const count = 2000;
-            const positions = new Float32Array(count * 3);
-            const colors = new Float32Array(count * 3);
+            const count = 2000, positions = new Float32Array(count * 3), colors = new Float32Array(count * 3);
             const geometry = new THREE.BufferGeometry();
             const radius = 4;
             for(let i=0; i < count; i++) {
@@ -191,13 +182,7 @@
             }
             geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-            const material = new THREE.PointsMaterial({
-                size: 0.05,
-                vertexColors: true,
-                blending: THREE.AdditiveBlending,
-                transparent: true,
-                opacity: 0.8
-            });
+            const material = new THREE.PointsMaterial({ size: 0.05, vertexColors: true, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.8 });
             singularity = new THREE.Points(geometry, material);
             scene.add(singularity);
         }
@@ -211,8 +196,7 @@
             const velocities = [];
             
             for (let i = 0; i < count; i++) {
-                // **ORBIT TIGHTENING**: Particles start in a tighter band
-                const r = 10 + Math.random() * 10;
+                const r = 8 + Math.random() * 8; // **ORBIT FIX**: Tighter band (8 to 16)
                 const theta = Math.random() * 2 * Math.PI;
                 const phi = Math.acos(2 * Math.random() - 1);
                 positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
@@ -228,27 +212,56 @@
             scene.add(stardust);
         }
 
-        function createAnomalyNodesFromLogs(logs) {
-            anomalyNodes = [];
+        function createConstellationsFromLogs(logs) {
             let addedAnomalies = new Set();
+            const constellationKeys = Object.keys(CONSTELLATION_DATA);
+            let keyIndex = 0;
+
             (logs || []).forEach(log => {
                 if (!log.tags) return;
                 log.tags.forEach(tag => {
                     const anomalyType = ANOMALY_MAP[tag];
                     if (anomalyType && !addedAnomalies.has(anomalyType.name)) {
-                        const anomalyNode = new THREE.Object3D();
-                        const radius = 8 + Math.random() * 5;
-                        const theta = Math.random() * 2 * Math.PI;
-                        const phi = Math.acos(2 * Math.random() - 1);
-                        anomalyNode.position.set(radius * Math.sin(phi) * Math.cos(theta), radius * Math.sin(phi) * Math.sin(theta), radius * Math.cos(phi));
-                        anomalyNode.userData = { type: anomalyType.name, severity: anomalyType.severity, color: anomalyType.color };
-                        anomalyNodes.push(anomalyNode);
+                        const shapeKey = constellationKeys[keyIndex % constellationKeys.length];
+                        drawConstellation(anomalyType, CONSTELLATION_DATA[shapeKey]);
                         addedAnomalies.add(anomalyType.name);
+                        keyIndex++;
                     }
                 });
             });
         }
         
+        function drawConstellation(anomaly, shape) {
+            const group = new THREE.Group();
+            const radius = 10 + Math.random() * 5;
+            const theta = Math.random() * 2 * Math.PI;
+            const phi = Math.acos(2 * Math.random() - 1);
+            group.position.set(radius * Math.sin(phi) * Math.cos(theta), radius * Math.sin(phi) * Math.sin(theta), radius * Math.cos(phi));
+            group.lookAt(0,0,0);
+            
+            // Create points for stars
+            const pointsGeom = new THREE.BufferGeometry().setFromPoints(shape.points.map(p => new THREE.Vector3(...p)));
+            const pointsMat = new THREE.PointsMaterial({ color: anomaly.color, size: 0.2, blending: THREE.AdditiveBlending, transparent: true, opacity: 0 });
+            const points = new THREE.Points(pointsGeom, pointsMat);
+            group.add(points);
+            
+            // Create lines
+            const linePoints = [];
+            shape.lines.forEach(line => {
+                linePoints.push(new THREE.Vector3(...shape.points[line[0]]));
+                linePoints.push(new THREE.Vector3(...shape.points[line[1]]));
+            });
+            const lineGeom = new THREE.BufferGeometry().setFromPoints(linePoints);
+            const lineMat = new THREE.LineBasicMaterial({ color: anomaly.color, blending: THREE.AdditiveBlending, transparent: true, opacity: 0 });
+            const lines = new THREE.LineSegments(lineGeom, lineMat);
+            group.add(lines);
+
+            group.userData.isFadingIn = true;
+            group.userData.anomalyName = anomaly.name;
+            constellationGroup.add(group);
+            addLogEntry(anomaly.severity, `Pattern Detected: ${anomaly.name}`);
+        }
+
         function animate(scores) {
             if (!scores || !renderer) return;
             requestAnimationFrame(() => animate(scores));
@@ -258,79 +271,41 @@
                 singularity.rotation.y = time * 0.1;
                 singularity.rotation.x = time * 0.05;
             }
-
-            if (stardust) {
-                updateStardustField();
-            }
+            if (stardust) updateStardustField(time);
+            
+            // Animate constellations
+            constellationGroup.children.forEach(group => {
+                group.rotation.z += 0.001;
+                if(group.userData.isFadingIn) {
+                    group.children.forEach(child => child.material.opacity = Math.min(0.8, child.material.opacity + 0.01));
+                    if (group.children[0].material.opacity >= 0.8) group.userData.isFadingIn = false;
+                }
+            });
 
             renderer.render(scene, camera);
         }
 
-        function updateStardustField() {
+        function updateStardustField(time) {
             const positions = stardust.geometry.attributes.position;
             const velocities = stardust.geometry.velocities;
             const center = new THREE.Vector3(0, 0, 0);
-
-            constellationGroup.children.forEach(child => {
-                child.material.opacity -= 0.005; 
-                if(child.material.opacity <= 0) constellationGroup.remove(child);
-            });
 
             for (let i = 0; i < positions.count; i++) {
                 const pos = new THREE.Vector3(positions.getX(i), positions.getY(i), positions.getZ(i));
                 const vel = velocities[i];
                 const distance = Math.max(pos.length(), 1); 
                 
-                // **ORBIT TIGHTENING**: Stronger gravity when further away
-                const gravityStrength = 1 / distance * (distance > 15 ? 0.001 : 0.0005);
-                const gravity = center.clone().sub(pos).normalize().multiplyScalar(gravityStrength);
+                const gravity = center.clone().sub(pos).normalize().multiplyScalar(0.001 / distance);
                 vel.add(gravity);
                 
-                const orbitalVel = new THREE.Vector3(-pos.z, 0, pos.x).normalize().multiplyScalar(0.005);
+                // **ORBIT FIX**: Add vertical oscillation for a 3D feel
+                const orbitalVel = new THREE.Vector3(-pos.z, Math.sin(time + i * 0.1) * 0.1, pos.x).normalize().multiplyScalar(0.02);
                 vel.add(orbitalVel);
-                vel.multiplyScalar(0.99); 
+                vel.multiplyScalar(0.97); // A little more drag
                 pos.add(vel);
 
                 positions.setXYZ(i, pos.x, pos.y, pos.z);
             }
-
-            if (Math.random() > 0.90) { 
-                anomalyNodes.forEach(node => {
-                    const nearbyParticles = [];
-                    const detectionRadius = 4.0;
-                    for (let i = 0; i < positions.count; i += 10) { 
-                        const pos = new THREE.Vector3(positions.getX(i), positions.getY(i), positions.getZ(i));
-                        if (pos.distanceTo(node.position) < detectionRadius) {
-                            nearbyParticles.push(pos);
-                        }
-                        if (nearbyParticles.length > 5) break;
-                    }
-
-                    if (nearbyParticles.length > 2) {
-                        const points = [];
-                        for(let j = 0; j < nearbyParticles.length; j++){
-                            for(let k = j + 1; k < nearbyParticles.length; k++){
-                                points.push(nearbyParticles[j]);
-                                points.push(nearbyParticles[k]);
-                            }
-                        }
-                        const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
-                        const lineMaterial = new THREE.LineBasicMaterial({ 
-                            color: node.userData.color,
-                            blending: THREE.AdditiveBlending,
-                            transparent: true,
-                            opacity: 0.8
-                        });
-                        const constellation = new THREE.LineSegments(lineGeometry, lineMaterial);
-                        constellationGroup.add(constellation);
-                        if (!node.userData.logged) {
-                           addLogEntry(node.userData.severity, `Pattern Detected: ${node.userData.type}`);
-                           node.userData.logged = true;
-                        }
-                    }
-                });
-            }
-
             positions.needsUpdate = true;
         }
 
