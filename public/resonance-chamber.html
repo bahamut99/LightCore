@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bio-Metric Resonance Chamber [LightCore]</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto+Mono:wght@300;400&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Roboto Mono', monospace; background-color: #0a0a1a; color: #00f0ff; overflow: hidden; }
+        .font-orbitron { font-family: 'Orbitron', sans-serif; }
+        #diagnostic-panel { backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); background: rgba(10, 25, 47, 0.6); border: 1px solid rgba(0, 240, 255, 0.2); }
+        .log-entry { border-bottom: 1px solid rgba(0, 240, 255, 0.1); animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .glowing-text { text-shadow: 0 0 5px #00f0ff, 0 0 10px #00f0ff, 0 0 15px #00f0ff; }
+        .status-nominal { color: #00ff88; text-shadow: 0 0 5px #00ff88; }
+        .status-warning { color: #ffd700; text-shadow: 0 0 5px #ffd700; }
+        .status-critical { color: #ff4d4d; text-shadow: 0 0 5px #ff4d4d; }
+        .scanline { position: absolute; top: 0; left: 0; width: 100%; height: 3px; background: linear-gradient(90deg, rgba(0,240,255,0), rgba(0,240,255,0.8), rgba(0,240,255,0)); animation: scan 4s linear infinite; pointer-events: none; z-index: 100; }
+        @keyframes scan { 0% { transform: translateY(-10px); } 100% { transform: translateY(100vh); } }
+        /* Scrollbar styling */
+        .overflow-y-auto::-webkit-scrollbar { width: 4px; }
+        .overflow-y-auto::-webkit-scrollbar-track { background: transparent; }
+        .overflow-y-auto::-webkit-scrollbar-thumb { background: rgba(0, 240, 255, 0.3); border-radius: 2px; }
+    </style>
+</head>
+<body class="w-screen h-screen">
+
+    <div id="scanline" class="scanline"></div>
+    <div id="container" class="absolute top-0 left-0 w-full h-full"></div>
+
+    <div id="diagnostic-panel" class="absolute top-4 right-4 w-full max-w-md h-[calc(100vh-2rem)] rounded-lg shadow-2xl p-4 flex flex-col text-sm overflow-hidden border border-cyan-400/20">
+        <div class="flex-shrink-0 pb-4 border-b border-cyan-400/20">
+            <h1 class="font-orbitron text-2xl glowing-text">RESONANCE CHAMBER</h1>
+            <p class="text-xs text-cyan-300">LIGHTCORE BDT v.2077.5.gamma</p>
+        </div>
+        
+        <div class="flex-shrink-0 py-4 grid grid-cols-2 gap-4">
+            <div>
+                <p class="font-bold">SUBJECT ID:</p>
+                <p id="subject-id" class="text-cyan-200 truncate">SYNCING...</p>
+            </div>
+             <div>
+                <p class="font-bold">BIO-CORE STATUS:</p>
+                <p id="system-status" class="font-bold status-nominal">CALIBRATING...</p>
+            </div>
+        </div>
+
+        <div class="flex-grow mt-2 overflow-y-auto pr-2">
+            <h2 class="font-orbitron text-lg glowing-text mb-2 sticky top-0 bg-[rgba(10,25,47,0.9)] py-1 z-10">AI MEMORY FEED</h2>
+            <div id="log-container" class="space-y-3">
+                </div>
+        </div>
+        
+        <div class="flex-shrink-0 pt-4 mt-4 border-t border-cyan-400/20 space-y-2">
+             <button id="resync-data" class="w-full bg-cyan-600/50 hover:bg-cyan-500/80 text-white font-bold py-2 px-4 rounded transition-all duration-300 border border-cyan-400">
+                RE-SYNC WITH LIGHTCORE BRAIN
+            </button>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- CONFIGURATION ---
+        const SUPABASE_URL = 'https://izbjadizahqlfrdqofyw.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6YmphZGl6YWhxbGZyZHFvZnl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMDE1OTksImV4cCI6MjA2OTc3NzU5OX0.sCoMYav2kGtopZsmijAJojBgoN_ay-ddAVYT3I-l6o0';
+        let USER_TOKEN = ''; // Populated by prompt
+
+        // Mapping log tags to anomaly types
+        const ANOMALY_MAP = {
+            'stress': { name: 'Cortisol Hotspot', color: 0xffa500, severity: 'WARNING' },
+            'anxious': { name: 'Cortisol Hotspot', color: 0xffa500, severity: 'WARNING' },
+            'fatigue': { name: 'Lactic Acid Cluster', color: 0xff4500, severity: 'WARNING' },
+            'sore': { name: 'Myofibril Tearing', color: 0xff4500, severity: 'WARNING' },
+            'poor sleep': { name: 'Melatonin Imbalance', color: 0x8A2BE2, severity: 'CRITICAL' },
+            'brain fog': { name: 'Neural Misfiring', color: 0xffffff, severity: 'CRITICAL' },
+            'hydrated': { name: 'Optimal Osmosis', color: 0x00ffff, severity: 'INFO' },
+            'energized': { name: 'Mitochondrial Efficiency', color: 0x00ff88, severity: 'INFO' },
+        };
+
+        // --- Basic Setup ---
+        let scene, camera, renderer, bioCoreModel, nanobots, anomalies;
+        const container = document.getElementById('container');
+        const logContainer = document.getElementById('log-container');
+        const systemStatusEl = document.getElementById('system-status');
+        const subjectIdEl = document.getElementById('subject-id');
+        const resyncButton = document.getElementById('resync-data');
+        
+        let supabase;
+
+        // --- MAIN LOGIC ---
+
+        async function fetchAndInitialize(authToken) {
+            addLogEntry('INFO', 'Establishing secure link to LightCore Brain...');
+            supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                global: { headers: { Authorization: `Bearer ${authToken}` } }
+            });
+
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                addLogEntry('CRITICAL', 'Authentication failed. Invalid token.');
+                updateSystemStatus('ERROR', '#ff4d4d');
+                return;
+            }
+            subjectIdEl.textContent = user.id;
+
+            const { data: logs, error } = await supabase
+                .from('daily_logs')
+                .select('created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes')
+                .order('created_at', { ascending: false })
+                .limit(15);
+            
+            if (error || !logs || logs.length === 0) {
+                addLogEntry('WARNING', 'No user data found. Running baseline simulation.');
+                updateSystemStatus('UNKNOWN', '#9CA3AF');
+                // In a real scenario, you'd initialize with default data here.
+                return;
+            }
+            
+            addLogEntry('INFO', 'Bio-metric data stream acquired. Initializing simulation...');
+            const latestScores = {
+                clarity: logs[0].clarity_score,
+                immune: logs[0].immune_score,
+                physical: logs[0].physical_readiness_score
+            };
+            
+            // Re-initialize the 3D scene with real data
+            if (scene) {
+                while(scene.children.length > 0){ scene.remove(scene.children[0]); }
+            } else {
+                initScene();
+            }
+            
+            populateHistoricalLogs(logs);
+            createBioCore(latestScores);
+            createNanobots(latestScores);
+            createAnomaliesFromLogs(logs);
+            animate(latestScores);
+        }
+        
+        // --- Scene Initialization and Objects ---
+        function initScene() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 15;
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+            
+            const ambientLight = new THREE.AmbientLight(0x404040, 2);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            directionalLight.position.set(10, 10, 10);
+            scene.add(directionalLight);
+        }
+
+        function createBioCore(scores) {
+            const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
+            const coreColor = new THREE.Color().lerpColors(new THREE.Color(0xff0000), new THREE.Color(0x00f0ff), avgScore / 10);
+
+            const geometry = new THREE.IcosahedronGeometry(5, 4);
+            const material = new THREE.MeshStandardMaterial({
+                color: coreColor,
+                emissive: coreColor,
+                emissiveIntensity: 0.3,
+                metalness: 0.8,
+                roughness: 0.4,
+                transparent: true,
+                opacity: 0.7,
+                wireframe: true,
+            });
+            bioCoreModel = new THREE.Mesh(geometry, material);
+            scene.add(bioCoreModel);
+        }
+
+        function createNanobots(scores) {
+            const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
+            const botColor = new THREE.Color().lerpColors(new THREE.Color(0xffd700), new THREE.Color(0x00f0ff), avgScore / 7);
+
+            const count = 5000;
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(count * 3);
+            const velocities = [];
+            const radius = 12;
+
+            for (let i = 0; i < count; i++) {
+                const theta = Math.random() * 2 * Math.PI;
+                const phi = Math.acos(2 * Math.random() - 1);
+                positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+                positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+                positions[i * 3 + 2] = radius * Math.cos(phi);
+                
+                const agitation = 1 - (avgScore / 10); // More agitation for lower scores
+                velocities.push(new THREE.Vector3(
+                    (Math.random() - 0.5) * (0.02 + agitation * 0.05),
+                    (Math.random() - 0.5) * (0.02 + agitation * 0.05),
+                    (Math.random() - 0.5) * (0.02 + agitation * 0.05)
+                ));
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.velocities = velocities;
+            const material = new THREE.PointsMaterial({ size: 0.08, color: botColor, blending: THREE.AdditiveBlending });
+            nanobots = new THREE.Points(geometry, material);
+            scene.add(nanobots);
+        }
+
+        function createAnomaliesFromLogs(logs) {
+            anomalies = [];
+            let addedAnomalies = new Set();
+            
+            logs.forEach(log => {
+                if (!log.tags) return;
+                log.tags.forEach(tag => {
+                    const anomalyType = ANOMALY_MAP[tag];
+                    if (anomalyType && !addedAnomalies.has(anomalyType.name)) {
+                        const geometry = new THREE.SphereGeometry(0.3, 16, 16);
+                        const material = new THREE.MeshBasicMaterial({ color: anomalyType.color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending });
+                        const anomaly = new THREE.Mesh(geometry, material);
+                        
+                        const radius = 6 + Math.random();
+                        const theta = Math.random() * 2 * Math.PI;
+                        const phi = Math.acos(2 * Math.random() - 1);
+                        anomaly.position.set(radius * Math.sin(phi) * Math.cos(theta), radius * Math.sin(phi) * Math.sin(theta), radius * Math.cos(phi));
+                        
+                        anomaly.userData = { type: anomalyType.name, severity: anomalyType.severity, detected: false, detectionProgress: 0 };
+                        anomalies.push(anomaly);
+                        scene.add(anomaly);
+                        addedAnomalies.add(anomalyType.name);
+                    }
+                });
+            });
+        }
+        
+        // --- Animation Loop ---
+        function animate(scores) {
+            requestAnimationFrame(() => animate(scores));
+
+            const time = Date.now() * 0.001;
+            
+            if (bioCoreModel) {
+                const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
+                const pulseSpeed = 0.5 + (avgScore / 10); // Slower pulse for lower scores
+                const pulseStrength = 0.01 + (avgScore / 10) * 0.03;
+                const pulse = Math.sin(time * pulseSpeed) * pulseStrength + 1;
+                bioCoreModel.scale.set(pulse, pulse, pulse);
+                bioCoreModel.rotation.y += 0.001;
+            }
+
+            if (nanobots) {
+                updateNanobots();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function updateNanobots() {
+            const positions = nanobots.geometry.attributes.position;
+            const velocities = nanobots.geometry.velocities;
+            const bounds = 12;
+
+            for (let i = 0; i < positions.count; i++) {
+                const pos = new THREE.Vector3(positions.getX(i), positions.getY(i), positions.getZ(i));
+                pos.add(velocities[i]);
+                if (pos.length() > bounds) {
+                    pos.normalize().multiplyScalar(bounds);
+                    velocities[i].reflect(pos.clone().normalize());
+                }
+                positions.setXYZ(i, pos.x, pos.y, pos.z);
+
+                anomalies.forEach(anomaly => {
+                    if (pos.distanceTo(anomaly.position) < 1.5) {
+                        if (!anomaly.userData.detected) {
+                            anomaly.userData.detectionProgress += 0.005;
+                            if (anomaly.userData.detectionProgress > 1) {
+                                anomaly.userData.detected = true;
+                                anomaly.material.opacity = 0.7;
+                                addLogEntry(anomaly.userData.severity, `Swarm Alert: ${anomaly.userData.type} detected.`);
+                                updateSystemStatusFromAnomalies();
+                            }
+                        }
+                    }
+                });
+            }
+            positions.needsUpdate = true;
+        }
+
+        // --- UI and Logging ---
+        function populateHistoricalLogs(logs) {
+            logContainer.innerHTML = '';
+            logs.slice().reverse().forEach(log => {
+                if (log.ai_notes) {
+                    const date = new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    addLogEntry('INFO', `[${date}] ${log.ai_notes}`);
+                }
+            });
+        }
+
+        function addLogEntry(severity, message) {
+            const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
+            const entry = document.createElement('div');
+            entry.className = 'log-entry p-2 rounded-md';
+            
+            let severityClass = 'bg-cyan-900/50', severityColor = 'text-cyan-300';
+            if (severity === 'WARNING') { severityClass = 'bg-yellow-900/50'; severityColor = 'text-yellow-300'; }
+            if (severity === 'CRITICAL') { severityClass = 'bg-red-900/50'; severityColor = 'text-red-300'; }
+            entry.classList.add(severityClass);
+
+            entry.innerHTML = `<p class="font-bold ${severityColor}">[${severity}] <span class="font-normal text-gray-400 ml-2">${timestamp}</span></p><p class="text-white">${message}</p>`;
+            logContainer.prepend(entry);
+            if (logContainer.children.length > 50) logContainer.removeChild(logContainer.lastChild);
+        }
+        
+        function updateSystemStatus(status, color) {
+            systemStatusEl.innerText = status;
+            systemStatusEl.style.color = color;
+            systemStatusEl.className = `font-bold status-${status.toLowerCase()}`;
+        }
+        
+        function updateSystemStatusFromAnomalies() {
+            const detectedAnomalies = anomalies.filter(a => a.userData.detected);
+            if (detectedAnomalies.some(a => a.userData.severity === 'CRITICAL')) {
+                updateSystemStatus('CRITICAL', '#ff4d4d');
+            } else if (detectedAnomalies.length > 0) {
+                updateSystemStatus('WARNING', '#ffd700');
+            }
+        }
+
+        // --- Event Listeners and Startup ---
+        window.addEventListener('resize', () => {
+            if (camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        }, false);
+        
+        resyncButton.addEventListener('click', () => {
+            if(USER_TOKEN) fetchAndInitialize(USER_TOKEN);
+        });
+
+        // --- Initial Load ---
+        function start() {
+            USER_TOKEN = prompt("Please paste your Supabase Auth Token (JWT) to link with the LightCore Brain.\n\n(You can get this from your browser's developer tools: Application -> Local Storage -> sb-....-auth-token -> session -> access_token)");
+            if (USER_TOKEN) {
+                fetchAndInitialize(USER_TOKEN);
+            } else {
+                addLogEntry('CRITICAL', 'No auth token provided. Cannot connect to LightCore Brain.');
+                updateSystemStatus('OFFLINE', '#6B7280');
+            }
+        }
+        
+        start();
+
+    </script>
+</body>
+</html>
