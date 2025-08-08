@@ -22,7 +22,6 @@
         .status-critical { color: #ff4d4d; text-shadow: 0 0 5px #ff4d4d; }
         .scanline { position: absolute; top: 0; left: 0; width: 100%; height: 3px; background: linear-gradient(90deg, rgba(0,240,255,0), rgba(0,240,255,0.8), rgba(0,240,255,0)); animation: scan 4s linear infinite; pointer-events: none; z-index: 100; }
         @keyframes scan { 0% { transform: translateY(-10px); } 100% { transform: translateY(100vh); } }
-        /* Scrollbar styling */
         .overflow-y-auto::-webkit-scrollbar { width: 4px; }
         .overflow-y-auto::-webkit-scrollbar-track { background: transparent; }
         .overflow-y-auto::-webkit-scrollbar-thumb { background: rgba(0, 240, 255, 0.3); border-radius: 2px; }
@@ -67,11 +66,7 @@
         // --- CONFIGURATION ---
         const SUPABASE_URL = 'https://izbjadizahqlfrdqofyw.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6YmphZGl6YWhxbGZyZHFvZnl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMDE1OTksImV4cCI6MjA2OTc3NzU5OX0.sCoMYav2kGtopZsmijAJojBgoN_ay-ddAVYT3I-l6o0';
-        
-        // The localStorage key for your Supabase project's auth token
-        const AUTH_TOKEN_KEY = 'sb-izbjadizahqlfrdqofyw-auth-token';
 
-        // Mapping log tags to anomaly types
         const ANOMALY_MAP = {
             'stress': { name: 'Cortisol Hotspot', color: 0xffa500, severity: 'WARNING' },
             'anxious': { name: 'Cortisol Hotspot', color: 0xffa500, severity: 'WARNING' },
@@ -83,7 +78,6 @@
             'energized': { name: 'Mitochondrial Efficiency', color: 0x00ff88, severity: 'INFO' },
         };
 
-        // --- Basic Setup ---
         let scene, camera, renderer, bioCoreModel, nanobots, anomalies;
         const container = document.getElementById('container');
         const logContainer = document.getElementById('log-container');
@@ -93,7 +87,6 @@
         let supabase;
         let currentAuthToken = null;
 
-        // --- MAIN LOGIC ---
         async function fetchAndInitialize(authToken) {
             addLogEntry('INFO', 'Establishing secure link to LightCore Brain...');
             currentAuthToken = authToken;
@@ -107,7 +100,7 @@
                 updateSystemStatus('ERROR', '#ff4d4d');
                 return;
             }
-            subjectIdEl.textContent = user.id.split('-')[0]; // Show first part of UUID
+            subjectIdEl.textContent = user.id.split('-')[0];
 
             const { data: logs, error } = await supabase
                 .from('daily_logs')
@@ -118,13 +111,11 @@
             if (error || !logs || logs.length === 0) {
                 addLogEntry('WARNING', 'No user data found. Running baseline simulation.');
                 updateSystemStatus('UNKNOWN', '#9CA3AF');
-                // Initialize with default data if no logs are found
                 const defaultScores = { clarity: 7, immune: 7, physical: 7 };
                 if (scene) {
                    while(scene.children.length > 0){ scene.remove(scene.children[0]); }
-                } else {
-                   initScene();
                 }
+                initScene();
                 createBioCore(defaultScores);
                 createNanobots(defaultScores);
                 createAnomaliesFromLogs([]);
@@ -139,7 +130,6 @@
                 physical: logs[0].physical_readiness_score
             };
             
-            // Re-initialize the 3D scene with real data
             if(scene) {
                 while(scene.children.length > 0){ scene.remove(scene.children[0]); }
             }
@@ -152,7 +142,6 @@
             animate(latestScores);
         }
         
-        // --- Scene Initialization and Objects ---
         function initScene() {
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -160,6 +149,9 @@
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
+            if (container.firstChild) {
+                container.removeChild(container.firstChild);
+            }
             container.appendChild(renderer.domElement);
             
             const ambientLight = new THREE.AmbientLight(0x404040, 2);
@@ -172,7 +164,6 @@
         function createBioCore(scores) {
             const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
             const coreColor = new THREE.Color().lerpColors(new THREE.Color(0xff0000), new THREE.Color(0x00f0ff), avgScore / 10);
-
             const geometry = new THREE.IcosahedronGeometry(5, 4);
             const material = new THREE.MeshStandardMaterial({
                 color: coreColor,
@@ -191,7 +182,6 @@
         function createNanobots(scores) {
             const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
             const botColor = new THREE.Color().lerpColors(new THREE.Color(0xffd700), new THREE.Color(0x00f0ff), avgScore / 7);
-
             const count = 5000;
             const geometry = new THREE.BufferGeometry();
             const positions = new Float32Array(count * 3);
@@ -204,7 +194,6 @@
                 positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
                 positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
                 positions[i * 3 + 2] = radius * Math.cos(phi);
-                
                 const agitation = 1 - (avgScore / 10);
                 velocities.push(new THREE.Vector3(
                     (Math.random() - 0.5) * (0.02 + agitation * 0.05),
@@ -223,7 +212,6 @@
         function createAnomaliesFromLogs(logs) {
             anomalies = [];
             let addedAnomalies = new Set();
-            
             logs.forEach(log => {
                 if (!log.tags) return;
                 log.tags.forEach(tag => {
@@ -232,12 +220,10 @@
                         const geometry = new THREE.SphereGeometry(0.3, 16, 16);
                         const material = new THREE.MeshBasicMaterial({ color: anomalyType.color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending });
                         const anomaly = new THREE.Mesh(geometry, material);
-                        
                         const radius = 6 + Math.random();
                         const theta = Math.random() * 2 * Math.PI;
                         const phi = Math.acos(2 * Math.random() - 1);
                         anomaly.position.set(radius * Math.sin(phi) * Math.cos(theta), radius * Math.sin(phi) * Math.sin(theta), radius * Math.cos(phi));
-                        
                         anomaly.userData = { type: anomalyType.name, severity: anomalyType.severity, detected: false, detectionProgress: 0 };
                         anomalies.push(anomaly);
                         scene.add(anomaly);
@@ -247,13 +233,10 @@
             });
         }
         
-        // --- Animation Loop ---
         function animate(scores) {
-            if (!scores) return; // Stop animation if no scores
+            if (!scores || !renderer) return;
             requestAnimationFrame(() => animate(scores));
-
             const time = Date.now() * 0.001;
-            
             if (bioCoreModel) {
                 const avgScore = (scores.clarity + scores.immune + scores.physical) / 3;
                 const pulseSpeed = 0.5 + (avgScore / 10);
@@ -262,11 +245,7 @@
                 bioCoreModel.scale.set(pulse, pulse, pulse);
                 bioCoreModel.rotation.y += 0.001;
             }
-
-            if (nanobots) {
-                updateNanobots();
-            }
-
+            if (nanobots) updateNanobots();
             renderer.render(scene, camera);
         }
 
@@ -274,7 +253,6 @@
             const positions = nanobots.geometry.attributes.position;
             const velocities = nanobots.geometry.velocities;
             const bounds = 12;
-
             for (let i = 0; i < positions.count; i++) {
                 const pos = new THREE.Vector3(positions.getX(i), positions.getY(i), positions.getZ(i));
                 pos.add(velocities[i]);
@@ -283,7 +261,6 @@
                     velocities[i].reflect(pos.clone().normalize());
                 }
                 positions.setXYZ(i, pos.x, pos.y, pos.z);
-
                 anomalies.forEach(anomaly => {
                     if (pos.distanceTo(anomaly.position) < 1.5) {
                         if (!anomaly.userData.detected) {
@@ -301,7 +278,6 @@
             positions.needsUpdate = true;
         }
 
-        // --- UI and Logging ---
         function populateHistoricalLogs(logs) {
             logContainer.innerHTML = '';
             logs.slice().reverse().forEach(log => {
@@ -316,12 +292,10 @@
             const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
             const entry = document.createElement('div');
             entry.className = 'log-entry p-2 rounded-md';
-            
             let severityClass = 'bg-cyan-900/50', severityColor = 'text-cyan-300';
             if (severity === 'WARNING') { severityClass = 'bg-yellow-900/50'; severityColor = 'text-yellow-300'; }
             if (severity === 'CRITICAL') { severityClass = 'bg-red-900/50'; severityColor = 'text-red-300'; }
             entry.classList.add(severityClass);
-
             entry.innerHTML = `<p class="font-bold ${severityColor}">[${severity}] <span class="font-normal text-gray-400 ml-2">${timestamp}</span></p><p class="text-white">${message}</p>`;
             logContainer.prepend(entry);
             if (logContainer.children.length > 50) logContainer.removeChild(logContainer.lastChild);
@@ -342,7 +316,6 @@
             }
         }
 
-        // --- Event Listeners and Startup ---
         window.addEventListener('resize', () => {
             if (camera && renderer) {
                 camera.aspect = window.innerWidth / window.innerHeight;
@@ -358,29 +331,27 @@
         // --- AUTOMATIC STARTUP LOGIC ---
         function start() {
             try {
-                // 1. Try to get the auth token from localStorage.
-                const authDataString = localStorage.getItem(AUTH_TOKEN_KEY);
-                if (!authDataString) throw new Error("Auth token not found in localStorage.");
-
-                const authData = JSON.parse(authDataString);
-                const userToken = authData?.session?.access_token;
+                // 1. Read the token from sessionStorage
+                const userToken = sessionStorage.getItem('supabase.auth.token');
                 
+                // 2. IMPORTANT: Remove the token immediately after reading for security
+                sessionStorage.removeItem('supabase.auth.token');
+
                 if (userToken) {
-                    // 2. If found, initialize the simulation.
+                    // 3. If found, initialize the simulation.
                     fetchAndInitialize(userToken);
                 } else {
-                    // 3. If not found, show an error.
-                    throw new Error("Access token missing from session data.");
+                    // 4. If not found, show an error.
+                    throw new Error("Active session token not found.");
                 }
             } catch (error) {
                 console.error("Initialization Error:", error);
-                addLogEntry('CRITICAL', 'No active session found. Please log in to the main dashboard and then refresh this page.');
+                addLogEntry('CRITICAL', 'No active session found. Please access via the button on the main dashboard.');
                 updateSystemStatus('OFFLINE', '#6B7280');
             }
         }
         
         start();
-
     </script>
 </body>
 </html>

@@ -7,6 +7,19 @@ function Header() {
     await supabase.auth.signOut();
   };
 
+  const handleNavigateToChamber = async (e) => {
+    e.preventDefault();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      // Temporarily place the token in session storage for the new page to read
+      sessionStorage.setItem('supabase.auth.token', session.access_token);
+      window.location.href = '/resonance-chamber.html';
+    } else {
+      // This should not happen if the user is logged in, but is good practice
+      alert('Could not find active session. Please log in again.');
+    }
+  };
+
   return (
     <div className="header-container">
       <img
@@ -16,6 +29,8 @@ function Header() {
       />
       <h1>LightCore - Your Bio Digital Twin</h1>
       <div className="header-actions">
+        {/* New Button to Access the Resonance Chamber */}
+        <a href="#" className="header-btn" onClick={handleNavigateToChamber}>Resonance Chamber</a>
         <a href="#" id="logout-link" className="header-btn" onClick={handleLogout}>Log Out</a>
       </div>
     </div>
