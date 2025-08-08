@@ -4,83 +4,88 @@ import { OrbitControls } from '@react-three/drei';
 import { supabase } from '../supabaseClient';
 import * as THREE from 'three';
 
-// The HUD component for displaying 2D information
+// UPDATE: Added custom scrollbar hiding styles
 function Hud({ log, onClose }) {
   if (!log) return null;
-
-  console.log('HUD is rendering for log:', log.created_at); // Diagnostic log
 
   const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
-    <div 
-      style={{ 
-        position: 'absolute', top: '2rem', left: '2rem', width: '400px',
-        color: '#00f0ff', background: 'rgba(10, 25, 47, 0.7)',
-        border: '1px solid rgba(0, 240, 255, 0.2)', backdropFilter: 'blur(10px)',
-        borderRadius: '0.5rem', padding: '1.5rem',
-        fontFamily: "'Roboto Mono', monospace", fontSize: '14px',
-        animation: 'fadeIn 0.5s ease-out', zIndex: 10
-      }}
-    >
-      <button onClick={onClose} style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', background: 'none', border: 'none', color: '#00f0ff', fontSize: '1.5rem', cursor: 'pointer' }}>
-        &times;
-      </button>
-      
-      <h2 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '1.25rem', textShadow: '0 0 5px #00f0ff', marginBottom: '1rem' }}>
-        LOG ENTRY: {formatDate(log.created_at)}
-      </h2>
-      
-      <div style={{ maxHeight: '200px', overflowY: 'auto', paddingRight: '1rem', marginBottom: '1rem' }}>
-        <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{log.ai_notes}</p>
-      </div>
+    <>
+      <style>{`
+        .hud-scroll::-webkit-scrollbar { display: none; }
+        .hud-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
+      <div 
+        style={{ 
+          position: 'absolute', top: '2rem', left: '2rem', width: '400px',
+          color: '#00f0ff', background: 'rgba(10, 25, 47, 0.7)',
+          border: '1px solid rgba(0, 240, 255, 0.2)', backdropFilter: 'blur(10px)',
+          borderRadius: '0.5rem', padding: '1.5rem',
+          fontFamily: "'Roboto Mono', monospace", fontSize: '14px',
+          animation: 'fadeIn 0.5s ease-out', zIndex: 10
+        }}
+      >
+        <button onClick={onClose} style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', background: 'none', border: 'none', color: '#00f0ff', fontSize: '1.5rem', cursor: 'pointer' }}>
+          &times;
+        </button>
+        
+        <h2 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '1.25rem', textShadow: '0 0 5px #00f0ff', marginBottom: '1rem' }}>
+          LOG ENTRY: {formatDate(log.created_at)}
+        </h2>
+        
+        <div className="hud-scroll" style={{ maxHeight: '200px', overflowY: 'auto', paddingRight: '1rem', marginBottom: '1rem' }}>
+          <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{log.ai_notes}</p>
+        </div>
 
-      <div style={{ borderTop: '1px solid rgba(0, 240, 255, 0.2)', paddingTop: '1rem' }}>
-        <h3 style={{ fontFamily: "'Orbitron', sans-serif", marginBottom: '0.75rem' }}>TAGS</h3>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-          {log.tags?.map(tag => (
-            <span key={tag} style={{ background: 'rgba(0, 240, 255, 0.1)', padding: '0.25rem 0.75rem', borderRadius: '99px', fontSize: '12px' }}>
-              {tag}
-            </span>
-          ))}
+        <div style={{ borderTop: '1px solid rgba(0, 240, 255, 0.2)', paddingTop: '1rem' }}>
+          <h3 style={{ fontFamily: "'Orbitron', sans-serif", marginBottom: '0.75rem' }}>TAGS</h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+            {log.tags?.map(tag => (
+              <span key={tag} style={{ background: 'rgba(0, 240, 255, 0.1)', padding: '0.25rem 0.75rem', borderRadius: '99px', fontSize: '12px' }}>
+                {tag}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
-// The interactive historical log node
-function LogNode({ log, position, setSelectedLog, isSelected }) {
+// UPDATE: Now with hover effects and improved material
+function LogNode({ log, position, setSelectedLog, isSelected, setHoveredLog, isHovered }) {
   const meshRef = useRef();
 
-  const materialProps = useMemo(() => {
-    const avgScore = ((log.clarity_score || 0) + (log.immune_score || 0) + (log.physical_readiness_score || 0)) / 30;
-    const color = new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avgScore);
-    return { color, emissive: color, emissiveIntensity: isSelected ? 2.5 : 1 };
-  }, [log, isSelected]);
+  // Change cursor style on hover
+  useEffect(() => {
+    document.body.style.cursor = isHovered ? 'pointer' : 'auto';
+    return () => { document.body.style.cursor = 'auto' }; // Cleanup
+  }, [isHovered]);
 
+  // Animate scale based on hover and selection state
   useFrame(() => {
-    meshRef.current.scale.lerp(new THREE.Vector3(1, 1, 1).multiplyScalar(isSelected ? 1.8 : 1), 0.1);
+    const targetScale = isSelected ? 1.8 : (isHovered ? 1.3 : 1);
+    meshRef.current.scale.lerp(new THREE.Vector3(1, 1, 1).multiplyScalar(targetScale), 0.1);
   });
 
   return (
     <mesh 
       ref={meshRef} 
       position={position}
-      onClick={(e) => {
-        e.stopPropagation();
-        console.log('Node clicked:', log.created_at); // Diagnostic log
-        setSelectedLog(log);
-      }}
+      onClick={(e) => { e.stopPropagation(); setSelectedLog(log); }}
+      onPointerOver={(e) => { e.stopPropagation(); setHoveredLog(log); }}
+      onPointerOut={() => setHoveredLog(null)}
     >
-      <sphereGeometry args={[0.2, 16, 16]} />
-      <meshStandardMaterial {...materialProps} />
+      <sphereGeometry args={[0.2, 32, 32]} />
+      {/* UPDATE: New reflective chrome material for a more 3D look */}
+      <meshStandardMaterial color="#f0f0f0" metalness={0.95} roughness={0.1} />
     </mesh>
   );
 }
 
-// The component to arrange all nodes
-function Constellation({ logs, setSelectedLog, selectedLog }) {
+// UPDATE: Passes hover state down
+function Constellation({ logs, setSelectedLog, selectedLog, setHoveredLog, hoveredLog }) {
   return useMemo(() => {
     const radius = 6;
     return logs.map((log, index) => {
@@ -92,13 +97,14 @@ function Constellation({ logs, setSelectedLog, selectedLog }) {
           position={[radius * Math.cos(angle), radius * Math.sin(angle), 0]} 
           setSelectedLog={setSelectedLog}
           isSelected={selectedLog?.created_at === log.created_at}
+          setHoveredLog={setHoveredLog}
+          isHovered={hoveredLog?.created_at === log.created_at}
         />
       );
     });
-  }, [logs, setSelectedLog, selectedLog]);
+  }, [logs, setSelectedLog, selectedLog, setHoveredLog, hoveredLog]);
 }
 
-// The central Locus orb
 function Locus() {
   const meshRef = useRef();
   useFrame((state, delta) => {
@@ -115,12 +121,13 @@ function Locus() {
   );
 }
 
-// The main component that manages state
+// UPDATE: Main component now manages hover state
 function NeuralCortex() {
   const [logHistory, setLogHistory] = useState([]); 
   const [latestScores, setLatestScores] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedLog, setSelectedLog] = useState(null);
+  const [hoveredLog, setHoveredLog] = useState(null); // NEW state for hovered log
 
   useEffect(() => {
     const fetchAllData = async () => {
@@ -173,6 +180,8 @@ function NeuralCortex() {
               logs={logHistory} 
               setSelectedLog={setSelectedLog}
               selectedLog={selectedLog}
+              setHoveredLog={setHoveredLog}
+              hoveredLog={hoveredLog}
             />
           </>
         )}
