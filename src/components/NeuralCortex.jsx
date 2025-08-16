@@ -1,21 +1,27 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Line, Text } from '@react-three/drei';
-import { EffectComposer, Bloom } from '@react-three/postprocessing';
+import { OrbitControls, Line, Text, Float, QuadraticBezierLine } from '@react-three/drei';
+import { EffectComposer, Bloom, FXAA } from '@react-three/postprocessing';
 import { supabase } from '../supabaseClient';
 import * as THREE from 'three';
 import LogEntryModal from './LogEntryModal.jsx';
 
 const EVENT_CONFIG = { 'Workout': { color: '#4ade80' }, 'Meal': { color: '#facc15' }, 'Caffeine': { color: '#f97316' }, 'Default': { color: '#a78bfa' } };
 
-// --- UI COMPONENTS ---
+// --- CUSTOM HOOKS ---
+function useHoverCursor(isHovered) {
+  useEffect(() => {
+    const originalCursor = document.body.style.cursor;
+    document.body.style.cursor = isHovered ? 'pointer' : 'auto';
+    return () => { document.body.style.cursor = originalCursor; };
+  }, [isHovered]);
+}
 
+// --- UI COMPONENTS ---
 function Hud({ item, onClose }) {
   if (!item) return null;
-
   const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const isLog = 'ai_notes' in item;
-
   return (
     <>
       <style>{`.hud-scroll::-webkit-scrollbar { display: none; } .hud-scroll { -ms-overflow-style: none; scrollbar-width: none; }`}</style>
@@ -40,7 +46,6 @@ function Hud({ item, onClose }) {
 }
 
 // --- 3D COMPONENTS ---
-
 function Locus() {
   const meshRef = useRef();
   useFrame((state, delta) => {
@@ -49,12 +54,7 @@ function Locus() {
       meshRef.current.rotation.x += delta * 0.05;
     }
   });
-  return (
-    <mesh ref={meshRef}>
-      <icosahedronGeometry args={[3, 5]} />
-      <meshStandardMaterial color="#f0f0f0" metalness={0.9} roughness={0.05} />
-    </mesh>
-  );
+  return (<mesh ref={meshRef}><icosahedronGeometry args={[3, 5]} /><meshStandardMaterial color="#f0f0f0" metalness={0.9} roughness={0.05} /></mesh>);
 }
 
 function AnomalyGlyph({ nudge, position, onGlyphClick }) {
@@ -66,86 +66,40 @@ function AnomalyGlyph({ nudge, position, onGlyphClick }) {
       meshRef.current.position.y = position[1] + Math.sin(time) * 0.2;
     }
   });
-  return (
-    <group ref={meshRef} position={position} onClick={() => onGlyphClick(nudge)}>
-      <mesh>
-        <octahedronGeometry args={[0.5]} />
-        <meshStandardMaterial color="#ff4d4d" emissive="#ff4d4d" emissiveIntensity={1} roughness={0.2} metalness={0.8} />
-      </mesh>
-      <Text color="white" fontSize={0.8} position={[0, 0, 0.6]} rotation={[0, 0, 0]}>!</Text>
-    </group>
-  );
+  return (<group ref={meshRef} position={position} onClick={() => onGlyphClick(nudge)}><mesh><octahedronGeometry args={[0.5]} /><meshStandardMaterial color="#ff4d4d" emissive="#ff4d4d" emissiveIntensity={1} roughness={0.2} metalness={0.8} /></mesh><Text color="white" fontSize={0.8} position={[0, 0, 0.6]} rotation={[0, 0, 0]}>!</Text></group>);
 }
 
 function EventNode({ event, position }) {
   const config = EVENT_CONFIG[event.event_type] || EVENT_CONFIG['Default'];
-  return (
-    <mesh position={position}>
-      <sphereGeometry args={[0.15, 16, 16]} />
-      <meshStandardMaterial color={config.color} emissive={config.color} emissiveIntensity={1.5} />
-    </mesh>
-  );
+  return (<mesh position={position}><sphereGeometry args={[0.15, 16, 16]} /><meshStandardMaterial color={config.color} emissive={config.color} emissiveIntensity={1.5} /></mesh>);
 }
 
 function SynapticLinks({ selectedLog, events }) {
   if (!selectedLog || !selectedLog.position || events.length === 0) return null;
-
   const links = useMemo(() => {
     const startPoint = new THREE.Vector3(...selectedLog.position);
     return events.map((event, index) => {
       const angle = (Math.PI / 2) + (index - (events.length - 1) / 2) * 0.5;
       const endPoint = new THREE.Vector3(startPoint.x + Math.cos(angle) * 3, startPoint.y + Math.sin(angle) * 3, startPoint.z);
-      return { event, startPoint, endPoint };
+      const midPoint = new THREE.Vector3((startPoint.x + endPoint.x) / 2, (startPoint.y + endPoint.y) / 2 + 0.8, startPoint.z);
+      return { event, startPoint, midPoint, endPoint, key: `${event.event_time}-${index}` };
     });
   }, [selectedLog, events]);
-
-  return (
-    <group>
-      {links.map(({ event, startPoint, endPoint }) => (
-        <group key={event.event_time}>
-          <EventNode event={event} position={endPoint} />
-          <Line points={[startPoint, endPoint]} color="#00f0ff" lineWidth={1} transparent opacity={0.5} />
-        </group>
-      ))}
-    </group>
-  );
+  return (<group>{links.map(({ event, startPoint, midPoint, endPoint, key }) => (<group key={key}><EventNode event={event} position={endPoint} /><QuadraticBezierLine start={startPoint} end={endPoint} mid={midPoint} color="#00f0ff" lineWidth={1} transparent opacity={0.55} /></group>))}</group>);
 }
 
 function LogNode({ log, position, setSelectedLog, isSelected, setHoveredLog, isHovered }) {
   const meshRef = useRef();
-  const dynamicColor = useMemo(() => {
-    const avgScore = ((log.clarity_score || 0) + (log.immune_score || 0) + (log.physical_readiness_score || 0)) / 30;
-    return new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avgScore);
-  }, [log]);
-
-  useEffect(() => {
-    document.body.style.cursor = isHovered ? 'pointer' : 'auto';
-    return () => { document.body.style.cursor = 'auto' };
-  }, [isHovered]);
-
+  useHoverCursor(isHovered);
+  const dynamicColor = useMemo(() => { const avgScore = ((log.clarity_score || 0) + (log.immune_score || 0) + (log.physical_readiness_score || 0)) / 30; return new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avgScore); }, [log]);
+  
   useFrame(() => {
-    const targetScale = isSelected ? 1.8 : (isHovered ? 1.3 : 1);
-    meshRef.current.scale.lerp(new THREE.Vector3(1, 1, 1).multiplyScalar(targetScale), 0.1);
+    const target = isSelected ? 1.8 : (isHovered ? 1.3 : 1);
+    const s = THREE.MathUtils.lerp(meshRef.current.scale.x, target, 0.1);
+    meshRef.current.scale.setScalar(s);
   });
 
-  return (
-    <mesh
-      ref={meshRef}
-      position={position}
-      onClick={(e) => { e.stopPropagation(); setSelectedLog({ log, position }); }}
-      onPointerOver={(e) => { e.stopPropagation(); setHoveredLog(log); }}
-      onPointerOut={() => setHoveredLog(null)}
-    >
-      <sphereGeometry args={[0.2, 32, 32]} />
-      <meshStandardMaterial
-        color={dynamicColor}
-        metalness={0.95}
-        roughness={0.1}
-        emissive={dynamicColor}
-        emissiveIntensity={isSelected || isHovered ? 0.5 : 0}
-      />
-    </mesh>
-  );
+  return (<mesh ref={meshRef} position={position} onClick={(e) => { e.stopPropagation(); setSelectedLog({ log, position }); }} onPointerOver={(e) => { e.stopPropagation(); setHoveredLog(log); }} onPointerOut={() => setHoveredLog(null)}><sphereGeometry args={[0.2, 32, 32]} /><meshStandardMaterial color={dynamicColor} metalness={0.95} roughness={0.1} emissive={dynamicColor} emissiveIntensity={isSelected || isHovered ? 0.5 : 0} /></mesh>);
 }
 
 function Constellation({ logs, setSelectedLog, selectedLog, setHoveredLog, hoveredLog }) {
@@ -154,19 +108,15 @@ function Constellation({ logs, setSelectedLog, selectedLog, setHoveredLog, hover
     return logs.map((log, index) => {
       const angle = (index / logs.length) * Math.PI * 2;
       const position = [radius * Math.cos(angle), radius * Math.sin(angle), 0];
-      return (
-        <LogNode
-          key={log.created_at}
-          log={log}
-          position={position}
-          setSelectedLog={setSelectedLog}
-          isSelected={selectedLog?.log?.created_at === log.created_at}
-          setHoveredLog={setHoveredLog}
-          isHovered={hoveredLog?.created_at === log.created_at}
-        />
-      );
+      return (<LogNode key={log.created_at} log={log} position={position} setSelectedLog={setSelectedLog} isSelected={selectedLog?.log?.created_at === log.created_at} setHoveredLog={setHoveredLog} isHovered={hoveredLog?.created_at === log.created_at}/>);
     });
   }, [logs, setSelectedLog, selectedLog, setHoveredLog, hoveredLog]);
+}
+
+function LogEntryButton({ onClick }) {
+    const [hovered, setHovered] = useState(false);
+    useHoverCursor(hovered);
+    return (<Float speed={4} floatIntensity={1.5}><group position={[0, -5, 0]} onClick={onClick} onPointerOver={() => setHovered(true)} onPointerOut={() => setHovered(false)}><mesh><torusGeometry args={[0.6, 0.1, 16, 100]} /><meshStandardMaterial color="#00f0ff" emissive="#00f0ff" emissiveIntensity={hovered ? 2 : 1} roughness={0.2} metalness={0.8} /></mesh><Text color="white" fontSize={0.2} position={[0, 0, 0]}>+ LOG</Text></group></Float>);
 }
 
 // --- MAIN COMPONENT ---
@@ -181,6 +131,7 @@ function NeuralCortex() {
   const [autoRotate, setAutoRotate] = useState(true);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [stepCount, setStepCount] = useState(null);
+  const idleRef = useRef(null);
 
   const fetchAllData = async () => {
     setIsLoading(true);
@@ -198,20 +149,27 @@ function NeuralCortex() {
         setLogHistory(logs);
         setLatestScores({ ...logs[0] });
       } else {
-        setLatestScores({ clarity: 8, immune: 8, physical: 8 });
+        setLatestScores({ clarity_score: 8, immune_score: 8, physical_readiness_score: 8 });
       }
 
       const { data: nudges, error: nudgeError } = nudgeRes;
       if (nudgeError) console.error("Error fetching nudges:", nudgeError);
       else setActiveNudges(nudges || []);
 
-      if (stepRes.steps) setStepCount(stepRes.steps);
+      if (stepRes && stepRes.steps) setStepCount(stepRes.steps);
     }
     setIsLoading(false);
   };
 
   useEffect(() => {
     fetchAllData();
+    const channel = supabase.channel('realtime:daily_logs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'daily_logs' }, 
+        payload => { 
+            console.log('Real-time update received:', payload.new);
+            setLogHistory(prev => [payload.new, ...prev].slice(0, 30))
+        }
+    ).subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   useEffect(() => {
@@ -229,10 +187,11 @@ function NeuralCortex() {
 
   const lightIntensities = useMemo(() => {
     if (!latestScores) return { clarity: 0, immune: 0, physical: 0 };
+    const clamp10 = v => Math.min(10, v || 0);
     return {
-      clarity: (latestScores.clarity_score || 0) * 150,
-      immune: (latestScores.immune_score || 0) * 150,
-      physical: (latestScores.physical_readiness_score || 0) * 150,
+      clarity: clamp10(latestScores.clarity_score) * 30,
+      immune: clamp10(latestScores.immune_score) * 30,
+      physical: clamp10(latestScores.physical_readiness_score) * 30,
     };
   }, [latestScores]);
 
@@ -240,39 +199,22 @@ function NeuralCortex() {
     const isLog = 'log' in item && 'position' in item;
     setSelectedItem(isLog ? item : item);
   };
-
+  
   const handleLogSubmitted = () => {
     setIsLogModalOpen(false);
-    fetchAllData();
+    // Realtime listener will handle the update, but we can refetch for immediate consistency
+    setTimeout(() => {
+        fetchAllData();
+    }, 500);
   };
   
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
+    <div style={{ width: '100vw', height: '100vh' }}>
       <Hud item={selectedItem?.log || selectedItem} onClose={() => setSelectedItem(null)} />
+      <LogEntryModal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} onLogSubmitted={handleLogSubmitted} stepCount={stepCount} />
       
-      <button 
-        onClick={() => setIsLogModalOpen(true)}
-        style={{
-          position: 'absolute', bottom: '2rem', left: '50%', transform: 'translateX(-50%)',
-          fontFamily: "'Orbitron', sans-serif", fontSize: '1rem', color: 'white',
-          background: 'rgba(0, 240, 255, 0.2)', border: '1px solid rgba(0, 240, 255, 0.5)',
-          padding: '0.75rem 1.5rem', borderRadius: '0.5rem', cursor: 'pointer', zIndex: 10,
-          backdropFilter: 'blur(5px)', transition: 'all 0.2s ease'
-        }}
-        onMouseOver={e => e.currentTarget.style.background = 'rgba(0, 240, 255, 0.4)'}
-        onMouseOut={e => e.currentTarget.style.background = 'rgba(0, 240, 255, 0.2)'}
-      >
-        CREATE LOG ENTRY
-      </button>
-
-      <LogEntryModal 
-        isOpen={isLogModalOpen} 
-        onClose={() => setIsLogModalOpen(false)}
-        onLogSubmitted={handleLogSubmitted}
-        stepCount={stepCount}
-      />
-      
-      <Canvas camera={{ position: [0, 0, 12], fov: 75 }}>
+      <Canvas dpr={[1, 2]} gl={{ antialias: true, powerPreference: 'high-performance' }} camera={{ position: [0, 0, 12], fov: 75 }}>
+        <color attach="background" args={['#0a0a1a']} />
         <ambientLight intensity={0.2} />
         <pointLight position={[-10, 5, 5]} intensity={lightIntensities.clarity} color="#00f0ff" />
         <pointLight position={[10, 5, 5]} intensity={lightIntensities.immune} color="#ffd700" />
@@ -286,6 +228,7 @@ function NeuralCortex() {
             {activeNudges.map((nudge, index) => (
               <AnomalyGlyph key={nudge.id} nudge={nudge} position={[-8, 4 - index * 2, -5]} onGlyphClick={setSelectedItem} />
             ))}
+            <LogEntryButton onClick={() => setIsLogModalOpen(true)} />
           </>
         )}
 
@@ -294,15 +237,13 @@ function NeuralCortex() {
           enableZoom={true} 
           autoRotate={autoRotate} 
           autoRotateSpeed={0.3}
-          onStart={() => setAutoRotate(false)}
+          onStart={() => { setAutoRotate(false); clearTimeout(idleRef.current); }}
+          onEnd={() => { clearTimeout(idleRef.current); idleRef.current = setTimeout(() => setAutoRotate(true), 4000); }}
         />
         
-        <EffectComposer>
-          <Bloom 
-            intensity={1.2}
-            luminanceThreshold={0.4}
-            luminanceSmoothing={0.9}
-          />
+        <EffectComposer multisampling={0}>
+          <FXAA />
+          <Bloom intensity={1.0} luminanceThreshold={0.45} luminanceSmoothing={0.8} />
         </EffectComposer>
       </Canvas>
     </div>

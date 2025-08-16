@@ -489,7 +489,7 @@ td:nth-child(6) {
 .button-set-goal:hover { background-color: #374151; color: #F9FAFB; border-color: #60A5FA; }
 
 /* ========================================
-   ChronoDeck Horizontal View
+    ChronoDeck Horizontal View
 ======================================== */
 #chronodeck-card .card-header h2 { margin-bottom: 0; }
 .chrono-deck-weekly-view { padding-top: 0.5rem; }
@@ -518,7 +518,7 @@ td:nth-child(6) {
 .hour-markers span:last-child { transform: translateX(-100%); }
 
 /* ========================================
-   Lightcore Matrix - Organic
+    Lightcore Matrix - Organic
 ======================================== */
 @keyframes pulse-noise { 0% { opacity: 0.05; } 50% { opacity: 0.07; } 100% { opacity: 0.05; } }
 @keyframes drift-nodes { 0% { background-position: 10% 20%, 80% 70%, 30% 90%, 60% 30%; } 100% { background-position: 15% 25%, 75% 65%, 35% 85%, 55% 35%; } }
@@ -530,7 +530,7 @@ td:nth-child(6) {
 .matrix-level-3, .matrix-level-4 {}
 
 /* ========================================
-   AI Core Calibration (HORIZONTAL RE-DESIGN)
+    AI Core Calibration (HORIZONTAL RE-DESIGN)
 ======================================== */
 .ai-core-calibration-container { margin: 1.25rem 0; padding-bottom: 1rem; }
 .calibration-pathway { position: relative; width: 90%; height: 24px; margin: 0 auto; display: flex; align-items: center; }
@@ -546,7 +546,7 @@ td:nth-child(6) {
 .pathway-node.active { background-color: #60A5FA; animation: pulse-active-node 2s infinite; }
 
 /* ========================================
-   Integrations Card
+    Integrations Card
 ======================================== */
 .integration-row { display: flex; justify-content: space-between; align-items: center; font-weight: 500; }
 .integration-label { display: flex; align-items: center; gap: 0.75rem; }
@@ -561,9 +561,33 @@ input:checked + .slider:before { transform: translateX(20px); }
 .step-count-display .label { font-size: 0.9rem; color: #9CA3AF; }
 
 /* ========================================
-   Specific Header Styles
+    Specific Header Styles
 ======================================== */
 #log-station-header {
     font-size: 1.25rem;
     margin-bottom: 0;
+}
+
+/* === NEW: Futuristic Form Styles for Modals === */
+.futuristic-input {
+  background-color: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  color: #F9FAFB;
+  padding: 0.75rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.futuristic-input:focus {
+  outline: none;
+  border-color: rgba(0, 240, 255, 0.8);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+}
+
+#log-station-header {
+  font-size: 1.25rem;
+  margin-bottom: 0;
+  font-family: 'Orbitron', sans-serif;
+  text-shadow: 0 0 5px #00f0ff;
 }
