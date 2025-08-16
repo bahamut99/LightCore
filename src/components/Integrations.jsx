@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 
-function Integrations() {
+function Integrations({ stepCount, setStepCount }) {
     const [isConnected, setIsConnected] = useState(false);
-    const [stepCount, setStepCount] = useState(null);
+    const [isChecked, setIsChecked] = useState(false); 
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -27,64 +27,36 @@ function Integrations() {
         if (checkError) {
             setError('Could not verify integration status.');
             setIsConnected(false);
+            setIsChecked(false);
         } else if (data) {
             setIsConnected(true);
-            fetchSteps(session.access_token);
+            setIsChecked(true);
+            // This component doesn't fetch its own steps, the dashboard does
         } else {
             setIsConnected(false);
+            setIsChecked(false);
         }
         setIsLoading(false);
     }, []);
 
-    const fetchSteps = async (token) => {
-        try {
-            const response = await fetch('/.netlify/functions/fetch-health-data', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!response.ok) throw new Error('Failed to fetch step data.');
-            
-            const data = await response.json();
-            setStepCount(data.steps);
-        } catch (err) {
-            setError(err.message);
-        }
-    };
-
     useEffect(() => {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('code') || urlParams.has('error')) {
-            window.history.replaceState({}, document.title, "/");
-            // After redirect, always re-check status
-            checkIntegrationStatus();
-        } else {
-            // Normal page load check
-            checkIntegrationStatus();
-        }
+        checkIntegrationStatus();
     }, [checkIntegrationStatus]);
+    
+    useEffect(() => {
+        if (isChecked && !isConnected) {
+            // The call to the auth function should be the full path
+            window.location.href = '/.netlify/functions/google-auth';
+        }
+    }, [isChecked, isConnected]);
 
     const handleToggle = async (e) => {
         const isNowChecked = e.target.checked;
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+        setIsChecked(isNowChecked);
 
-        if (isNowChecked) {
-            try {
-                // 1. Ask our backend for the special Google URL
-                const response = await fetch('/.netlify/functions/google-auth', {
-                    headers: { 'Authorization': `Bearer ${session.access_token}` }
-                });
-                if (!response.ok) throw new Error('Could not get auth URL.');
-                
-                const data = await response.json();
-                
-                // 2. Redirect the user to that URL
-                window.location.href = data.authUrl;
-            } catch (err) {
-                setError("Failed to start connection process.");
-            }
-        } else {
-            // Disconnect logic
+        if (!isNowChecked) {
             setIsLoading(true);
+            const { data: { session } } = await supabase.auth.getSession();
             try {
                 await fetch('/.netlify/functions/delete-integration', {
                     method: 'POST',
@@ -95,9 +67,10 @@ function Integrations() {
                     body: JSON.stringify({ provider: 'google-health' })
                 });
                 setIsConnected(false);
-                setStepCount(null);
+                if (setStepCount) setStepCount(null);
             } catch (err) {
                 setError("Failed to disconnect.");
+                setIsChecked(true); 
             }
             setIsLoading(false);
         }
@@ -118,23 +91,17 @@ function Integrations() {
                     <span>Google Health</span>
                 </div>
                 <label className="toggle-switch">
-                    <input type="checkbox" checked={isConnected} onChange={handleToggle} disabled={isLoading} />
+                    <input type="checkbox" checked={isChecked} onChange={handleToggle} disabled={isLoading} />
                     <span className="slider"></span>
                 </label>
             </div>
             {isConnected && (
                 <div className="integration-data">
                     <hr />
-                    {isLoading && !stepCount ? (
-                        <div className="loader" style={{margin: '1rem auto'}}></div>
-                    ) : error ? (
-                         <p className="error-message small">{error}</p>
-                    ) : (
-                        <div className="step-count-display">
-                            <span className="steps">{stepCount !== null ? stepCount.toLocaleString() : '...'}</span>
-                            <span className="label">Steps Today</span>
-                        </div>
-                    )}
+                    {/* The step count is displayed by the parent Dashboard component in Classic View */}
+                    <div className="step-count-display">
+                        <span className="label">Connection Active</span>
+                    </div>
                 </div>
             )}
         </div>
