@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 
-function Integrations({ stepCount, setStepCount }) {
+function Integrations() {
     const [isConnected, setIsConnected] = useState(false);
     const [isChecked, setIsChecked] = useState(false); 
     const [isLoading, setIsLoading] = useState(true);
@@ -31,7 +31,6 @@ function Integrations({ stepCount, setStepCount }) {
         } else if (data) {
             setIsConnected(true);
             setIsChecked(true);
-            // This component doesn't fetch its own steps, the dashboard does
         } else {
             setIsConnected(false);
             setIsChecked(false);
@@ -42,19 +41,32 @@ function Integrations({ stepCount, setStepCount }) {
     useEffect(() => {
         checkIntegrationStatus();
     }, [checkIntegrationStatus]);
-    
-    useEffect(() => {
-        if (isChecked && !isConnected) {
-            // The call to the auth function should be the full path
-            window.location.href = '/.netlify/functions/google-auth';
-        }
-    }, [isChecked, isConnected]);
 
     const handleToggle = async (e) => {
         const isNowChecked = e.target.checked;
         setIsChecked(isNowChecked);
 
-        if (!isNowChecked) {
+        if (isNowChecked) {
+            // NEW: Use fetch to get a secure auth URL from the backend
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session) throw new Error("User session not found.");
+
+                const response = await fetch('/.netlify/functions/google-auth', {
+                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                });
+
+                if (!response.ok) throw new Error('Could not get auth URL from server.');
+                
+                const data = await response.json();
+                window.location.href = data.authUrl;
+
+            } catch (err) {
+                setError("Failed to start connection process.");
+                setIsChecked(false); // Revert toggle on failure
+            }
+        } else {
+            // Disconnect logic remains the same
             setIsLoading(true);
             const { data: { session } } = await supabase.auth.getSession();
             try {
@@ -67,7 +79,8 @@ function Integrations({ stepCount, setStepCount }) {
                     body: JSON.stringify({ provider: 'google-health' })
                 });
                 setIsConnected(false);
-                if (setStepCount) setStepCount(null);
+                // In classic view, a page refresh might be needed to update steps,
+                // or rely on the dashboard's main data fetch.
             } catch (err) {
                 setError("Failed to disconnect.");
                 setIsChecked(true); 
@@ -79,6 +92,7 @@ function Integrations({ stepCount, setStepCount }) {
     return (
         <div className="card">
             <h2>Connected Services</h2>
+            {error && <p className="error-message small">{error}</p>}
             <div className="integration-row">
                 <div className="integration-label">
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="google-logo">
@@ -98,7 +112,6 @@ function Integrations({ stepCount, setStepCount }) {
             {isConnected && (
                 <div className="integration-data">
                     <hr />
-                    {/* The step count is displayed by the parent Dashboard component in Classic View */}
                     <div className="step-count-display">
                         <span className="label">Connection Active</span>
                     </div>
