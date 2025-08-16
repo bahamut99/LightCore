@@ -4,6 +4,7 @@ import { OrbitControls, Line, Text } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { supabase } from '../supabaseClient';
 import * as THREE from 'three';
+import LogEntryModal from './LogEntryModal.jsx';
 
 const EVENT_CONFIG = { 'Workout': { color: '#4ade80' }, 'Meal': { color: '#facc15' }, 'Caffeine': { color: '#f97316' }, 'Default': { color: '#a78bfa' } };
 
@@ -65,7 +66,6 @@ function AnomalyGlyph({ nudge, position, onGlyphClick }) {
       meshRef.current.position.y = position[1] + Math.sin(time) * 0.2;
     }
   });
-
   return (
     <group ref={meshRef} position={position} onClick={() => onGlyphClick(nudge)}>
       <mesh>
@@ -179,32 +179,38 @@ function NeuralCortex() {
   const [dayEvents, setDayEvents] = useState([]);
   const [activeNudges, setActiveNudges] = useState([]);
   const [autoRotate, setAutoRotate] = useState(true);
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [stepCount, setStepCount] = useState(null);
+
+  const fetchAllData = async () => {
+    setIsLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const [logRes, nudgeRes, stepRes] = await Promise.all([
+        supabase.from('daily_logs').select('id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes').order('created_at', { ascending: false }).limit(30),
+        supabase.from('nudges').select('*').eq('is_acknowledged', false),
+        fetch('/.netlify/functions/fetch-health-data', { headers: { 'Authorization': `Bearer ${session.access_token}` } }).then(res => res.json())
+      ]);
+      
+      const { data: logs, error: logError } = logRes;
+      if (logError) console.error("Error fetching logs:", logError);
+      else if (logs && logs.length > 0) {
+        setLogHistory(logs);
+        setLatestScores({ ...logs[0] });
+      } else {
+        setLatestScores({ clarity: 8, immune: 8, physical: 8 });
+      }
+
+      const { data: nudges, error: nudgeError } = nudgeRes;
+      if (nudgeError) console.error("Error fetching nudges:", nudgeError);
+      else setActiveNudges(nudges || []);
+
+      if (stepRes.steps) setStepCount(stepRes.steps);
+    }
+    setIsLoading(false);
+  };
 
   useEffect(() => {
-    const fetchAllData = async () => {
-      setIsLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const [logRes, nudgeRes] = await Promise.all([
-          supabase.from('daily_logs').select('id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes').order('created_at', { ascending: false }).limit(30),
-          supabase.from('nudges').select('*').eq('is_acknowledged', false)
-        ]);
-        
-        const { data: logs, error: logError } = logRes;
-        if (logError) console.error("Error fetching logs:", logError);
-        else if (logs && logs.length > 0) {
-          setLogHistory(logs);
-          setLatestScores({ ...logs[0] });
-        } else {
-          setLatestScores({ clarity: 8, immune: 8, physical: 8 });
-        }
-
-        const { data: nudges, error: nudgeError } = nudgeRes;
-        if (nudgeError) console.error("Error fetching nudges:", nudgeError);
-        else setActiveNudges(nudges || []);
-      }
-      setIsLoading(false);
-    };
     fetchAllData();
   }, []);
 
@@ -232,16 +238,39 @@ function NeuralCortex() {
 
   const handleSelectItem = (item) => {
     const isLog = 'log' in item && 'position' in item;
-    if (isLog) {
-      setSelectedItem(item);
-    } else {
-      setSelectedItem(item);
-    }
+    setSelectedItem(isLog ? item : item);
+  };
+
+  const handleLogSubmitted = () => {
+    setIsLogModalOpen(false);
+    fetchAllData();
   };
   
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
       <Hud item={selectedItem?.log || selectedItem} onClose={() => setSelectedItem(null)} />
+      
+      <button 
+        onClick={() => setIsLogModalOpen(true)}
+        style={{
+          position: 'absolute', bottom: '2rem', left: '50%', transform: 'translateX(-50%)',
+          fontFamily: "'Orbitron', sans-serif", fontSize: '1rem', color: 'white',
+          background: 'rgba(0, 240, 255, 0.2)', border: '1px solid rgba(0, 240, 255, 0.5)',
+          padding: '0.75rem 1.5rem', borderRadius: '0.5rem', cursor: 'pointer', zIndex: 10,
+          backdropFilter: 'blur(5px)', transition: 'all 0.2s ease'
+        }}
+        onMouseOver={e => e.currentTarget.style.background = 'rgba(0, 240, 255, 0.4)'}
+        onMouseOut={e => e.currentTarget.style.background = 'rgba(0, 240, 255, 0.2)'}
+      >
+        CREATE LOG ENTRY
+      </button>
+
+      <LogEntryModal 
+        isOpen={isLogModalOpen} 
+        onClose={() => setIsLogModalOpen(false)}
+        onLogSubmitted={handleLogSubmitted}
+        stepCount={stepCount}
+      />
       
       <Canvas camera={{ position: [0, 0, 12], fov: 75 }}>
         <ambientLight intensity={0.2} />

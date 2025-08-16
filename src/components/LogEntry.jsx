@@ -19,7 +19,8 @@ async function fetchWithRetry(url, options, retries = 3, delay = 2000) {
     throw new Error(`Failed to fetch after ${retries} attempts.`);
 }
 
-function LogEntry({ stepCount }) {
+// Now accepts onLogSubmitted prop
+function LogEntry({ stepCount, onLogSubmitted }) {
     const [log, setLog] = useState('');
     const [sleepHours, setSleepHours] = useState('');
     const [sleepQuality, setSleepQuality] = useState('');
@@ -61,12 +62,18 @@ function LogEntry({ stepCount }) {
             setSleepHours('');
             setSleepQuality('');
             
+            // After parsing events, call the callback if it exists
             fetch('/.netlify/functions/parse-events', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
                 body: JSON.stringify({ log_id: newLog.id, log_text: newLog.log, userTimezone })
             }).then(() => {
-                window.dispatchEvent(new CustomEvent('newLogSubmitted'));
+                if (onLogSubmitted) {
+                    onLogSubmitted(); // This tells the parent (NeuralCortex) we're done
+                } else {
+                    // Fallback for the Classic View
+                    window.dispatchEvent(new CustomEvent('newLogSubmitted'));
+                }
             });
 
         } catch (err) { setError(err.message); } 
@@ -74,39 +81,31 @@ function LogEntry({ stepCount }) {
     };
 
     return (
-        <>
-            <div className="card">
-                <h2 id="log-station-header">Daily Log Station</h2>
-                <form onSubmit={handleSubmit} style={{marginTop: '1rem'}}>
-                    <textarea id="log" rows="5" placeholder="I woke up feeling clear-headed..." value={log} onChange={(e) => setLog(e.target.value)}></textarea>
-                    
-                    <div className="sleep-inputs-container">
-                        <div>
-                            <label htmlFor="sleep-hours">Hours Slept</label>
-                            <input type="number" id="sleep-hours" min="0" max="24" step="0.5" placeholder="e.g., 7.5" value={sleepHours} onChange={e => setSleepHours(e.target.value)} />
-                        </div>
-                        <div>
-                            <label htmlFor="sleep-quality">Sleep Quality (1-5)</label>
-                            <input type="number" id="sleep-quality" min="1" max="5" placeholder="1=Poor, 5=Excellent" value={sleepQuality} onChange={e => setSleepQuality(e.target.value)} />
-                        </div>
+        // The card now has a transparent background to blend with the modal
+        <div className="card" style={{ background: 'transparent', border: 'none', boxShadow: 'none' }}>
+            <h2 id="log-station-header" style={{ color: '#00f0ff' }}>New Log Entry</h2>
+            <form onSubmit={handleSubmit} style={{marginTop: '1rem'}}>
+                <textarea id="log" rows="5" placeholder="I woke up feeling clear-headed..." value={log} onChange={(e) => setLog(e.target.value)}></textarea>
+                
+                <div className="sleep-inputs-container">
+                    <div>
+                        <label htmlFor="sleep-hours">Hours Slept</label>
+                        <input type="number" id="sleep-hours" min="0" max="24" step="0.5" placeholder="e.g., 7.5" value={sleepHours} onChange={e => setSleepHours(e.target.value)} />
                     </div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1.5rem' }}>
-                        <button type="submit" disabled={loading}>{loading ? 'Analyzing...' : 'Analyze Log'}</button>
-                        {loading && <div className="loader"></div>}
+                    <div>
+                        <label htmlFor="sleep-quality">Sleep Quality (1-5)</label>
+                        <input type="number" id="sleep-quality" min="1" max="5" placeholder="1=Poor, 5=Excellent" value={sleepQuality} onChange={e => setSleepQuality(e.target.value)} />
                     </div>
-                </form>
-            </div>
-            {error && <div className="card"><p className="error-message">{error}</p></div>}
-            {results && (
-                <div className="card" id="results">
-                    <div className="score"><span className="label">Mental Clarity:</span><span>{results.clarity_score}/10 ({results.clarity_label})</span></div>
-                    <div className="score"><span className="label">Immune Risk:</span><span>{results.immune_score}/10 ({results.immune_label})</span></div>
-                    <div className="score"><span className="label">Physical Output:</span><span>{results.physical_readiness_score}/10 ({results.physical_readiness_label})</span></div>
-                    <div className="notes-section"><span className="label">AI Notes:</span><p>{results.ai_notes}</p></div>
                 </div>
-            )}
-        </>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1.5rem' }}>
+                    <button type="submit" disabled={loading}>{loading ? 'Analyzing...' : 'Analyze Log'}</button>
+                    {loading && <div className="loader"></div>}
+                </div>
+            </form>
+            {/* We will hide the results card in the modal for a cleaner UX */}
+            {/* {results && ...} */}
+        </div>
     );
 }
 
