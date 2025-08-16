@@ -5,7 +5,26 @@ function Integrations() {
     const [isConnected, setIsConnected] = useState(false);
     const [isChecked, setIsChecked] = useState(false); 
     const [isLoading, setIsLoading] = useState(true);
+    const [isFetchingSteps, setIsFetchingSteps] = useState(false);
+    const [stepCount, setStepCount] = useState(null);
     const [error, setError] = useState(null);
+
+    const fetchSteps = async (token) => {
+        setIsFetchingSteps(true);
+        try {
+            const response = await fetch('/.netlify/functions/fetch-health-data', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) throw new Error('Failed to fetch step data.');
+            
+            const data = await response.json();
+            setStepCount(data.steps);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setIsFetchingSteps(false);
+        }
+    };
 
     const checkIntegrationStatus = useCallback(async () => {
         setIsLoading(true);
@@ -31,6 +50,7 @@ function Integrations() {
         } else if (data) {
             setIsConnected(true);
             setIsChecked(true);
+            fetchSteps(session.access_token); // Fetch steps if connected
         } else {
             setIsConnected(false);
             setIsChecked(false);
@@ -47,7 +67,6 @@ function Integrations() {
         setIsChecked(isNowChecked);
 
         if (isNowChecked) {
-            // NEW: Use fetch to get a secure auth URL from the backend
             try {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (!session) throw new Error("User session not found.");
@@ -63,10 +82,9 @@ function Integrations() {
 
             } catch (err) {
                 setError("Failed to start connection process.");
-                setIsChecked(false); // Revert toggle on failure
+                setIsChecked(false);
             }
         } else {
-            // Disconnect logic remains the same
             setIsLoading(true);
             const { data: { session } } = await supabase.auth.getSession();
             try {
@@ -79,8 +97,7 @@ function Integrations() {
                     body: JSON.stringify({ provider: 'google-health' })
                 });
                 setIsConnected(false);
-                // In classic view, a page refresh might be needed to update steps,
-                // or rely on the dashboard's main data fetch.
+                setStepCount(null);
             } catch (err) {
                 setError("Failed to disconnect.");
                 setIsChecked(true); 
@@ -112,9 +129,14 @@ function Integrations() {
             {isConnected && (
                 <div className="integration-data">
                     <hr />
-                    <div className="step-count-display">
-                        <span className="label">Connection Active</span>
-                    </div>
+                    {isFetchingSteps ? (
+                        <div className="loader" style={{margin: '1rem auto'}}></div>
+                    ) : (
+                        <div className="step-count-display">
+                            <span className="steps">{stepCount !== null ? stepCount.toLocaleString() : '...'}</span>
+                            <span className="label">Steps Today</span>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
