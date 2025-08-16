@@ -11,7 +11,7 @@ import NudgeNotice from './NudgeNotice.jsx';
 import LightcoreMatrix from './LightcoreMatrix.jsx';
 import Integrations from './Integrations.jsx';
 
-function Dashboard() {
+function Dashboard({ onSwitchView }) {
     const [dashboardData, setDashboardData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [range, setRange] = useState(7); 
@@ -47,7 +47,6 @@ function Dashboard() {
     }, []);
 
     useEffect(() => {
-        // The URL cleaning logic has been removed from here
         fetchDashboardData(false);
         
         const handleNewLog = () => fetchDashboardData(true);
@@ -79,6 +78,7 @@ function Dashboard() {
                 </div>
             </main>
             <div className="footer">
+                <button onClick={onSwitchView} className="header-btn" style={{marginRight: '1rem'}}>Switch to Neural-Cortex</button>
                 <a href="about.html" className="footer-link">What is LightCore?</a>
                 <span className="footer-separator">|</span>
                 <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer" className="footer-link">Privacy Policy</a>

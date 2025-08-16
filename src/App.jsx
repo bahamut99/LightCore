@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import Auth from './components/Auth.jsx';
-// Import our new NeuralCortex component
+import Dashboard from './components/Dashboard.jsx';
 import NeuralCortex from './components/NeuralCortex.jsx';
 
 function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [currentView, setCurrentView] = useState('neural'); // 'neural' is the default
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -25,10 +26,17 @@ function App() {
     return null; 
   }
 
+  const renderActiveView = () => {
+    if (currentView === 'neural') {
+      return <NeuralCortex onSwitchView={() => setCurrentView('classic')} />;
+    } else {
+      return <Dashboard onSwitchView={() => setCurrentView('neural')} />;
+    }
+  };
+
   return (
     <div>
-      {/* We are temporarily replacing the Dashboard with the NeuralCortex */}
-      {!session ? <Auth /> : <NeuralCortex />}
+      {!session ? <Auth /> : renderActiveView()}
     </div>
   );
 }

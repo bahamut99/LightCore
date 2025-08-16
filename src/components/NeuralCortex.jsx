@@ -8,7 +8,6 @@ import LogEntryModal from './LogEntryModal.jsx';
 
 const EVENT_CONFIG = { 'Workout': { color: '#4ade80' }, 'Meal': { color: '#facc15' }, 'Caffeine': { color: '#f97316' }, 'Default': { color: '#a78bfa' } };
 
-// --- CUSTOM HOOKS ---
 function useHoverCursor(isHovered) {
   useEffect(() => {
     const originalCursor = document.body.style.cursor;
@@ -17,7 +16,6 @@ function useHoverCursor(isHovered) {
   }, [isHovered]);
 }
 
-// --- UI COMPONENTS ---
 function Hud({ item, onClose }) {
   if (!item) return null;
   const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -45,27 +43,15 @@ function Hud({ item, onClose }) {
   );
 }
 
-// --- 3D COMPONENTS ---
 function Locus() {
   const meshRef = useRef();
-  useFrame((state, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += delta * 0.1;
-      meshRef.current.rotation.x += delta * 0.05;
-    }
-  });
+  useFrame((state, delta) => { if (meshRef.current) { meshRef.current.rotation.y += delta * 0.1; meshRef.current.rotation.x += delta * 0.05; } });
   return (<mesh ref={meshRef}><icosahedronGeometry args={[3, 5]} /><meshStandardMaterial color="#f0f0f0" metalness={0.9} roughness={0.05} /></mesh>);
 }
 
 function AnomalyGlyph({ nudge, position, onGlyphClick }) {
   const meshRef = useRef();
-  useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += 0.01;
-      const time = state.clock.getElapsedTime();
-      meshRef.current.position.y = position[1] + Math.sin(time) * 0.2;
-    }
-  });
+  useFrame((state) => { if (meshRef.current) { meshRef.current.rotation.y += 0.01; const time = state.clock.getElapsedTime(); meshRef.current.position.y = position[1] + Math.sin(time) * 0.2; } });
   return (<group ref={meshRef} position={position} onClick={() => onGlyphClick(nudge)}><mesh><octahedronGeometry args={[0.5]} /><meshStandardMaterial color="#ff4d4d" emissive="#ff4d4d" emissiveIntensity={1} roughness={0.2} metalness={0.8} /></mesh><Text color="white" fontSize={0.8} position={[0, 0, 0.6]} rotation={[0, 0, 0]}>!</Text></group>);
 }
 
@@ -92,13 +78,7 @@ function LogNode({ log, position, setSelectedLog, isSelected, setHoveredLog, isH
   const meshRef = useRef();
   useHoverCursor(isHovered);
   const dynamicColor = useMemo(() => { const avgScore = ((log.clarity_score || 0) + (log.immune_score || 0) + (log.physical_readiness_score || 0)) / 30; return new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avgScore); }, [log]);
-  
-  useFrame(() => {
-    const target = isSelected ? 1.8 : (isHovered ? 1.3 : 1);
-    const s = THREE.MathUtils.lerp(meshRef.current.scale.x, target, 0.1);
-    meshRef.current.scale.setScalar(s);
-  });
-
+  useFrame(() => { const target = isSelected ? 1.8 : (isHovered ? 1.3 : 1); const s = THREE.MathUtils.lerp(meshRef.current.scale.x, target, 0.1); meshRef.current.scale.setScalar(s); });
   return (<mesh ref={meshRef} position={position} onClick={(e) => { e.stopPropagation(); setSelectedLog({ log, position }); }} onPointerOver={(e) => { e.stopPropagation(); setHoveredLog(log); }} onPointerOut={() => setHoveredLog(null)}><sphereGeometry args={[0.2, 32, 32]} /><meshStandardMaterial color={dynamicColor} metalness={0.95} roughness={0.1} emissive={dynamicColor} emissiveIntensity={isSelected || isHovered ? 0.5 : 0} /></mesh>);
 }
 
@@ -119,8 +99,7 @@ function LogEntryButton({ onClick }) {
     return (<Float speed={4} floatIntensity={1.5}><group position={[0, -5, 0]} onClick={onClick} onPointerOver={() => setHovered(true)} onPointerOut={() => setHovered(false)}><mesh><torusGeometry args={[0.6, 0.1, 16, 100]} /><meshStandardMaterial color="#00f0ff" emissive="#00f0ff" emissiveIntensity={hovered ? 2 : 1} roughness={0.2} metalness={0.8} /></mesh><Text color="white" fontSize={0.2} position={[0, 0, 0]}>+ LOG</Text></group></Float>);
 }
 
-// --- MAIN COMPONENT ---
-function NeuralCortex() {
+function NeuralCortex({ onSwitchView }) {
   const [logHistory, setLogHistory] = useState([]); 
   const [latestScores, setLatestScores] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -166,7 +145,7 @@ function NeuralCortex() {
     const channel = supabase.channel('realtime:daily_logs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'daily_logs' }, 
         payload => { 
             console.log('Real-time update received:', payload.new);
-            setLogHistory(prev => [payload.new, ...prev].slice(0, 30))
+            setLogHistory(prev => [payload.new, ...prev].slice(0, 29));
         }
     ).subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -202,7 +181,6 @@ function NeuralCortex() {
   
   const handleLogSubmitted = () => {
     setIsLogModalOpen(false);
-    // Realtime listener will handle the update, but we can refetch for immediate consistency
     setTimeout(() => {
         fetchAllData();
     }, 500);
@@ -211,6 +189,22 @@ function NeuralCortex() {
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
       <Hud item={selectedItem?.log || selectedItem} onClose={() => setSelectedItem(null)} />
+      
+      <button 
+        onClick={onSwitchView}
+        style={{
+          position: 'absolute', top: '2rem', right: '2rem',
+          fontFamily: "'Orbitron', sans-serif", fontSize: '0.8rem', color: '#9CA3AF',
+          background: 'rgba(10, 25, 47, 0.7)', border: '1px solid rgba(0, 240, 255, 0.2)',
+          padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', zIndex: 10,
+          backdropFilter: 'blur(5px)', transition: 'all 0.2s ease'
+        }}
+        onMouseOver={e => e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.5)'}
+        onMouseOut={e => e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.2)'}
+      >
+        CLASSIC VIEW
+      </button>
+
       <LogEntryModal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} onLogSubmitted={handleLogSubmitted} stepCount={stepCount} />
       
       <Canvas dpr={[1, 2]} gl={{ antialias: true, powerPreference: 'high-performance' }} camera={{ position: [0, 0, 12], fov: 75 }}>
