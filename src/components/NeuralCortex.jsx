@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line, Text } from '@react-three/drei';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { supabase } from '../supabaseClient';
 import * as THREE from 'three';
 
@@ -41,8 +42,18 @@ function Hud({ item, onClose }) {
 
 function Locus() {
   const meshRef = useRef();
-  useFrame((state, delta) => { if (meshRef.current) { meshRef.current.rotation.y += delta * 0.1; meshRef.current.rotation.x += delta * 0.05; } });
-  return (<mesh ref={meshRef}><icosahedronGeometry args={[3, 5]} /><meshStandardMaterial color="#f0f0f0" metalness={0.9} roughness={0.05} /></mesh>);
+  useFrame((state, delta) => {
+    if (meshRef.current) {
+      meshRef.current.rotation.y += delta * 0.1;
+      meshRef.current.rotation.x += delta * 0.05;
+    }
+  });
+  return (
+    <mesh ref={meshRef}>
+      <icosahedronGeometry args={[3, 5]} />
+      <meshStandardMaterial color="#f0f0f0" metalness={0.9} roughness={0.05} />
+    </mesh>
+  );
 }
 
 function AnomalyGlyph({ nudge, position, onGlyphClick }) {
@@ -68,11 +79,17 @@ function AnomalyGlyph({ nudge, position, onGlyphClick }) {
 
 function EventNode({ event, position }) {
   const config = EVENT_CONFIG[event.event_type] || EVENT_CONFIG['Default'];
-  return (<mesh position={position}><sphereGeometry args={[0.15, 16, 16]} /><meshStandardMaterial color={config.color} emissive={config.color} emissiveIntensity={1.5} /></mesh>);
+  return (
+    <mesh position={position}>
+      <sphereGeometry args={[0.15, 16, 16]} />
+      <meshStandardMaterial color={config.color} emissive={config.color} emissiveIntensity={1.5} />
+    </mesh>
+  );
 }
 
 function SynapticLinks({ selectedLog, events }) {
   if (!selectedLog || !selectedLog.position || events.length === 0) return null;
+
   const links = useMemo(() => {
     const startPoint = new THREE.Vector3(...selectedLog.position);
     return events.map((event, index) => {
@@ -81,7 +98,17 @@ function SynapticLinks({ selectedLog, events }) {
       return { event, startPoint, endPoint };
     });
   }, [selectedLog, events]);
-  return (<group>{links.map(({ event, startPoint, endPoint }) => (<group key={event.event_time}><EventNode event={event} position={endPoint} /><Line points={[startPoint, endPoint]} color="#00f0ff" lineWidth={1} transparent opacity={0.5} /></group>))}</group>);
+
+  return (
+    <group>
+      {links.map(({ event, startPoint, endPoint }) => (
+        <group key={event.event_time}>
+          <EventNode event={event} position={endPoint} />
+          <Line points={[startPoint, endPoint]} color="#00f0ff" lineWidth={1} transparent opacity={0.5} />
+        </group>
+      ))}
+    </group>
+  );
 }
 
 function LogNode({ log, position, setSelectedLog, isSelected, setHoveredLog, isHovered }) {
@@ -90,9 +117,35 @@ function LogNode({ log, position, setSelectedLog, isSelected, setHoveredLog, isH
     const avgScore = ((log.clarity_score || 0) + (log.immune_score || 0) + (log.physical_readiness_score || 0)) / 30;
     return new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avgScore);
   }, [log]);
-  useEffect(() => { document.body.style.cursor = isHovered ? 'pointer' : 'auto'; return () => { document.body.style.cursor = 'auto' }; }, [isHovered]);
-  useFrame(() => { const targetScale = isSelected ? 1.8 : (isHovered ? 1.3 : 1); meshRef.current.scale.lerp(new THREE.Vector3(1, 1, 1).multiplyScalar(targetScale), 0.1); });
-  return (<mesh ref={meshRef} position={position} onClick={(e) => { e.stopPropagation(); setSelectedLog({ log, position }); }} onPointerOver={(e) => { e.stopPropagation(); setHoveredLog(log); }} onPointerOut={() => setHoveredLog(null)}><sphereGeometry args={[0.2, 32, 32]} /><meshStandardMaterial color={dynamicColor} metalness={0.95} roughness={0.1} emissive={dynamicColor} emissiveIntensity={isSelected || isHovered ? 0.5 : 0} /></mesh>);
+
+  useEffect(() => {
+    document.body.style.cursor = isHovered ? 'pointer' : 'auto';
+    return () => { document.body.style.cursor = 'auto' };
+  }, [isHovered]);
+
+  useFrame(() => {
+    const targetScale = isSelected ? 1.8 : (isHovered ? 1.3 : 1);
+    meshRef.current.scale.lerp(new THREE.Vector3(1, 1, 1).multiplyScalar(targetScale), 0.1);
+  });
+
+  return (
+    <mesh
+      ref={meshRef}
+      position={position}
+      onClick={(e) => { e.stopPropagation(); setSelectedLog({ log, position }); }}
+      onPointerOver={(e) => { e.stopPropagation(); setHoveredLog(log); }}
+      onPointerOut={() => setHoveredLog(null)}
+    >
+      <sphereGeometry args={[0.2, 32, 32]} />
+      <meshStandardMaterial
+        color={dynamicColor}
+        metalness={0.95}
+        roughness={0.1}
+        emissive={dynamicColor}
+        emissiveIntensity={isSelected || isHovered ? 0.5 : 0}
+      />
+    </mesh>
+  );
 }
 
 function Constellation({ logs, setSelectedLog, selectedLog, setHoveredLog, hoveredLog }) {
@@ -101,7 +154,17 @@ function Constellation({ logs, setSelectedLog, selectedLog, setHoveredLog, hover
     return logs.map((log, index) => {
       const angle = (index / logs.length) * Math.PI * 2;
       const position = [radius * Math.cos(angle), radius * Math.sin(angle), 0];
-      return (<LogNode key={log.created_at} log={log} position={position} setSelectedLog={setSelectedLog} isSelected={selectedLog?.log?.created_at === log.created_at} setHoveredLog={setHoveredLog} isHovered={hoveredLog?.created_at === log.created_at}/>);
+      return (
+        <LogNode
+          key={log.created_at}
+          log={log}
+          position={position}
+          setSelectedLog={setSelectedLog}
+          isSelected={selectedLog?.log?.created_at === log.created_at}
+          setHoveredLog={setHoveredLog}
+          isHovered={hoveredLog?.created_at === log.created_at}
+        />
+      );
     });
   }, [logs, setSelectedLog, selectedLog, setHoveredLog, hoveredLog]);
 }
@@ -168,12 +231,11 @@ function NeuralCortex() {
   }, [latestScores]);
 
   const handleSelectItem = (item) => {
-    // This logic determines if the clicked item is a log or a nudge/glyph
     const isLog = 'log' in item && 'position' in item;
     if (isLog) {
       setSelectedItem(item);
     } else {
-      setSelectedItem(item); // Nudge object
+      setSelectedItem(item);
     }
   };
   
@@ -205,6 +267,14 @@ function NeuralCortex() {
           autoRotateSpeed={0.3}
           onStart={() => setAutoRotate(false)}
         />
+        
+        <EffectComposer>
+          <Bloom 
+            intensity={1.2}
+            luminanceThreshold={0.4}
+            luminanceSmoothing={0.9}
+          />
+        </EffectComposer>
       </Canvas>
     </div>
   );

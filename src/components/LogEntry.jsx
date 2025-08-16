@@ -19,7 +19,7 @@ async function fetchWithRetry(url, options, retries = 3, delay = 2000) {
     throw new Error(`Failed to fetch after ${retries} attempts.`);
 }
 
-function LogEntry() {
+function LogEntry({ stepCount }) {
     const [log, setLog] = useState('');
     const [sleepHours, setSleepHours] = useState('');
     const [sleepQuality, setSleepQuality] = useState('');
@@ -48,7 +48,8 @@ function LogEntry() {
                     log,
                     sleep_hours: sleepHours ? parseFloat(sleepHours) : null,
                     sleep_quality: sleepQuality ? parseInt(sleepQuality, 10) : null,
-                    userTimezone: userTimezone // Send the user's timezone
+                    step_count: stepCount,
+                    userTimezone: userTimezone
                 })
             });
 
@@ -60,7 +61,6 @@ function LogEntry() {
             setSleepHours('');
             setSleepQuality('');
             
-            // The parse-events call already correctly sends the timezone
             fetch('/.netlify/functions/parse-events', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
@@ -82,11 +82,11 @@ function LogEntry() {
                     
                     <div className="sleep-inputs-container">
                         <div>
-                            <label htmlFor="sleep-hours">Hours Slept 😴</label>
+                            <label htmlFor="sleep-hours">Hours Slept</label>
                             <input type="number" id="sleep-hours" min="0" max="24" step="0.5" placeholder="e.g., 7.5" value={sleepHours} onChange={e => setSleepHours(e.target.value)} />
                         </div>
                         <div>
-                            <label htmlFor="sleep-quality">Sleep Quality (1-5) ⭐</label>
+                            <label htmlFor="sleep-quality">Sleep Quality (1-5)</label>
                             <input type="number" id="sleep-quality" min="1" max="5" placeholder="1=Poor, 5=Excellent" value={sleepQuality} onChange={e => setSleepQuality(e.target.value)} />
                         </div>
                     </div>
