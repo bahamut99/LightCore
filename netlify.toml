@@ -1,3 +1,7 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
 [[headers]]
 for = "/*"
   [headers.values]
@@ -7,7 +11,6 @@ for = "/*"
   Permissions-Policy = "geolocation=(), microphone=(), camera=(), payment=()"
   X-Frame-Options = "DENY"
   Cross-Origin-Opener-Policy = "same-origin"
-  # Keep CSP reasonable for our app: self + Supabase + Netlify Functions, images (incl. imgur), inline styles for now
   Content-Security-Policy = """
     default-src 'self';
     script-src 'self';
