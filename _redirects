@@ -15,3 +15,7 @@
 
 # Nudge endpoint
 /acknowledge-nudge    /.netlify/functions/acknowledge-nudge    200
+
+# Settings endpoints
+/get-user-settings    /.netlify/functions/get-user-settings    200
+/set-user-settings    /.netlify/functions/set-user-settings    200

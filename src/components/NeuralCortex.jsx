@@ -134,7 +134,6 @@ function NeuralCortex({ onSwitchView }) {
   const idleRef = useRef(null);
 
   const fetchAllData = async () => {
-    // This function is defined outside but used in useEffect
     setIsLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
@@ -161,6 +160,17 @@ function NeuralCortex({ onSwitchView }) {
     }
     setIsLoading(false);
   };
+  
+  useEffect(() => {
+    document.body.style.margin = '0';
+    document.body.style.padding = '0';
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.margin = '';
+      document.body.style.padding = '';
+      document.body.style.overflow = '';
+    };
+  }, []);
 
   useEffect(() => {
     fetchAllData();
@@ -209,7 +219,7 @@ function NeuralCortex({ onSwitchView }) {
   };
   
   return (
-    <div style={{ width: '100vw', height: '100vh' }}>
+    <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
       <Hud item={selectedItem?.log || selectedItem} onClose={() => setSelectedItem(null)} />
       
       <div style={{ position: 'absolute', top: '2rem', right: '2rem', zIndex: 10, display: 'flex', gap: '1rem' }}>
