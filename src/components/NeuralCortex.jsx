@@ -51,7 +51,6 @@ async function fetchWithTimeout(promise, ms) {
 function Hud({ item, onClose }) {
   if (!item) return null;
 
-  // Accept either a plain log object or { log, position }
   const logObj = item?.ai_notes ? item : item?.log;
   const isLog = !!logObj?.ai_notes || !!logObj?.created_at;
   const isNudge = !!item?.headline;
@@ -182,27 +181,41 @@ function Hud({ item, onClose }) {
 }
 
 /* ---------------------- SHADERS ---------------------- */
-const vertexShader = `
+// Proper Fresnel outline (no inner artifacting)
+const fresnelVertex = `
   varying vec3 vNormal;
+  varying vec3 vWorldPosition;
   void main() {
     vNormal = normalize(normalMatrix * normal);
+    vec4 wPos = modelMatrix * vec4(position, 1.0);
+    vWorldPosition = wPos.xyz;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
-const fragmentShader = `
+const fresnelFragment = `
   uniform float uHover;
   uniform vec3 uColor;
   varying vec3 vNormal;
+  varying vec3 vWorldPosition;
+
   void main() {
-    float intensity = pow(0.7 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
-    intensity += uHover * 0.5;
-    gl_FragColor = vec4(uColor, 1.0) * intensity;
+    // view-dependent rim
+    vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+    float ndotv = max(dot(normalize(vNormal), viewDir), 0.0);
+    float fresnel = pow(1.0 - ndotv, 2.0);
+
+    // soft edge + hover boost
+    float edge = smoothstep(0.15, 1.0, fresnel);
+    float glow = edge * mix(1.0, 1.6, clamp(uHover, 0.0, 1.0));
+
+    // use additive blend with alpha carrying intensity only on the rim
+    gl_FragColor = vec4(uColor, glow * 0.65);
   }
 `;
 
 /* -------------------- 3D ELEMENTS -------------------- */
 function Locus({ onLocusClick }) {
-  const meshRef = useRef();
+  const groupRef = useRef();
   const [hovered, setHovered] = useState(false);
   useHoverCursor(hovered);
 
@@ -215,38 +228,41 @@ function Locus({ onLocusClick }) {
   );
 
   useFrame(() => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += 0.001;
-      uniforms.uHover.value = THREE.MathUtils.lerp(
-        uniforms.uHover.value,
-        hovered ? 1.0 : 0.0,
-        0.1
-      );
-    }
+    if (!groupRef.current) return;
+    groupRef.current.rotation.y += 0.001;
+    uniforms.uHover.value = THREE.MathUtils.lerp(
+      uniforms.uHover.value,
+      hovered ? 1.0 : 0.0,
+      0.12
+    );
   });
 
   return (
-    <>
-      <mesh
-        ref={meshRef}
-        onClick={onLocusClick}
-        onPointerOver={() => setHovered(true)}
-        onPointerOut={() => setHovered(false)}
-      >
+    <group
+      ref={groupRef}
+      onClick={onLocusClick}
+      onPointerOver={() => setHovered(true)}
+      onPointerOut={() => setHovered(false)}
+    >
+      {/* Core */}
+      <mesh>
         <icosahedronGeometry args={[3, 5]} />
         <meshStandardMaterial color="#f0f0f0" metalness={0.9} roughness={0.05} />
       </mesh>
+
+      {/* Fresnel outline shell (click-through handled by group) */}
       <mesh>
-        <icosahedronGeometry args={[3.01, 5]} />
+        <icosahedronGeometry args={[3.03, 5]} />
         <shaderMaterial
-          fragmentShader={fragmentShader}
-          vertexShader={vertexShader}
+          vertexShader={fresnelVertex}
+          fragmentShader={fresnelFragment}
           uniforms={uniforms}
           transparent
+          depthWrite={false}
           blending={THREE.AdditiveBlending}
         />
       </mesh>
-    </>
+    </group>
   );
 }
 
@@ -463,13 +479,12 @@ function NeuralCortex({ onSwitchView }) {
   }, []);
 
   const fetchAllData = async () => {
-    setIsLoading(true); // unblock quickly after logs/nudges
+    setIsLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { setIsLoading(false); return; }
       const authHeader = { Authorization: `Bearer ${session.access_token}` };
 
-      // Logs + nudges first (drive the scene)
       const [logRes, nudgeRes] = await Promise.all([
         supabase
           .from('daily_logs')
@@ -495,10 +510,8 @@ function NeuralCortex({ onSwitchView }) {
       if (nudgeError) console.error('Error fetching nudges:', nudgeError);
       setActiveNudges(nudges || []);
 
-      // Unblock render; guidance/steps load in background
-      setIsLoading(false);
+      setIsLoading(false); // render scene
 
-      // Steps (background, with timeout)
       fetchWithTimeout(
         fetch('/.netlify/functions/fetch-health-data', { headers: authHeader }).then((r) => (r.ok ? r.json() : null)),
         6000
@@ -508,7 +521,6 @@ function NeuralCortex({ onSwitchView }) {
         })
         .catch(() => {});
 
-      // Guidance (background, with timeout)
       fetchWithTimeout(
         fetch('/.netlify/functions/generate-guidance', {
           method: 'POST',
@@ -580,7 +592,6 @@ function NeuralCortex({ onSwitchView }) {
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
-      {/* Single HUD anchored to current selection */}
       <Hud item={selectedItem} onClose={() => setSelectedItem(null)} />
 
       <div style={{ position: 'absolute', top: '2rem', right: '2rem', zIndex: 10, display: 'flex', gap: '1rem' }}>
@@ -658,7 +669,7 @@ function NeuralCortex({ onSwitchView }) {
               <AnomalyGlyph
                 key={nudge.id}
                 nudge={nudge}
-                position={[-8, 4 - index * 2, -5]}  /* FIXED: array, not comma operator */
+                position={[-8, 4 - index * 2, -5]}
                 onGlyphClick={setSelectedItem}
               />
             ))}
