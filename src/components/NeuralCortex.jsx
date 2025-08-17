@@ -1,4 +1,12 @@
 // src/components/NeuralCortex.jsx
+// LightCore v2025-08-17 build-08 — Neural-Cortex 3D UI (pinned guide, left header, unified buttons)
+// Purpose: 3D "mind map" UI with feature parity to Classic, privacy-forward overlays.
+// Changes:
+// - Pinned, always-visible GuidePanel on the right (no close button).
+// - Request guidance on load (parallel), and after new logs (throttled).
+// - Header controls moved to top-left; unified “NeoButton” style (same height).
+// - HUD for logs/nudges uses a header bar; close “×” truly top-right and not over text.
+
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, Float, QuadraticBezierLine } from '@react-three/drei';
@@ -53,134 +61,372 @@ async function fetchWithTimeout(promise, ms) {
   }
 }
 
-/* ------------------------- HUD ------------------------- */
+function fmtDate(d) {
+  try {
+    return new Date(d).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  } catch {
+    return '';
+  }
+}
+
+/* ------------------------- Shared UI ------------------------- */
+const neoBtnStyle = {
+  fontFamily: "'Orbitron', sans-serif",
+  fontSize: '0.8rem',
+  letterSpacing: '0.04em',
+  color: '#cfefff',
+  height: '38px',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '0 1rem',
+  background: 'linear-gradient(180deg, rgba(10,25,47,0.85) 0%, rgba(10,25,47,0.7) 100%)',
+  border: '1px solid rgba(0, 240, 255, 0.35)',
+  borderRadius: '10px',
+  cursor: 'pointer',
+  backdropFilter: 'blur(6px)',
+  textDecoration: 'none',
+  transition: 'transform .12s ease, box-shadow .12s ease, border-color .12s ease',
+};
+
+function NeoButton({ as = 'button', href, children, onClick, title }) {
+  const [hover, setHover] = useState(false);
+  const style = {
+    ...neoBtnStyle,
+    boxShadow: hover ? '0 0 12px rgba(0,240,255,0.35)' : '0 0 6px rgba(0,240,255,0.15)',
+    borderColor: hover ? 'rgba(0,240,255,0.6)' : neoBtnStyle.border.split(':')[2]?.trim(),
+    transform: hover ? 'translateY(-1px)' : 'translateY(0)',
+  };
+  if (as === 'a') {
+    return (
+      <a
+        href={href}
+        title={title}
+        style={style}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+      >
+        {children}
+      </a>
+    );
+  }
+  return (
+    <button
+      type="button"
+      title={title}
+      style={style}
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {children}
+    </button>
+  );
+}
+
+function TopLeftControls({ onSwitchView }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: '2rem',
+        left: '2rem',
+        zIndex: 12,
+        display: 'flex',
+        gap: '0.75rem',
+      }}
+    >
+      <NeoButton as="a" href="/settings.html" title="Open Settings">
+        SETTINGS
+      </NeoButton>
+      <NeoButton onClick={onSwitchView} title="Switch to Classic Dashboard">
+        CLASSIC VIEW
+      </NeoButton>
+    </div>
+  );
+}
+
+/* ------------------------- Guide Panel ------------------------- */
+function GuidePanel({ guide }) {
+  const g = guide || {
+    current_state: 'Generating your guidance…',
+    positives: [],
+    concerns: [],
+    suggestions: ['Keep logging — your personalized guide is being prepared.'],
+  };
+
+  return (
+    <div
+      aria-label="LightCore Guide"
+      style={{
+        position: 'absolute',
+        top: '2rem',
+        right: '2rem',
+        width: '440px',
+        color: '#00f0ff',
+        background: 'rgba(10, 25, 47, 0.72)',
+        border: '1px solid rgba(0, 240, 255, 0.25)',
+        boxShadow: '0 0 24px rgba(0,240,255,0.15)',
+        backdropFilter: 'blur(10px)',
+        borderRadius: '12px',
+        padding: '1.25rem 1.25rem 1rem',
+        fontFamily: "'Roboto Mono', monospace",
+        fontSize: '14px',
+        zIndex: 11,
+      }}
+    >
+      <h2
+        style={{
+          fontFamily: "'Orbitron', sans-serif",
+          fontSize: '1.1rem',
+          textShadow: '0 0 5px #00f0ff',
+          margin: 0,
+          marginBottom: '0.75rem',
+          letterSpacing: '0.04em',
+        }}
+      >
+        LIGHTCØRE GUIDE
+      </h2>
+
+      <p
+        style={{
+          color: 'white',
+          whiteSpace: 'pre-wrap',
+          lineHeight: 1.6,
+          fontStyle: 'italic',
+          marginTop: 0,
+          marginBottom: '0.75rem',
+          maxHeight: '18vh',
+          overflowY: 'auto',
+        }}
+      >
+        {g.current_state}
+      </p>
+
+      {(g.positives?.length || g.concerns?.length) > 0 && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr',
+            gap: '0.25rem',
+            maxHeight: '20vh',
+            overflowY: 'auto',
+            paddingRight: '0.5rem',
+            marginBottom: '0.75rem',
+          }}
+        >
+          {(g.positives || []).map((p) => (
+            <p key={`p-${p}`} style={{ color: '#00ff88', margin: 0 }}>
+              + {p}
+            </p>
+          ))}
+          {(g.concerns || []).map((c) => (
+            <p key={`c-${c}`} style={{ color: '#ffd700', margin: 0 }}>
+              - {c}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {g.suggestions?.length > 0 && (
+        <>
+          <div
+            style={{
+              borderTop: '1px solid rgba(0,240,255,0.18)',
+              margin: '0.5rem 0 0.75rem',
+            }}
+          />
+          <h3
+            style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '0.9rem',
+              margin: 0,
+              marginBottom: '0.5rem',
+              letterSpacing: '0.04em',
+            }}
+          >
+            SUGGESTIONS
+          </h3>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '0.5rem',
+              maxHeight: '18vh',
+              overflowY: 'auto',
+              paddingRight: '0.5rem',
+            }}
+          >
+            {g.suggestions.map((s) => (
+              <span
+                key={`s-${s}`}
+                style={{
+                  background: 'rgba(0,240,255,0.12)',
+                  padding: '0.3rem 0.75rem',
+                  borderRadius: '999px',
+                  fontSize: '12px',
+                  color: '#cfefff',
+                  border: '1px solid rgba(0,240,255,0.25)',
+                }}
+              >
+                {s}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------- Privacy Panel ------------------------- */
+function PrivacyPanel({ getAuthHeader }) {
+  const [busy, setBusy] = useState(false);
+
+  const callFn = async (path) => {
+    try {
+      setBusy(true);
+      const headers = await getAuthHeader();
+      const res = await fetch(path, { headers });
+      if (res?.ok) {
+        window.alert('Request received. Check your email or downloads shortly.');
+      } else {
+        window.alert('Feature not available yet.');
+      }
+    } catch {
+      window.alert('Unable to complete request right now.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        bottom: '1.5rem',
+        right: '2rem',
+        zIndex: 10,
+        display: 'flex',
+        gap: '0.75rem',
+        alignItems: 'center',
+      }}
+    >
+      <span
+        title="Your data is stored with RLS; no selling of data."
+        style={{
+          fontFamily: "'Orbitron', sans-serif",
+          fontSize: '0.7rem',
+          color: '#7dd3fc',
+          background: 'rgba(10, 25, 47, 0.7)',
+          border: '1px solid rgba(0, 240, 255, 0.2)',
+          padding: '0.5rem 0.75rem',
+          borderRadius: '10px',
+          backdropFilter: 'blur(6px)',
+        }}
+      >
+        PRIVACY: Local UI • RLS-protected
+      </span>
+      <NeoButton onClick={() => callFn('/.netlify/functions/export-user-data')}>EXPORT MY DATA</NeoButton>
+      <NeoButton onClick={() => callFn('/.netlify/functions/delete-my-data')}>DELETE ACCOUNT</NeoButton>
+    </div>
+  );
+}
+
+/* ------------------------- HUD (Logs/Nudges) ------------------------- */
 function Hud({ item, onClose }) {
+  // Only for logs and nudges; guide is now a dedicated panel
   if (!item) return null;
 
   const logObj = item?.ai_notes ? item : item?.log;
   const isLog = !!logObj?.created_at || !!logObj?.ai_notes;
-  const isNudge = !!item?.headline;
-  const isGuide = !!item?.current_state;
-
-  const when = (d) =>
-    new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-
-  let title = 'SYSTEM DATA';
-  if (isLog) title = `LOG ENTRY: ${when(logObj.created_at)}`;
-  if (isNudge) title = `ANOMALY: ${item.headline?.toUpperCase?.() ?? ''}`;
-  if (isGuide) title = 'LIGHTCORE GUIDE';
-
-  const wrapStyle = {
-    position: 'absolute',
-    top: '2rem',
-    ...(isGuide ? { right: '2rem' } : { left: '2rem' }),
-    width: '400px',
-    color: '#00f0ff',
-    background: 'rgba(10, 25, 47, 0.7)',
-    border: '1px solid rgba(0, 240, 255, 0.2)',
-    backdropFilter: 'blur(10px)',
-    borderRadius: '0.5rem',
-    padding: '1.5rem',
-    fontFamily: "'Roboto Mono', monospace",
-    fontSize: '14px',
-    animation: 'fadeIn 0.5s ease-out',
-    zIndex: 10,
-  };
+  const isNudge = !!item?.headline || !!item?.body_text;
+  if (!isLog && !isNudge) return null;
 
   return (
-    <>
-      <style>{`.hud-scroll::-webkit-scrollbar{display:none}.hud-scroll{-ms-overflow-style:none;scrollbar-width:none}`}</style>
-      <div style={wrapStyle}>
-        <button
-          onClick={onClose}
-          style={{
-            position: 'absolute',
-            top: '0.5rem',
-            right: '0.5rem',
-            background: 'none',
-            border: 'none',
-            color: '#00f0ff',
-            fontSize: '1.5rem',
-            cursor: 'pointer',
-          }}
-        >
-          &times;
-        </button>
-
+    <div
+      style={{
+        position: 'absolute',
+        top: '2rem',
+        left: '2rem',
+        width: '480px',
+        color: '#00f0ff',
+        background: 'rgba(10, 25, 47, 0.72)',
+        border: '1px solid rgba(0, 240, 255, 0.25)',
+        boxShadow: '0 0 24px rgba(0,240,255,0.15)',
+        backdropFilter: 'blur(10px)',
+        borderRadius: '12px',
+        padding: '1rem 1rem 1rem',
+        fontFamily: "'Roboto Mono', monospace",
+        fontSize: '14px',
+        zIndex: 11,
+        maxHeight: '70vh',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Header bar prevents overlap; close at real top-right */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          marginBottom: '0.75rem',
+        }}
+      >
         <h2
           style={{
             fontFamily: "'Orbitron', sans-serif",
-            fontSize: '1.25rem',
+            fontSize: '1.1rem',
             textShadow: '0 0 5px #00f0ff',
-            marginBottom: '1rem',
+            margin: 0,
+            letterSpacing: '0.04em',
+            color: '#cfefff',
           }}
         >
-          {title}
+          {isLog ? `LOG ENTRY: ${fmtDate(logObj.created_at)}` : `ANOMALY: ${item.headline?.toUpperCase?.() ?? ''}`}
         </h2>
-
-        {isGuide && (
-          <p
-            className="hud-scroll"
-            style={{
-              color: 'white',
-              whiteSpace: 'pre-wrap',
-              lineHeight: '1.6',
-              fontStyle: 'italic',
-              marginBottom: '1rem',
-            }}
-          >
-            {item.current_state}
-          </p>
-        )}
-
-        <div
-          className="hud-scroll"
-          style={{ maxHeight: '200px', overflowY: 'auto', paddingRight: '1rem', marginBottom: '1rem' }}
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          title="Close"
+          style={{
+            width: 32,
+            height: 32,
+            lineHeight: '28px',
+            textAlign: 'center',
+            fontSize: '18px',
+            color: '#00f0ff',
+            background: 'transparent',
+            border: '1px solid rgba(0,240,255,0.35)',
+            borderRadius: 8,
+            cursor: 'pointer',
+          }}
         >
-          {isLog && (
-            <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
-              {logObj.ai_notes}
-            </p>
-          )}
-          {isNudge && (
-            <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{item.body_text}</p>
-          )}
-          {isGuide &&
-            (item.positives || []).map((p) => (
-              <p key={p} style={{ color: '#00ff88' }}>
-                + {p}
-              </p>
-            ))}
-          {isGuide &&
-            (item.concerns || []).map((c) => (
-              <p key={c} style={{ color: '#ffd700' }}>
-                - {c}
-              </p>
-            ))}
-        </div>
+          ×
+        </button>
+      </div>
 
-        {isGuide && item.suggestions?.length > 0 && (
-          <div style={{ borderTop: '1px solid rgba(0,240,255,0.2)', paddingTop: '1rem' }}>
-            <h3 style={{ fontFamily: "'Orbitron', sans-serif", marginBottom: '0.75rem' }}>SUGGESTIONS</h3>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-              {item.suggestions.map((s) => (
-                <span
-                  key={s}
-                  style={{
-                    background: 'rgba(0,240,255,0.1)',
-                    padding: '0.25rem 0.75rem',
-                    borderRadius: '99px',
-                    fontSize: '12px',
-                  }}
-                >
-                  {s}
-                </span>
-              ))}
-            </div>
-          </div>
+      <div
+        className="hud-scroll"
+        style={{
+          maxHeight: '52vh',
+          overflowY: 'auto',
+          paddingRight: '0.5rem',
+        }}
+      >
+        {isLog && (
+          <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{logObj.ai_notes}</p>
+        )}
+        {isNudge && (
+          <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{item.body_text}</p>
         )}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -233,29 +479,16 @@ function Locus({ onLocusClick }) {
     uniforms.uHover.value = THREE.MathUtils.lerp(uniforms.uHover.value, hovered ? 1.0 : 0.0, 0.18);
   });
 
-  const over = (e) => {
-    e.stopPropagation();
-    setHovered(true);
-  };
-  const out = (e) => {
-    e.stopPropagation();
-    setHovered(false);
-  };
-  const click = (e) => {
-    e.stopPropagation();
-    onLocusClick?.();
-  };
-
   return (
     <group ref={groupRef}>
       {/* Core – receives events */}
-      <mesh onClick={click} onPointerOver={over} onPointerOut={out}>
+      <mesh onClick={onLocusClick} onPointerOver={() => setHovered(true)} onPointerOut={() => setHovered(false)}>
         <icosahedronGeometry args={[3, 5]} />
         <meshStandardMaterial color="#f0f0f0" metalness={0.9} roughness={0.05} />
       </mesh>
 
       {/* Rim shell – receives events */}
-      <mesh onClick={click} onPointerOver={over} onPointerOut={out}>
+      <mesh onClick={onLocusClick} onPointerOver={() => setHovered(true)} onPointerOut={() => setHovered(false)}>
         <icosahedronGeometry args={[3.03, 5]} />
         <shaderMaterial
           vertexShader={fresnelVertex}
@@ -324,7 +557,11 @@ function SynapticLinks({ selectedLog, events }) {
     const start = new THREE.Vector3(...selectedLog.position);
     return events.map((event, i) => {
       const angle = Math.PI / 2 + (i - (events.length - 1) / 2) * 0.5;
-      const end = new THREE.Vector3(start.x + Math.cos(angle) * 3, start.y + Math.sin(angle) * 3, start.z);
+      const end = new THREE.Vector3(
+        start.x + Math.cos(angle) * 3,
+        start.y + Math.sin(angle) * 3,
+        start.z
+      );
       const mid = new THREE.Vector3((start.x + end.x) / 2, (start.y + end.y) / 2 + 0.8, start.z);
       return { event, start, mid, end, key: `${event.event_time}-${i}` };
     });
@@ -402,7 +639,7 @@ function Constellation({ logs, setSelectedItem, selectedItem, setHoveredLog, hov
       const pos = [radius * Math.cos(angle), radius * Math.sin(angle), 0];
       return (
         <LogNode
-          key={log.created_at}
+          key={log.id || log.created_at || i}
           log={log}
           position={pos}
           setSelectedItem={setSelectedItem}
@@ -429,6 +666,8 @@ function LogEntryButton({ onClick }) {
       >
         <mesh>
           <torusGeometry args={[0.6, 0.1, 16, 100]} />
+        </mesh>
+        <mesh>
           <meshStandardMaterial
             color="#00f0ff"
             emissive="#00f0ff"
@@ -450,7 +689,7 @@ function NeuralCortex({ onSwitchView }) {
   const [logHistory, setLogHistory] = useState([]);
   const [latestScores, setLatestScores] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null); // logs/nudges only
   const [hoveredLog, setHoveredLog] = useState(null);
   const [dayEvents, setDayEvents] = useState([]);
   const [activeNudges, setActiveNudges] = useState([]);
@@ -458,6 +697,8 @@ function NeuralCortex({ onSwitchView }) {
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [stepCount, setStepCount] = useState(null);
   const [guideData, setGuideData] = useState(null);
+
+  const lastGuideRequestRef = useRef(0);
   const idleRef = useRef(null);
 
   useEffect(() => {
@@ -471,12 +712,22 @@ function NeuralCortex({ onSwitchView }) {
     };
   }, []);
 
-  const requestGuidance = async (authHeader) => {
+  const getAuthHeader = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session ? { Authorization: `Bearer ${session.access_token}` } : {};
+  };
+
+  const requestGuidance = async () => {
     try {
+      const now = Date.now();
+      if (now - lastGuideRequestRef.current < 15000) return null; // throttle to 15s
+      lastGuideRequestRef.current = now;
+
+      const headers = await getAuthHeader();
       const json = await fetchWithTimeout(
         fetch('/.netlify/functions/generate-guidance', {
           method: 'POST',
-          headers: { ...authHeader, 'Content-Type': 'application/json' },
+          headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ source: 'neural-cortex' }),
         }).then((r) => (r.ok ? r.json() : null)),
         10000
@@ -493,8 +744,17 @@ function NeuralCortex({ onSwitchView }) {
     setIsLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { setIsLoading(false); return; }
-      const authHeader = { Authorization: `Bearer ${session.access_token}` };
+      if (!session) {
+        setIsLoading(false);
+        return;
+      }
+
+      // Start guidance immediately (parallel) so the panel fills ASAP
+      if (!guideData) {
+        // show placeholder instantly; real data will hydrate when ready
+        setGuideData(null);
+        requestGuidance().catch(() => {});
+      }
 
       const [logRes, nudgeRes] = await Promise.all([
         supabase
@@ -520,17 +780,20 @@ function NeuralCortex({ onSwitchView }) {
 
       setIsLoading(false); // render scene
 
-      // Background fetches that shouldn't block UI
+      // Non-blocking extras
       fetchWithTimeout(
-        fetch('/.netlify/functions/fetch-health-data', { headers: authHeader }).then((r) => (r.ok ? r.json() : null)),
+        (async () => {
+          const headers = await getAuthHeader();
+          return fetch('/.netlify/functions/fetch-health-data', { headers }).then((r) =>
+            r.ok ? r.json() : null
+          );
+        })(),
         6000
       )
         .then((stepRes) => {
           if (stepRes?.steps) setStepCount(stepRes.steps);
         })
         .catch(() => {});
-
-      requestGuidance(authHeader).catch(() => {});
     } catch (e) {
       console.error('fetchAllData failed:', e);
       setIsLoading(false);
@@ -544,6 +807,9 @@ function NeuralCortex({ onSwitchView }) {
       .channel('realtime:daily_logs')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'daily_logs' }, (payload) => {
         setLogHistory((prev) => [payload.new, ...prev].slice(0, 30));
+        setLatestScores({ ...payload.new });
+        // refresh guide on new logs (throttled)
+        requestGuidance().catch(() => {});
       })
       .subscribe();
 
@@ -556,11 +822,6 @@ function NeuralCortex({ onSwitchView }) {
       authListener?.subscription?.unsubscribe?.();
     };
   }, []);
-
-  // Auto-open the guide once it first arrives (if nothing else is open)
-  useEffect(() => {
-    if (guideData && !selectedItem) setSelectedItem(guideData);
-  }, [guideData, selectedItem]);
 
   useEffect(() => {
     if (selectedItem && selectedItem.log) {
@@ -587,73 +848,43 @@ function NeuralCortex({ onSwitchView }) {
     };
   }, [latestScores]);
 
+  const handleCloseHud = async () => {
+    // If a nudge is open, acknowledge it on close.
+    const item = selectedItem;
+    setSelectedItem(null);
+    if (item?.id && (item?.headline || item?.body_text)) {
+      try {
+        await supabase
+          .from('nudges')
+          .update({ is_acknowledged: true, acknowledged_at: new Date().toISOString() })
+          .eq('id', item.id);
+        setActiveNudges((prev) => prev.filter((n) => n.id !== item.id));
+      } catch (e) {
+        console.warn('Failed to ack nudge');
+      }
+    }
+  };
+
   const handleLogSubmitted = () => setIsLogModalOpen(false);
 
   const handleLocusClick = async () => {
-    if (guideData) {
-      setSelectedItem(guideData);
-      return;
-    }
-    // Show a friendly placeholder immediately
-    const placeholder = {
-      current_state: 'Generating your guidance…',
-      positives: [],
-      concerns: [],
-      suggestions: ['Keep logging—your personalized guide is being prepared.'],
-    };
-    setSelectedItem(placeholder);
-
-    const { data: { session } } = await supabase.auth.getSession();
-    const header = session ? { Authorization: `Bearer ${session.access_token}` } : {};
-    const g = await requestGuidance(header);
-    if (g) setSelectedItem(g);
+    // Manual refresh hook: click the core to refresh guidance now
+    await requestGuidance();
   };
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
-      <Hud item={selectedItem} onClose={() => setSelectedItem(null)} />
+      {/* Left header controls */}
+      <TopLeftControls onSwitchView={onSwitchView} />
 
-      <div style={{ position: 'absolute', top: '2rem', right: '2rem', zIndex: 10, display: 'flex', gap: '1rem' }}>
-        <a
-          href="/settings.html"
-          style={{
-            fontFamily: "'Orbitron', sans-serif",
-            fontSize: '0.8rem',
-            color: '#9CA3AF',
-            background: 'rgba(10, 25, 47, 0.7)',
-            border: '1px solid rgba(0, 240, 255, 0.2)',
-            padding: '0.5rem 1rem',
-            borderRadius: '0.5rem',
-            cursor: 'pointer',
-            backdropFilter: 'blur(5px)',
-            textDecoration: 'none',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseOver={(e) => (e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.5)')}
-          onMouseOut={(e) => (e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.2)')}
-        >
-          SETTINGS
-        </a>
-        <button
-          onClick={onSwitchView}
-          style={{
-            fontFamily: "'Orbitron', sans-serif",
-            fontSize: '0.8rem',
-            color: '#9CA3AF',
-            background: 'rgba(10, 25, 47, 0.7)',
-            border: '1px solid rgba(0, 240, 255, 0.2)',
-            padding: '0.5rem 1rem',
-            borderRadius: '0.5rem',
-            cursor: 'pointer',
-            backdropFilter: 'blur(5px)',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseOver={(e) => (e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.5)')}
-          onMouseOut={(e) => (e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.2)')}
-        >
-          CLASSIC VIEW
-        </button>
-      </div>
+      {/* Pinned guide panel on the right */}
+      <GuidePanel guide={guideData} />
+
+      {/* HUD for logs/nudges only */}
+      <Hud item={selectedItem} onClose={handleCloseHud} />
+
+      {/* Privacy quick-actions */}
+      <PrivacyPanel getAuthHeader={getAuthHeader} />
 
       <LogEntryModal
         isOpen={isLogModalOpen}
@@ -662,7 +893,11 @@ function NeuralCortex({ onSwitchView }) {
         stepCount={stepCount}
       />
 
-      <Canvas dpr={[1, 2]} gl={{ antialias: true, powerPreference: 'high-performance' }} camera={{ position: [0, 0, 12], fov: 75 }}>
+      <Canvas
+        dpr={[1, 2]}
+        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        camera={{ position: [0, 0, 12], fov: 75 }}
+      >
         <color attach="background" args={['#0a0a1a']} />
         <ambientLight intensity={0.2} />
         <pointLight position={[-10, 5, 5]} intensity={lightIntensities.clarity} color="#00f0ff" />
@@ -681,7 +916,12 @@ function NeuralCortex({ onSwitchView }) {
             />
             <SynapticLinks selectedLog={selectedItem} events={dayEvents} />
             {activeNudges.map((nudge, idx) => (
-              <AnomalyGlyph key={nudge.id} nudge={nudge} position={[-8, 4 - idx * 2, -5]} onGlyphClick={setSelectedItem} />
+              <AnomalyGlyph
+                key={nudge.id}
+                nudge={nudge}
+                position={[-8, 4 - idx * 2, -5]}
+                onGlyphClick={setSelectedItem}
+              />
             ))}
             <LogEntryButton onClick={() => setIsLogModalOpen(true)} />
           </>
@@ -712,3 +952,13 @@ function NeuralCortex({ onSwitchView }) {
 }
 
 export default NeuralCortex;
+
+/*
+How to test:
+1) Load Neural-Cortex: Guide panel appears on the right immediately with “Generating…” then fills when the function returns.
+2) Click the central core → guidance refresh (throttled).
+3) Add a log → a new node shows; guide refreshes automatically within a moment.
+4) Header buttons are top-left, identical height/visual style (no overlap with guide).
+5) Open a log or nudge → left HUD opens; close “×” is top-right of the HUD header, not over the title.
+6) Guide panel cannot be closed (by design).
+*/
