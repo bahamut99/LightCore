@@ -6,147 +6,9 @@ import { supabase } from '../supabaseClient';
 import * as THREE from 'three';
 import LogEntryModal from './LogEntryModal.jsx';
 
-// --- This section is intentionally left blank. The helper components are now fully integrated below. ---
+const EVENT_CONFIG = { 'Workout': { color: '#4ade80' }, 'Meal': { color: '#facc15' }, 'Caffeine': { color: '#f97316' }, 'Default': { color: '#a78bfa' } };
 
-// --- MAIN COMPONENT ---
-function NeuralCortex({ onSwitchView }) {
-  const [logHistory, setLogHistory] = useState([]); 
-  const [latestScores, setLatestScores] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [hoveredLog, setHoveredLog] = useState(null);
-  const [dayEvents, setDayEvents] = useState([]);
-  const [activeNudges, setActiveNudges] = useState([]);
-  const [autoRotate, setAutoRotate] = useState(true);
-  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
-  const [stepCount, setStepCount] = useState(null);
-  const [guideData, setGuideData] = useState(null); // NEW: State for Guide data
-  const idleRef = useRef(null);
-  
-  // This useEffect manages the body styles for a true full-screen experience
-  useEffect(() => {
-    document.body.style.margin = '0';
-    document.body.style.padding = '0';
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.margin = '';
-      document.body.style.padding = '';
-      document.body.style.overflow = '';
-    };
-  }, []);
-
-  // Main data fetching hook
-  useEffect(() => {
-    const fetchAllData = async () => {
-      setIsLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const [logRes, nudgeRes, stepRes, guideRes] = await Promise.all([
-          supabase.from('daily_logs').select('id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes').order('created_at', { ascending: false }).limit(30),
-          supabase.from('nudges').select('*').eq('is_acknowledged', false),
-          fetch('/.netlify/functions/fetch-health-data', { headers: { 'Authorization': `Bearer ${session.access_token}` } }).then(res => res.json()),
-          fetch('/.netlify/functions/generate-guidance', { headers: { 'Authorization': `Bearer ${session.access_token}` } }).then(res => res.json())
-        ]);
-        
-        const { data: logs, error: logError } = logRes;
-        if (logError) console.error("Error fetching logs:", logError);
-        else if (logs && logs.length > 0) {
-          setLogHistory(logs);
-          setLatestScores({ ...logs[0] });
-        } else {
-          setLatestScores({ clarity_score: 8, immune_score: 8, physical_readiness_score: 8 });
-        }
-
-        const { data: nudges, error: nudgeError } = nudgeRes;
-        if (nudgeError) console.error("Error fetching nudges:", nudgeError);
-        else setActiveNudges(nudges || []);
-
-        if (stepRes && stepRes.steps) setStepCount(stepRes.steps);
-        if (guideRes && guideRes.guidance) setGuideData(guideRes.guidance);
-      }
-      setIsLoading(false);
-    };
-
-    fetchAllData();
-
-    const channel = supabase.channel('realtime:daily_logs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'daily_logs' }, 
-        payload => { 
-            setLogHistory(prev => [payload.new, ...prev].slice(0, 29));
-        }
-    ).subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, []);
-
-  // Fetch events when a log is selected
-  useEffect(() => {
-    if (selectedItem && selectedItem.log) {
-      const fetchEventsForDay = async () => {
-        const { data, error } = await supabase.from('events').select('event_type, event_time').eq('log_id', selectedItem.log.id);
-        if (error) console.error("Error fetching events:", error);
-        else setDayEvents(data || []);
-      };
-      fetchEventsForDay();
-    } else {
-      setDayEvents([]); 
-    }
-  }, [selectedItem]);
-
-  const lightIntensities = useMemo(() => {
-    if (!latestScores) return { clarity: 0, immune: 0, physical: 0 };
-    const clamp10 = v => Math.min(10, v || 0);
-    return {
-      clarity: clamp10(latestScores.clarity_score) * 30,
-      immune: clamp10(latestScores.immune_score) * 30,
-      physical: clamp10(latestScores.physical_readiness_score) * 30,
-    };
-  }, [latestScores]);
-
-  const handleLogSubmitted = () => {
-    setIsLogModalOpen(false);
-    // Real-time listener will handle the visual update automatically
-  };
-  
-  return (
-    <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
-      <Hud item={selectedItem} onClose={() => setSelectedItem(null)} />
-      
-      <div style={{ position: 'absolute', top: '2rem', right: '2rem', zIndex: 10, display: 'flex', gap: '1rem' }}>
-        <a href="/settings.html" style={{fontFamily: "'Orbitron', sans-serif", fontSize: '0.8rem', color: '#9CA3AF', background: 'rgba(10, 25, 47, 0.7)', border: '1px solid rgba(0, 240, 255, 0.2)', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', backdropFilter: 'blur(5px)', textDecoration: 'none', transition: 'all 0.2s ease'}} onMouseOver={e => e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.5)'} onMouseOut={e => e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.2)'}>SETTINGS</a>
-        <button onClick={onSwitchView} style={{fontFamily: "'Orbitron', sans-serif", fontSize: '0.8rem', color: '#9CA3AF', background: 'rgba(10, 25, 47, 0.7)', border: '1px solid rgba(0, 240, 255, 0.2)', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', backdropFilter: 'blur(5px)', transition: 'all 0.2s ease'}} onMouseOver={e => e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.5)'} onMouseOut={e => e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.2)'}>CLASSIC VIEW</button>
-      </div>
-
-      <LogEntryModal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} onLogSubmitted={handleLogSubmitted} stepCount={stepCount} />
-      
-      <Canvas dpr={[1, 2]} gl={{ antialias: true, powerPreference: 'high-performance' }} camera={{ position: [0, 0, 12], fov: 75 }}>
-        <color attach="background" args={['#0a0a1a']} />
-        <ambientLight intensity={0.2} />
-        <pointLight position={[-10, 5, 5]} intensity={lightIntensities.clarity} color="#00f0ff" />
-        <pointLight position={[10, 5, 5]} intensity={lightIntensities.immune} color="#ffd700" />
-        <pointLight position={[0, -10, 5]} intensity={lightIntensities.physical} color="#00ff88" />
-        
-        {!isLoading && (
-          <>
-            <Locus onLocusClick={() => setSelectedItem(guideData)} />
-            <Constellation logs={logHistory} setSelectedItem={setSelectedItem} selectedItem={selectedItem} setHoveredLog={setHoveredLog} hoveredLog={hoveredLog}/>
-            <SynapticLinks selectedLog={selectedItem} events={dayEvents} />
-            {activeNudges.map((nudge, index) => (
-              <AnomalyGlyph key={nudge.id} nudge={nudge} position={[-8, 4 - index * 2, -5]} onGlyphClick={setSelectedItem} />
-            ))}
-            <LogEntryButton onClick={() => setIsLogModalOpen(true)} />
-          </>
-        )}
-
-        <OrbitControls enablePan={false} enableZoom={true} autoRotate={autoRotate} autoRotateSpeed={0.3} onStart={() => { setAutoRotate(false); clearTimeout(idleRef.current); }} onEnd={() => { clearTimeout(idleRef.current); idleRef.current = setTimeout(() => setAutoRotate(true), 4000); }} />
-        <EffectComposer multisampling={0}><FXAA /><Bloom intensity={1.0} luminanceThreshold={0.45} luminanceSmoothing={0.8} /></EffectComposer>
-      </Canvas>
-    </div>
-  );
-}
-
-
-// --- FULL HELPER COMPONENT CODE ---
-// This ensures the entire file is complete and correct.
-
+// --- CUSTOM HOOKS ---
 function useHoverCursor(isHovered) {
   useEffect(() => {
     const originalCursor = document.body.style.cursor;
@@ -155,13 +17,14 @@ function useHoverCursor(isHovered) {
   }, [isHovered]);
 }
 
+// --- UI COMPONENTS ---
 function Hud({ item, onClose }) {
   if (!item) return null;
   const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const isLog = item.hasOwnProperty('ai_notes');
   const isNudge = item.hasOwnProperty('headline');
   const isGuide = item.hasOwnProperty('current_state');
-
+  
   let title = "SYSTEM DATA";
   if (isLog) title = `LOG ENTRY: ${formatDate(item.created_at)}`;
   if (isNudge) title = `ANOMALY: ${item.headline.toUpperCase()}`;
@@ -195,6 +58,8 @@ function Hud({ item, onClose }) {
   );
 }
 
+// --- 3D COMPONENTS ---
+
 const vertexShader = `
   varying vec3 vNormal;
   void main() {
@@ -218,6 +83,7 @@ function Locus({ onLocusClick }) {
   const meshRef = useRef();
   const [hovered, setHovered] = useState(false);
   useHoverCursor(hovered);
+
   const uniforms = useMemo(() => ({
       uHover: { value: 0.0 },
       uColor: { value: new THREE.Color('#00f0ff') }
@@ -254,7 +120,13 @@ function AnomalyGlyph({ nudge, position, onGlyphClick }) {
   const meshRef = useRef();
   const [hovered, setHovered] = useState(false);
   useHoverCursor(hovered);
-  useFrame((state) => { if (meshRef.current) { meshRef.current.rotation.y += 0.01; const time = state.clock.getElapsedTime(); meshRef.current.position.y = position[1] + Math.sin(time) * 0.2; } });
+  useFrame((state) => {
+    if (meshRef.current) {
+      meshRef.current.rotation.y += 0.01;
+      const time = state.clock.getElapsedTime();
+      meshRef.current.position.y = position[1] + Math.sin(time) * 0.2;
+    }
+  });
   return (<group ref={meshRef} position={position} onClick={() => onGlyphClick(nudge)} onPointerOver={() => setHovered(true)} onPointerOut={() => setHovered(false)}><mesh><octahedronGeometry args={[0.5]} /><meshStandardMaterial color="#ff4d4d" emissive="#ff4d4d" emissiveIntensity={hovered ? 2 : 1} roughness={0.2} metalness={0.8} /></mesh><Text color="white" fontSize={0.8} position={[0, 0, 0.6]} rotation={[0, 0, 0]}>!</Text></group>);
 }
 
@@ -300,6 +172,129 @@ function LogEntryButton({ onClick }) {
     const [hovered, setHovered] = useState(false);
     useHoverCursor(hovered);
     return (<Float speed={4} floatIntensity={1.5}><group position={[0, -5, 0]} onClick={onClick} onPointerOver={() => setHovered(true)} onPointerOut={() => setHovered(false)}><mesh><torusGeometry args={[0.6, 0.1, 16, 100]} /><meshStandardMaterial color="#00f0ff" emissive="#00f0ff" emissiveIntensity={hovered ? 2 : 1} roughness={0.2} metalness={0.8} /></mesh><Text color="white" fontSize={0.2} position={[0, 0, 0]}>+ LOG</Text></group></Float>);
+}
+
+// --- MAIN COMPONENT ---
+function NeuralCortex({ onSwitchView }) {
+  const [logHistory, setLogHistory] = useState([]); 
+  const [latestScores, setLatestScores] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [hoveredLog, setHoveredLog] = useState(null);
+  const [dayEvents, setDayEvents] = useState([]);
+  const [activeNudges, setActiveNudges] = useState([]);
+  const [autoRotate, setAutoRotate] = useState(true);
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [stepCount, setStepCount] = useState(null);
+  const [guideData, setGuideData] = useState(null);
+  const idleRef = useRef(null);
+  
+  useEffect(() => {
+    document.body.style.margin = '0';
+    document.body.style.padding = '0';
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.margin = '';
+      document.body.style.padding = '';
+      document.body.style.overflow = '';
+    };
+  }, []);
+
+  const fetchAllData = async () => {
+    setIsLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const [logRes, nudgeRes, stepRes, guideRes] = await Promise.all([
+        supabase.from('daily_logs').select('id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes').order('created_at', { ascending: false }).limit(30),
+        supabase.from('nudges').select('*').eq('is_acknowledged', false),
+        fetch('/.netlify/functions/fetch-health-data', { headers: { 'Authorization': `Bearer ${session.access_token}` } }).then(res => res.json()),
+        fetch('/.netlify/functions/generate-guidance', { headers: { 'Authorization': `Bearer ${session.access_token}` } }).then(res => res.json())
+      ]);
+      
+      const { data: logs, error: logError } = logRes;
+      if (logError) console.error("Error fetching logs:", logError);
+      else if (logs && logs.length > 0) {
+        setLogHistory(logs);
+        setLatestScores({ ...logs[0] });
+      } else {
+        setLatestScores({ clarity_score: 8, immune_score: 8, physical_readiness_score: 8 });
+      }
+
+      const { data: nudges, error: nudgeError } = nudgeRes;
+      if (nudgeError) console.error("Error fetching nudges:", nudgeError);
+      else setActiveNudges(nudges || []);
+
+      if (stepRes && stepRes.steps) setStepCount(stepRes.steps);
+      if (guideRes && guideRes.guidance) setGuideData(guideRes.guidance);
+    }
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchAllData();
+    const channel = supabase.channel('realtime:daily_logs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'daily_logs' }, 
+        payload => { 
+            setLogHistory(prev => [payload.new, ...prev].slice(0, 29));
+        }
+    ).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  useEffect(() => {
+    if (selectedItem && selectedItem.log) {
+      const fetchEventsForDay = async () => {
+        const { data, error } = await supabase.from('events').select('event_type, event_time').eq('log_id', selectedItem.log.id);
+        if (error) console.error("Error fetching events:", error);
+        else setDayEvents(data || []);
+      };
+      fetchEventsForDay();
+    } else {
+      setDayEvents([]); 
+    }
+  }, [selectedItem]);
+
+  const lightIntensities = useMemo(() => {
+    if (!latestScores) return { clarity: 0, immune: 0, physical: 0 };
+    const clamp10 = v => Math.min(10, v || 0);
+    return {
+      clarity: clamp10(latestScores.clarity_score) * 30,
+      immune: clamp10(latestScores.immune_score) * 30,
+      physical: clamp10(latestScores.physical_readiness_score) * 30,
+    };
+  }, [latestScores]);
+  
+  const handleLogSubmitted = () => {
+    setIsLogModalOpen(false);
+  };
+  
+  return (
+    <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
+      <Hud item={selectedItem} onClose={() => setSelectedItem(null)} />
+      <div style={{ position: 'absolute', top: '2rem', right: '2rem', zIndex: 10, display: 'flex', gap: '1rem' }}>
+        <a href="/settings.html" style={{fontFamily: "'Orbitron', sans-serif", fontSize: '0.8rem', color: '#9CA3AF', background: 'rgba(10, 25, 47, 0.7)', border: '1px solid rgba(0, 240, 255, 0.2)', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', backdropFilter: 'blur(5px)', textDecoration: 'none', transition: 'all 0.2s ease'}} onMouseOver={e => e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.5)'} onMouseOut={e => e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.2)'}>SETTINGS</a>
+        <button onClick={onSwitchView} style={{fontFamily: "'Orbitron', sans-serif", fontSize: '0.8rem', color: '#9CA3AF', background: 'rgba(10, 25, 47, 0.7)', border: '1px solid rgba(0, 240, 255, 0.2)', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', backdropFilter: 'blur(5px)', transition: 'all 0.2s ease'}} onMouseOver={e => e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.5)'} onMouseOut={e => e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.2)'}>CLASSIC VIEW</button>
+      </div>
+      <LogEntryModal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} onLogSubmitted={handleLogSubmitted} stepCount={stepCount} />
+      <Canvas dpr={[1, 2]} gl={{ antialias: true, powerPreference: 'high-performance' }} camera={{ position: [0, 0, 12], fov: 75 }}>
+        <color attach="background" args={['#0a0a1a']} />
+        <ambientLight intensity={0.2} />
+        <pointLight position={[-10, 5, 5]} intensity={lightIntensities.clarity} color="#00f0ff" />
+        <pointLight position={[10, 5, 5]} intensity={lightIntensities.immune} color="#ffd700" />
+        <pointLight position={[0, -10, 5]} intensity={lightIntensities.physical} color="#00ff88" />
+        {!isLoading && (
+          <>
+            <Locus onLocusClick={() => setSelectedItem(guideData)} />
+            <Constellation logs={logHistory} setSelectedItem={setSelectedItem} selectedItem={selectedItem} setHoveredLog={setHoveredLog} hoveredLog={hoveredLog}/>
+            <SynapticLinks selectedLog={selectedItem} events={dayEvents} />
+            {activeNudges.map((nudge, index) => (<AnomalyGlyph key={nudge.id} nudge={nudge} position={[-8, 4 - index * 2, -5]} onGlyphClick={setSelectedItem} />))}
+            <LogEntryButton onClick={() => setIsLogModalOpen(true)} />
+          </>
+        )}
+        <OrbitControls enablePan={false} enableZoom={true} autoRotate={autoRotate} autoRotateSpeed={0.3} onStart={() => { setAutoRotate(false); clearTimeout(idleRef.current); }} onEnd={() => { clearTimeout(idleRef.current); idleRef.current = setTimeout(() => setAutoRotate(true), 4000); }} />
+        <EffectComposer multisampling={0}><FXAA /><Bloom intensity={1.0} luminanceThreshold={0.45} luminanceSmoothing={0.8} /></EffectComposer>
+      </Canvas>
+    </div>
+  );
 }
 
 export default NeuralCortex;
