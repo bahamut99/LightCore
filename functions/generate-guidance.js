@@ -3,7 +3,6 @@ const fetch = require('node-fetch');
 
 const createAdminClient = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-// Helper to format the raw context data into a clean string for the AI prompt
 function formatContextForAI(context) {
     let formattedString = "Here is a summary of the user's recent health data:\n\n";
 
@@ -27,9 +26,9 @@ function formatContextForAI(context) {
     if (context.chrono_events && context.chrono_events.length > 0) {
         formattedString += "=== User's Recent Timed Events (ChronoDeck) ===\n";
         context.chrono_events.slice(0, 15).forEach(event => {
-             const date = new Date(event.event_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-             const time = new Date(event.event_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute:'2-digit' });
-             formattedString += `- ${event.event_type} at ${time} on ${date}\n`;
+            const date = new Date(event.event_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const time = new Date(event.event_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute:'2-digit' });
+            formattedString += `- ${event.event_type} at ${time} on ${date}\n`;
         });
         formattedString += "\n";
     }
@@ -55,14 +54,12 @@ exports.handler = async (event, context) => {
     if (userError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
 
     try {
-        // This function now ONLY reads the context. It no longer tries to build it.
         const { data: contextData, error: contextError } = await supabase
             .from('lightcore_brain_context')
             .select('*')
             .eq('user_id', user.id)
             .single();
 
-        // If no context is found (e.g., before the first log is analyzed), return the default message.
         if (contextError || !contextData) {
             console.log("No context found for user, waiting for analyze-log to create it.");
             return { statusCode: 200, body: JSON.stringify({ guidance: { current_state: "Log data for a few days to start generating personalized guidance." } }) };
@@ -83,6 +80,19 @@ Your entire response MUST be a single, valid JSON object with two top-level keys
 2.  "memory_update": An object for your own internal memory. It must have these keys:
     - "new_user_summary": (String) A new 1-2 sentence summary of the user's journey to be stored for next time.
     - "new_ai_persona_memo": (String) A new 1-sentence private memo for yourself on what to focus on next for this user.
+
+---
+**SUGGESTION GUIDELINES (CRITICAL):**
+-   **BE APP-AWARE:** Suggestions MUST encourage the use of LightCore's features. Instead of "track your food," say "Try using the 'Meal' event in your daily log to see how timing affects your energy."
+-   **BE SPECIFIC:** Propose a small, actionable experiment for the next 1-3 days. Instead of "get more sleep," suggest "Let's try an experiment: For the next 2 nights, aim to be in bed by 10:30 PM and see how it impacts your 'Clarity' score."
+-   **GOOD EXAMPLES:**
+    -   "For the next 3 days, try logging your 'Caffeine' intake in your daily log. Let's see if we can find a pattern between timing and your sleep quality scores."
+    -   "You mentioned 'project deadline' several times. Try adding a '#work' tag to those logs so we can track its impact on your 'Clarity' over time."
+-   **NEGATIVE CONSTRAINTS:**
+    -   **NEVER** suggest using another app, journal, or tool. The user is using LightCore.
+    -   **AVOID** generic, non-actionable advice like "exercise more."
+    -   **DO NOT** give medical advice. Frame suggestions around data collection and pattern discovery.
+---
 
 CRITICAL INSTRUCTION: Analyze the provided data context below. Based on your analysis, generate the JSON object as described above. Do not include any other text, preambles, or explanations in your response.
 
