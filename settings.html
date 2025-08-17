@@ -2,170 +2,37 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>LightCore • Settings</title>
     <meta name="color-scheme" content="dark" />
-
     <style>
       :root {
-        --bg: #0a0a1a;
-        --panel: rgba(10, 25, 47, 0.92);
-        --panel-soft: rgba(10, 25, 47, 0.72);
-        --cyan: #00f0ff;
-        --cyan-200: #9bd9ff;
-        --text: #cfefff;
-        --muted: #98a9c1;
-        --gold: #ffd700;
-        --green: #00ff88;
-        --ring: rgba(0, 240, 255, 0.35);
-        --ring-strong: rgba(0, 240, 255, 0.6);
+        --bg:#0a0a1a;--panel:rgba(10,25,47,.92);--panel-soft:rgba(10,25,47,.72);
+        --cyan:#00f0ff;--cyan-200:#9bd9ff;--text:#cfefff;--muted:#98a9c1;
+        --ring:rgba(0,240,255,.35);--ring-strong:rgba(0,240,255,.6)
       }
-
-      /* Global: full-bleed, no visible scrollbars */
-      html, body {
-        height: 100%;
-        margin: 0;
-        background: var(--bg);
-        color: var(--text);
-        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-          Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
-          "Noto Color Emoji";
-        overflow: hidden;
-      }
-      * { scrollbar-width: none; -ms-overflow-style: none; }
-      *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
-
-      /* Layout */
-      .wrap {
-        position: relative;
-        width: 100vw;
-        height: 100vh;
-        display: grid;
-        place-items: center;
-        padding: env(safe-area-inset-top) env(safe-area-inset-right)
-                 env(safe-area-inset-bottom) env(safe-area-inset-left);
-      }
-
-      .panel {
-        width: min(920px, 92vw);
-        background: var(--panel);
-        border: 1px solid rgba(0, 240, 255, 0.25);
-        border-radius: 14px;
-        box-shadow: 0 0 24px rgba(0,240,255,0.15);
-        backdrop-filter: blur(10px);
-        padding: 20px;
-      }
-
-      .panel h1 {
-        margin: 0 0 8px 0;
-        font-size: 1.25rem;
-        letter-spacing: 0.04em;
-        font-family: "Orbitron", system-ui, sans-serif;
-        text-shadow: 0 0 6px var(--cyan);
-      }
-
-      .subtitle {
-        margin: 0 0 14px 0;
-        color: var(--muted);
-        font-size: 0.9rem;
-      }
-
-      .section {
-        border-top: 1px solid rgba(0, 240, 255, 0.18);
-        padding-top: 16px;
-        margin-top: 12px;
-      }
-
-      .row {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-
-      .two {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-      }
-      @media (max-width: 720px) {
-        .two { grid-template-columns: 1fr; }
-      }
-
-      .hint {
-        color: var(--muted);
-        font-size: 12px;
-        margin-top: 8px;
-      }
-
-      /* Neo buttons */
-      .btn {
-        height: 42px;
-        padding: 0 16px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 12px;
-        background: linear-gradient(180deg, rgba(10,25,47,0.85) 0%, rgba(10,25,47,0.7) 100%);
-        border: 1px solid var(--ring);
-        color: var(--text);
-        letter-spacing: 0.04em;
-        font-family: "Orbitron", system-ui, sans-serif;
-        font-size: 0.85rem;
-        cursor: pointer;
-        box-shadow: 0 0 6px rgba(0,240,255,0.15);
-        transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease, opacity .12s ease;
-        user-select: none;
-      }
-      .btn:hover {
-        transform: translateY(-1px);
-        border-color: var(--ring-strong);
-        box-shadow: 0 0 12px rgba(0,240,255,0.35);
-      }
-      .btn:disabled {
-        opacity: .6;
-        cursor: not-allowed;
-        transform: none !important;
-      }
-      .btn.full { width: 100%; }
-      .btn.active { border-color: #38e8ff; }
-
-      /* Little toast / status */
-      .toast {
-        position: fixed;
-        left: 50%;
-        bottom: 24px;
-        transform: translateX(-50%);
-        background: var(--panel-soft);
-        border: 1px solid rgba(0, 240, 255, 0.25);
-        border-radius: 10px;
-        padding: 10px 14px;
-        font-size: 0.9rem;
-        box-shadow: 0 0 18px rgba(0,240,255,0.15);
-        backdrop-filter: blur(6px);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity .18s ease, transform .18s ease;
-      }
-      .toast.show {
-        opacity: 1;
-        transform: translate(-50%, 0);
-      }
-
-      /* Top left back link (optional) */
-      .nav {
-        position: fixed;
-        top: 16px;
-        left: 16px;
-        display: flex;
-        gap: 10px;
-        z-index: 10;
-      }
+      html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans","Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji";overflow:hidden}
+      *{scrollbar-width:none;-ms-overflow-style:none}
+      *::-webkit-scrollbar{width:0!important;height:0!important;display:none!important}
+      .wrap{position:relative;width:100vw;height:100vh;display:grid;place-items:center;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+      .panel{width:min(920px,92vw);background:var(--panel);border:1px solid rgba(0,240,255,.25);border-radius:14px;box-shadow:0 0 24px rgba(0,240,255,.15);backdrop-filter:blur(10px);padding:20px}
+      .panel h1{margin:0 0 8px 0;font-size:1.25rem;letter-spacing:.04em;font-family:"Orbitron",system-ui,sans-serif;text-shadow:0 0 6px var(--cyan)}
+      .subtitle{margin:0 0 14px 0;color:var(--muted);font-size:.9rem}
+      .section{border-top:1px solid rgba(0,240,255,.18);padding-top:16px;margin-top:12px}
+      .row{display:flex;gap:10px;flex-wrap:wrap}
+      .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+      @media(max-width:720px){.two{grid-template-columns:1fr}}
+      .hint{color:var(--muted);font-size:12px;margin-top:8px}
+      .btn{height:42px;padding:0 16px;display:inline-flex;align-items:center;justify-content:center;border-radius:12px;background:linear-gradient(180deg,rgba(10,25,47,.85) 0%,rgba(10,25,47,.7) 100%);border:1px solid var(--ring);color:var(--text);letter-spacing:.04em;font-family:"Orbitron",system-ui,sans-serif;font-size:.85rem;cursor:pointer;box-shadow:0 0 6px rgba(0,240,255,.15);transition:transform .12s ease,box-shadow .12s ease,border-color .12s ease,opacity .12s ease;user-select:none}
+      .btn:hover{transform:translateY(-1px);border-color:var(--ring-strong);box-shadow:0 0 12px rgba(0,240,255,.35)}
+      .btn:disabled{opacity:.6;cursor:not-allowed;transform:none!important}
+      .btn.full{width:100%}
+      .btn.active{border-color:#38e8ff}
+      .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--panel-soft);border:1px solid rgba(0,240,255,.25);border-radius:10px;padding:10px 14px;font-size:.9rem;box-shadow:0 0 18px rgba(0,240,255,.15);backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease}
+      .toast.show{opacity:1;transform:translate(-50%,0)}
+      .nav{position:fixed;top:16px;left:16px;display:flex;gap:10px;z-index:10}
     </style>
   </head>
-
   <body>
     <div class="nav">
       <a class="btn" href="/index.html" title="Home">HOME</a>
@@ -178,11 +45,8 @@
         <h1>SETTINGS</h1>
         <p class="subtitle">Tuning your experience &amp; privacy controls.</p>
 
-        <!-- UI Preference -->
         <div class="section">
-          <h3 style="margin:0 0 10px 0; font-family:'Orbitron',system-ui,sans-serif; color:var(--cyan-200);">
-            UI PREFERENCE
-          </h3>
+          <h3 style="margin:0 0 10px 0;font-family:'Orbitron',system-ui,sans-serif;color:var(--cyan-200)">UI PREFERENCE</h3>
           <div class="two">
             <button id="pref-neural" class="btn full">NEURAL-CORTEX</button>
             <button id="pref-classic" class="btn full">CLASSIC</button>
@@ -190,14 +54,11 @@
           <p class="hint">Your choice loads automatically after you sign in.</p>
         </div>
 
-        <!-- Privacy -->
         <div class="section">
-          <h3 style="margin:0 0 10px 0; font-family:'Orbitron',system-ui,sans-serif; color:var(--cyan-200);">
-            PRIVACY
-          </h3>
+          <h3 style="margin:0 0 10px 0;font-family:'Orbitron',system-ui,sans-serif;color:var(--cyan-200)">PRIVACY</h3>
           <div class="row">
             <button id="btn-export" class="btn">EXPORT MY DATA</button>
-            <button id="btn-delete" class="btn" style="border-color:#ff7a7a;">DELETE ACCOUNT</button>
+            <button id="btn-delete" class="btn" style="border-color:#ff7a7a">DELETE ACCOUNT</button>
           </div>
           <p class="hint">Stored with Row-Level Security. We don’t sell your data.</p>
         </div>
@@ -208,128 +69,108 @@
 
     <script type="module">
       import { supabase } from '/src/supabaseClient.js';
+      const $ = (s)=>document.querySelector(s);
+      const toast = (m)=>{ const el=$('#toast'); el.textContent=m; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),1800); };
 
-      const $ = (sel) => document.querySelector(sel);
-      const toast = (msg) => {
-        const el = $('#toast');
-        el.textContent = msg;
-        el.classList.add('show');
-        setTimeout(() => el.classList.remove('show'), 1800);
-      };
+      const state = { user:null, saving:false };
 
-      const state = {
-        user: null,
-        saving: false,
-      };
-
-      async function requireSession() {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          // If you have a dedicated sign-in page, redirect there instead.
-          window.location.replace('/index.html');
-          return null;
-        }
+      async function requireSession(){
+        const { data:{ session } } = await supabase.auth.getSession();
+        if(!session){ window.location.replace('/index.html'); return null; }
         return session;
       }
 
-      function setActivePref(view) {
-        $('#pref-neural').classList.toggle('active', view === 'neural');
-        $('#pref-classic').classList.toggle('active', view === 'classic');
+      function setActivePref(view){
+        $('#pref-neural').classList.toggle('active', view==='neural');
+        $('#pref-classic').classList.toggle('active', view==='classic');
       }
 
-      async function loadProfile() {
-        const { data: { user } } = await supabase.auth.getUser();
-        state.user = user;
+      async function ensureProfileRow(userId){
+        try{
+          await supabase.from('profiles').upsert({ id:userId }, { onConflict:'id' });
+        }catch(e){ /* ignore; policies may still allow later upsert */ }
+      }
 
-        // Attempt to read profile.preferred_view
-        try {
+      async function loadProfile(){
+        const { data:{ user } } = await supabase.auth.getUser();
+        state.user = user;
+        await ensureProfileRow(user.id);
+        try{
           const { data, error } = await supabase
             .from('profiles')
             .select('preferred_view')
             .eq('id', user.id)
             .maybeSingle();
-
+          if(error){ console.error('profiles select error:', error); }
           const pref = data?.preferred_view || 'neural';
           setActivePref(pref);
-        } catch (e) {
+        }catch(e){
+          console.error('profiles select threw:', e);
           setActivePref('neural');
         }
       }
 
-      async function savePref(view) {
-        if (!state.user || state.saving) return;
+      async function savePref(view){
+        if(!state.user || state.saving) return;
         state.saving = true;
-        try {
+        try{
           const { error } = await supabase
             .from('profiles')
-            .update({ preferred_view: view })
-            .eq('id', state.user.id);
-
-          if (!error) {
-            setActivePref(view);
-            toast('UI preference saved');
-          } else {
-            toast('Could not save preference');
-          }
-        } finally {
+            .upsert({ id: state.user.id, preferred_view: view, updated_at: new Date().toISOString() }, { onConflict:'id' });
+          if(error){ console.error('profiles upsert error:', error); toast('Could not save preference'); }
+          else { setActivePref(view); toast('UI preference saved'); }
+        }catch(e){
+          console.error('profiles upsert threw:', e);
+          toast('Could not save preference');
+        }finally{
           state.saving = false;
         }
       }
 
-      async function authHeader() {
-        const { data: { session } } = await supabase.auth.getSession();
-        return session ? { Authorization: 'Bearer ' + session.access_token } : {};
+      async function authHeader(){
+        const { data:{ session } } = await supabase.auth.getSession();
+        return session ? { Authorization:'Bearer '+session.access_token } : {};
       }
 
-      async function exportData() {
-        try {
+      async function exportData(){
+        try{
           $('#btn-export').disabled = true;
           const headers = await authHeader();
           const res = await fetch('/.netlify/functions/export-user-data', { headers });
-          if (!res.ok) throw new Error('Export failed');
+          if(!res.ok) throw new Error('Export failed');
           const blob = await res.blob();
           const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'lightcore-export.json';
-          a.click();
+          const a = document.createElement('a'); a.href=url; a.download='lightcore-export.json'; a.click();
           URL.revokeObjectURL(url);
           toast('Export ready');
-        } catch (e) {
-          toast('Export failed');
-        } finally {
-          $('#btn-export').disabled = false;
-        }
+        }catch(e){ console.error(e); toast('Export failed'); }
+        finally{ $('#btn-export').disabled=false; }
       }
 
-      async function deleteAccount() {
+      async function deleteAccount(){
         const ok = confirm('Delete your account and all data? This cannot be undone.');
-        if (!ok) return;
-        try {
+        if(!ok) return;
+        try{
           $('#btn-delete').disabled = true;
           const headers = await authHeader();
           const res = await fetch('/.netlify/functions/delete-my-data', { headers });
-          if (!res.ok) throw new Error('Delete failed');
+          if(!res.ok) throw new Error('Delete failed');
           toast('Deleted — signing out…');
           await supabase.auth.signOut();
-          setTimeout(() => (window.location.href = '/'), 600);
-        } catch (e) {
-          toast('Delete failed');
-        } finally {
-          $('#btn-delete').disabled = false;
-        }
+          setTimeout(()=> (window.location.href='/'), 600);
+        }catch(e){ console.error(e); toast('Delete failed'); }
+        finally{ $('#btn-delete').disabled=false; }
       }
 
       // Wire up UI
-      $('#pref-neural').addEventListener('click', () => savePref('neural'));
-      $('#pref-classic').addEventListener('click', () => savePref('classic'));
+      $('#pref-neural').addEventListener('click', ()=>savePref('neural'));
+      $('#pref-classic').addEventListener('click', ()=>savePref('classic'));
       $('#btn-export').addEventListener('click', exportData);
       $('#btn-delete').addEventListener('click', deleteAccount);
 
       // Boot
-      (async () => {
-        const session = await requireSession();
-        if (!session) return;
+      (async ()=>{
+        const session = await requireSession(); if(!session) return;
         await loadProfile();
       })();
     </script>
