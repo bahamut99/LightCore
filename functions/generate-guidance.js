@@ -1,4 +1,9 @@
-// LightCore v2025-08-16 build-04 — generate-guidance (non-blocking + capping)
+// LightCore v2025-08-17 build-07 — generate-guidance (no-data-loss memory update)
+// Purpose: Generate concise, app-aware guidance JSON from recent context.
+// Inputs: Authorization: Bearer <supabase access token>; optional JSON body { source?: string }.
+// Outputs (200): { guidance: { current_state, positives[], concerns[], suggestions[] } }
+// Errors: 4xx for auth, 5xx for upstream/model issues. No PII is logged.
+
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
@@ -19,6 +24,7 @@ const userClient = (token) =>
 
 const adminClient = () => createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+// Truncate any free text before sending to AI or logging
 function safeLogSnippet(row) {
   const raw = row?.log ?? row?.ai_notes ?? row?.notes ?? row?.text ?? row?.entry ?? '';
   const s = typeof raw === 'string' ? raw : JSON.stringify(raw ?? '');
@@ -62,12 +68,13 @@ function formatContextForAI(ctx) {
 
 function buildPrompt(formatted) {
   return (
-    `You are LightCore – a unified, personalized health AI guide. Produce ONE valid JSON object only.\n\n` +
+    `You are LightCore — a unified, personalized health AI guide. Produce ONE valid JSON object only.\n\n` +
     `Top-level keys:\n` +
     `- "guidance_for_user": { "current_state", "positives", "concerns", "suggestions" }\n` +
     `- "memory_update": { "new_user_summary", "new_ai_persona_memo" }\n\n` +
-    `Limits (IMPORTANT): Return **at most** 5 positives, 5 concerns, 8 suggestions. Pick the most actionable and non-duplicative.\n` +
-    `Guidelines: Be app-aware (use LightCore features), be specific (1–3 day experiments), no external apps, no medical advice.\n\n` +
+    `Limits (IMPORTANT): Return at most 5 positives, 5 concerns, 8 suggestions. Pick the most actionable and non-duplicative.\n` +
+    `Constraints: Be app-aware (reference LightCore features), use 1–3 day experiments, no medical advice, no external apps/services.\n` +
+    `Style: concise, supportive, privacy-respecting.\n\n` +
     `Output JSON only. No extra text.\n\n` +
     `DATA CONTEXT:\n${formatted}`
   );
@@ -80,13 +87,33 @@ function extractJson(str) {
   const first = raw.indexOf('{');
   const last = raw.lastIndexOf('}');
   if (first === -1 || last === -1 || last < first) return null;
-  try { return JSON.parse(raw.slice(first, last + 1)); } catch { return null; }
+  try {
+    return JSON.parse(raw.slice(first, last + 1));
+  } catch {
+    return null;
+  }
+}
+
+function fallbackGuidance() {
+  return {
+    current_state:
+      'I could not compute full guidance right now. Your recent activity is noted—keep logs flowing and try one simple lever for 1–3 days.',
+    positives: [],
+    concerns: [],
+    suggestions: [
+      "Tap '+ LOG' to add a quick entry today",
+      "Add one event (e.g., 'Meal' or 'Caffeine') to seed patterns",
+      'Pick a single focus metric for the week (e.g., Clarity)',
+    ],
+  };
 }
 
 exports.handler = async (event) => {
   console.info(`${TAG} start`);
   try {
-    const authHeader = event.headers?.authorization || event.headers?.Authorization || event.headers?.AUTHORIZATION;
+    // Auth
+    const authHeader =
+      event.headers?.authorization || event.headers?.Authorization || event.headers?.AUTHORIZATION;
     const token = authHeader?.split(' ')[1];
     if (!token) {
       console.warn(`${TAG} 401 no bearer token`);
@@ -102,7 +129,7 @@ exports.handler = async (event) => {
     }
     console.info(`${TAG} uid=${user.id}`);
 
-    // Try brain context; if missing, build minimal context
+    // Context (prefer long-term context table; otherwise minimal)
     let { data: ctx, error: ctxErr } = await supabase
       .from('lightcore_brain_context')
       .select('*')
@@ -113,7 +140,9 @@ exports.handler = async (event) => {
       console.info(`${TAG} no brain context → building minimal context`);
       const { data: recentLogs } = await supabase
         .from('daily_logs')
-        .select('id, created_at, clarity_score, immune_score, physical_readiness_score, ai_notes, log, notes, text, entry')
+        .select(
+          'id, created_at, clarity_score, immune_score, physical_readiness_score, ai_notes, log, notes, text, entry'
+        )
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(7);
@@ -132,10 +161,14 @@ exports.handler = async (event) => {
           statusCode: 200,
           body: JSON.stringify({
             guidance: {
-              current_state: 'Log data for a few days to start generating personalized guidance.',
+              current_state:
+                'Log data for a few days to start generating personalized guidance.',
               positives: [],
               concerns: [],
-              suggestions: ["Tap '+ LOG' to add a quick entry today", "Try a 'Meal' or 'Caffeine' event to seed the timeline"],
+              suggestions: [
+                "Tap '+ LOG' to add a quick entry today",
+                "Try a 'Meal' or 'Caffeine' event to seed the timeline",
+              ],
             },
           }),
         };
@@ -153,6 +186,10 @@ exports.handler = async (event) => {
     const formatted = formatContextForAI(ctx);
     const prompt = buildPrompt(formatted);
 
+    // Upstream call with timeout (12s). No PII in error logs.
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 12000);
+
     const aiResp = await fetch(GEMINI_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -160,51 +197,100 @@ exports.handler = async (event) => {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { responseMimeType: 'application/json' },
       }),
+      signal: controller.signal,
+    }).catch((e) => {
+      console.error(`${TAG} Gemini fetch failed: ${e?.name || 'error'}`);
+      return null;
     });
+    clearTimeout(t);
 
-    if (!aiResp.ok) {
-      const body = await aiResp.text();
-      console.error(`${TAG} Gemini error ${aiResp.status}: ${body}`);
-      throw new Error(`Gemini API error: ${aiResp.status}`);
+    if (!aiResp || !aiResp.ok) {
+      const status = aiResp ? aiResp.status : 599;
+      console.error(`${TAG} Gemini error status=${status}`);
+      return { statusCode: 200, body: JSON.stringify({ guidance: fallbackGuidance() }) };
     }
 
     const aiJson = await aiResp.json();
     const text = aiJson?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
     const parsed = extractJson(text);
-    if (!parsed) throw new Error('AI did not return valid JSON');
 
-    const guidanceRaw = parsed.guidance_for_user || parsed.guidance || parsed.guide || {};
-    const memoryUpdate = parsed.memory_update || null;
+    const fromModel = parsed?.guidance_for_user || parsed?.guidance || parsed?.guide || null;
+    const guidance = fromModel
+      ? {
+          current_state:
+            fromModel.current_state ||
+            fromModel.currentState ||
+            fromModel.summary ||
+            fromModel.message ||
+            'Here’s your current state.',
+          positives: Array.isArray(fromModel.positives || fromModel.strengths)
+            ? (fromModel.positives || fromModel.strengths).slice(0, 5)
+            : [],
+          concerns: Array.isArray(fromModel.concerns || fromModel.risks || fromModel.issues)
+            ? (fromModel.concerns || fromModel.risks || fromModel.issues).slice(0, 5)
+            : [],
+          suggestions: Array.isArray(
+            fromModel.suggestions || fromModel.actions || fromModel.recommendations
+          )
+            ? (fromModel.suggestions ||
+                fromModel.actions ||
+                fromModel.recommendations
+              ).slice(0, 8)
+            : [],
+        }
+      : fallbackGuidance();
 
-    // Normalize + cap
-    const cap = (arr, n) => Array.isArray(arr) ? arr.slice(0, n) : [];
-    const guidance = {
-      current_state: guidanceRaw.current_state || guidanceRaw.currentState || guidanceRaw.summary || guidanceRaw.message || 'Here’s your current state.',
-      positives: cap(guidanceRaw.positives || guidanceRaw.strengths, 5),
-      concerns: cap(guidanceRaw.concerns || guidanceRaw.risks || guidanceRaw.issues, 5),
-      suggestions: cap(guidanceRaw.suggestions || guidanceRaw.actions || guidanceRaw.recommendations, 8),
-    };
-
+    // Memory upsert (server role; table secured by RLS)
+    const memoryUpdate = parsed?.memory_update || null;
     if (memoryUpdate) {
-      console.info(`${TAG} upserting memory`);
-      const admin = adminClient();
-      await admin
-        .from('lightcore_brain_context')
-        .upsert(
-          {
-            user_id: user.id,
-            user_summary: memoryUpdate.new_user_summary ?? null,
-            ai_persona_memo: memoryUpdate.new_ai_persona_memo ?? null,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id' }
-        );
+      // Only write non-empty strings; never send nulls to avoid clobbering.
+      const hasNonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;
+
+      const upsertData = { user_id: user.id, updated_at: new Date().toISOString() };
+
+      if (hasNonEmpty(memoryUpdate.new_user_summary) &&
+          memoryUpdate.new_user_summary !== ctx?.user_summary) {
+        upsertData.user_summary = memoryUpdate.new_user_summary;
+      }
+
+      if (hasNonEmpty(memoryUpdate.new_ai_persona_memo) &&
+          memoryUpdate.new_ai_persona_memo !== ctx?.ai_persona_memo) {
+        upsertData.ai_persona_memo = memoryUpdate.new_ai_persona_memo;
+      }
+
+      // Only hit DB if at least one field is actually changing.
+      if ('user_summary' in upsertData || 'ai_persona_memo' in upsertData) {
+        try {
+          const admin = adminClient();
+          await admin
+            .from('lightcore_brain_context')
+            .upsert(upsertData, { onConflict: 'user_id' });
+        } catch (e) {
+          // Do not fail the request for memory issues; just log without PII
+          console.warn(`${TAG} memory upsert warn`);
+        }
+      }
     }
 
-    console.info(`${TAG} ok pos=${guidance.positives.length} con=${guidance.concerns.length} sug=${guidance.suggestions.length}`);
+    console.info(
+      `${TAG} ok pos=${guidance.positives.length} con=${guidance.concerns.length} sug=${guidance.suggestions.length}`
+    );
     return { statusCode: 200, body: JSON.stringify({ guidance }) };
   } catch (err) {
-    console.error(`${TAG} error:`, err?.message || err);
-    return { statusCode: 500, body: JSON.stringify({ error: "Sorry, I couldn't generate guidance right now." }) };
+    console.error(`${TAG} error`, err?.message || err);
+    return {
+      statusCode: 200, // return graceful guidance instead of 500 for better UX
+      body: JSON.stringify({ guidance: fallbackGuidance() }),
+    };
   }
 };
+
+/* How to test (local via Netlify CLI):
+1) Ensure env vars are set (SUPABASE_URL/ANON_KEY/SERVICE_ROLE_KEY, GEMINI_API_KEY, optional GEMINI_MODEL).
+2) Start dev: `netlify dev`.
+3) With a signed-in session in the app, open Neural-Cortex and click the Locus; guidance should appear.
+4) cURL (replace <TOKEN>):
+   curl -X POST -H "Authorization: Bearer <TOKEN>" http://localhost:8888/.netlify/functions/generate-guidance
+Expected: 200 with { guidance: { current_state, positives[], concerns[], suggestions[] } }
+*/
+

@@ -1,3 +1,4 @@
+// src/components/NeuralCortex.jsx
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, Float, QuadraticBezierLine } from '@react-three/drei';
@@ -13,25 +14,30 @@ const EVENT_CONFIG = {
   Default: { color: '#a78bfa' },
 };
 
-/* ------------------------- UTIL ------------------------- */
+/* ------------------------- Utils ------------------------- */
 function normalizeGuidance(raw) {
   if (!raw) return null;
-  const g = raw.guidance_for_user || raw.lightcoreGuide || raw.guidance || raw.guide || raw;
+  const g =
+    raw.guidance_for_user ||
+    raw.guidance ||
+    raw.lightcoreGuide ||
+    raw.guide ||
+    (raw.current_state ? raw : null);
   if (!g) return null;
-  const clamp = (arr, n) => (Array.isArray(arr) ? arr.slice(0, n) : []);
+  const clip = (a, n) => (Array.isArray(a) ? a.slice(0, n) : []);
   return {
     current_state: g.current_state || g.currentState || g.summary || g.message || '',
-    positives: clamp(g.positives || g.strengths, 5),
-    concerns: clamp(g.concerns || g.risks || g.issues, 5),
-    suggestions: clamp(g.suggestions || g.actions || g.recommendations, 8),
+    positives: clip(g.positives || g.strengths, 5),
+    concerns: clip(g.concerns || g.risks || g.issues, 5),
+    suggestions: clip(g.suggestions || g.actions || g.recommendations, 8),
   };
 }
 
 function useHoverCursor(isHovered) {
   useEffect(() => {
-    const originalCursor = document.body.style.cursor;
+    const prev = document.body.style.cursor;
     document.body.style.cursor = isHovered ? 'pointer' : 'auto';
-    return () => { document.body.style.cursor = originalCursor; };
+    return () => (document.body.style.cursor = prev);
   }, [isHovered]);
 }
 
@@ -40,7 +46,7 @@ async function fetchWithTimeout(promise, ms) {
   try {
     return await Promise.race([
       promise,
-      new Promise((_, rej) => (t = setTimeout(() => rej(new Error('timeout')), ms))),
+      new Promise((_, reject) => (t = setTimeout(() => reject(new Error('timeout')), ms))),
     ]);
   } finally {
     clearTimeout(t);
@@ -52,39 +58,39 @@ function Hud({ item, onClose }) {
   if (!item) return null;
 
   const logObj = item?.ai_notes ? item : item?.log;
-  const isLog = !!logObj?.ai_notes || !!logObj?.created_at;
+  const isLog = !!logObj?.created_at || !!logObj?.ai_notes;
   const isNudge = !!item?.headline;
   const isGuide = !!item?.current_state;
 
-  const formatDate = (d) =>
+  const when = (d) =>
     new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   let title = 'SYSTEM DATA';
-  if (isLog) title = `LOG ENTRY: ${formatDate(logObj.created_at)}`;
+  if (isLog) title = `LOG ENTRY: ${when(logObj.created_at)}`;
   if (isNudge) title = `ANOMALY: ${item.headline?.toUpperCase?.() ?? ''}`;
   if (isGuide) title = 'LIGHTCORE GUIDE';
 
+  const wrapStyle = {
+    position: 'absolute',
+    top: '2rem',
+    ...(isGuide ? { right: '2rem' } : { left: '2rem' }),
+    width: '400px',
+    color: '#00f0ff',
+    background: 'rgba(10, 25, 47, 0.7)',
+    border: '1px solid rgba(0, 240, 255, 0.2)',
+    backdropFilter: 'blur(10px)',
+    borderRadius: '0.5rem',
+    padding: '1.5rem',
+    fontFamily: "'Roboto Mono', monospace",
+    fontSize: '14px',
+    animation: 'fadeIn 0.5s ease-out',
+    zIndex: 10,
+  };
+
   return (
     <>
-      <style>{`.hud-scroll::-webkit-scrollbar { display: none; } .hud-scroll { -ms-overflow-style: none; scrollbar-width: none; }`}</style>
-      <div
-        style={{
-          position: 'absolute',
-          top: '2rem',
-          left: '2rem',
-          width: '400px',
-          color: '#00f0ff',
-          background: 'rgba(10, 25, 47, 0.7)',
-          border: '1px solid rgba(0, 240, 255, 0.2)',
-          backdropFilter: 'blur(10px)',
-          borderRadius: '0.5rem',
-          padding: '1.5rem',
-          fontFamily: "'Roboto Mono', monospace",
-          fontSize: '14px',
-          animation: 'fadeIn 0.5s ease-out',
-          zIndex: 10,
-        }}
-      >
+      <style>{`.hud-scroll::-webkit-scrollbar{display:none}.hud-scroll{-ms-overflow-style:none;scrollbar-width:none}`}</style>
+      <div style={wrapStyle}>
         <button
           onClick={onClose}
           style={{
@@ -137,9 +143,7 @@ function Hud({ item, onClose }) {
             </p>
           )}
           {isNudge && (
-            <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
-              {item.body_text}
-            </p>
+            <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{item.body_text}</p>
           )}
           {isGuide &&
             (item.positives || []).map((p) => (
@@ -156,14 +160,14 @@ function Hud({ item, onClose }) {
         </div>
 
         {isGuide && item.suggestions?.length > 0 && (
-          <div style={{ borderTop: '1px solid rgba(0, 240, 255, 0.2)', paddingTop: '1rem' }}>
+          <div style={{ borderTop: '1px solid rgba(0,240,255,0.2)', paddingTop: '1rem' }}>
             <h3 style={{ fontFamily: "'Orbitron', sans-serif", marginBottom: '0.75rem' }}>SUGGESTIONS</h3>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
               {item.suggestions.map((s) => (
                 <span
                   key={s}
                   style={{
-                    background: 'rgba(0, 240, 255, 0.1)',
+                    background: 'rgba(0,240,255,0.1)',
                     padding: '0.25rem 0.75rem',
                     borderRadius: '99px',
                     fontSize: '12px',
@@ -180,8 +184,8 @@ function Hud({ item, onClose }) {
   );
 }
 
-/* ---------------------- SHADERS ---------------------- */
-// Proper Fresnel outline (no inner artifacting)
+/* ---------------------- Shaders ---------------------- */
+// Soft Fresnel rim, alpha-only glow, brightens on hover (no milky interior)
 const fresnelVertex = `
   varying vec3 vNormal;
   varying vec3 vWorldPosition;
@@ -192,6 +196,7 @@ const fresnelVertex = `
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
+
 const fresnelFragment = `
   uniform float uHover;
   uniform vec3 uColor;
@@ -199,21 +204,16 @@ const fresnelFragment = `
   varying vec3 vWorldPosition;
 
   void main() {
-    // view-dependent rim
     vec3 viewDir = normalize(cameraPosition - vWorldPosition);
     float ndotv = max(dot(normalize(vNormal), viewDir), 0.0);
     float fresnel = pow(1.0 - ndotv, 2.0);
-
-    // soft edge + hover boost
-    float edge = smoothstep(0.15, 1.0, fresnel);
-    float glow = edge * mix(1.0, 1.6, clamp(uHover, 0.0, 1.0));
-
-    // use additive blend with alpha carrying intensity only on the rim
-    gl_FragColor = vec4(uColor, glow * 0.65);
+    float rim = smoothstep(0.15, 1.0, fresnel);
+    float alpha = rim * 0.35 * mix(1.0, 2.1, clamp(uHover, 0.0, 1.0));
+    gl_FragColor = vec4(uColor, alpha);
   }
 `;
 
-/* -------------------- 3D ELEMENTS -------------------- */
+/* -------------------- 3D Elements -------------------- */
 function Locus({ onLocusClick }) {
   const groupRef = useRef();
   const [hovered, setHovered] = useState(false);
@@ -230,28 +230,32 @@ function Locus({ onLocusClick }) {
   useFrame(() => {
     if (!groupRef.current) return;
     groupRef.current.rotation.y += 0.001;
-    uniforms.uHover.value = THREE.MathUtils.lerp(
-      uniforms.uHover.value,
-      hovered ? 1.0 : 0.0,
-      0.12
-    );
+    uniforms.uHover.value = THREE.MathUtils.lerp(uniforms.uHover.value, hovered ? 1.0 : 0.0, 0.18);
   });
 
+  const over = (e) => {
+    e.stopPropagation();
+    setHovered(true);
+  };
+  const out = (e) => {
+    e.stopPropagation();
+    setHovered(false);
+  };
+  const click = (e) => {
+    e.stopPropagation();
+    onLocusClick?.();
+  };
+
   return (
-    <group
-      ref={groupRef}
-      onClick={onLocusClick}
-      onPointerOver={() => setHovered(true)}
-      onPointerOut={() => setHovered(false)}
-    >
-      {/* Core */}
-      <mesh>
+    <group ref={groupRef}>
+      {/* Core – receives events */}
+      <mesh onClick={click} onPointerOver={over} onPointerOut={out}>
         <icosahedronGeometry args={[3, 5]} />
         <meshStandardMaterial color="#f0f0f0" metalness={0.9} roughness={0.05} />
       </mesh>
 
-      {/* Fresnel outline shell (click-through handled by group) */}
-      <mesh>
+      {/* Rim shell – receives events */}
+      <mesh onClick={click} onPointerOver={over} onPointerOut={out}>
         <icosahedronGeometry args={[3.03, 5]} />
         <shaderMaterial
           vertexShader={fresnelVertex}
@@ -267,21 +271,20 @@ function Locus({ onLocusClick }) {
 }
 
 function AnomalyGlyph({ nudge, position, onGlyphClick }) {
-  const meshRef = useRef();
+  const ref = useRef();
   const [hovered, setHovered] = useState(false);
   useHoverCursor(hovered);
 
   useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += 0.01;
-      const time = state.clock.getElapsedTime();
-      meshRef.current.position.y = position[1] + Math.sin(time) * 0.2;
+    if (ref.current) {
+      ref.current.rotation.y += 0.01;
+      ref.current.position.y = position[1] + Math.sin(state.clock.getElapsedTime()) * 0.2;
     }
   });
 
   return (
     <group
-      ref={meshRef}
+      ref={ref}
       position={position}
       onClick={() => onGlyphClick(nudge)}
       onPointerOver={() => setHovered(true)}
@@ -297,7 +300,7 @@ function AnomalyGlyph({ nudge, position, onGlyphClick }) {
           metalness={0.8}
         />
       </mesh>
-      <Text color="white" fontSize={0.8} position={[0, 0, 0.6]} rotation={[0, 0, 0]}>
+      <Text color="white" fontSize={0.8} position={[0, 0, 0.6]}>
         !
       </Text>
     </group>
@@ -305,44 +308,37 @@ function AnomalyGlyph({ nudge, position, onGlyphClick }) {
 }
 
 function EventNode({ event, position }) {
-  const config = EVENT_CONFIG[event.event_type] || EVENT_CONFIG['Default'];
+  const cfg = EVENT_CONFIG[event.event_type] || EVENT_CONFIG.Default;
   return (
     <mesh position={position}>
       <sphereGeometry args={[0.15, 16, 16]} />
-      <meshStandardMaterial color={config.color} emissive={config.color} emissiveIntensity={1.5} />
+      <meshStandardMaterial color={cfg.color} emissive={cfg.color} emissiveIntensity={1.5} />
     </mesh>
   );
 }
 
 function SynapticLinks({ selectedLog, events }) {
   if (!selectedLog || !selectedLog.position || !selectedLog.log || events.length === 0) return null;
+
   const links = useMemo(() => {
-    const startPoint = new THREE.Vector3(...selectedLog.position);
-    return events.map((event, index) => {
-      const angle = Math.PI / 2 + (index - (events.length - 1) / 2) * 0.5;
-      const endPoint = new THREE.Vector3(
-        startPoint.x + Math.cos(angle) * 3,
-        startPoint.y + Math.sin(angle) * 3,
-        startPoint.z
-      );
-      const midPoint = new THREE.Vector3(
-        (startPoint.x + endPoint.x) / 2,
-        (startPoint.y + endPoint.y) / 2 + 0.8,
-        startPoint.z
-      );
-      return { event, startPoint, midPoint, endPoint, key: `${event.event_time}-${index}` };
+    const start = new THREE.Vector3(...selectedLog.position);
+    return events.map((event, i) => {
+      const angle = Math.PI / 2 + (i - (events.length - 1) / 2) * 0.5;
+      const end = new THREE.Vector3(start.x + Math.cos(angle) * 3, start.y + Math.sin(angle) * 3, start.z);
+      const mid = new THREE.Vector3((start.x + end.x) / 2, (start.y + end.y) / 2 + 0.8, start.z);
+      return { event, start, mid, end, key: `${event.event_time}-${i}` };
     });
   }, [selectedLog, events]);
 
   return (
     <group>
-      {links.map(({ event, startPoint, midPoint, endPoint, key }) => (
+      {links.map(({ event, start, mid, end, key }) => (
         <group key={key}>
-          <EventNode event={event} position={endPoint} />
+          <EventNode event={event} position={end} />
           <QuadraticBezierLine
-            start={startPoint}
-            end={endPoint}
-            mid={midPoint}
+            start={start}
+            end={end}
+            mid={mid}
             color="#00f0ff"
             lineWidth={1}
             transparent
@@ -355,30 +351,26 @@ function SynapticLinks({ selectedLog, events }) {
 }
 
 function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, isHovered }) {
-  const meshRef = useRef();
+  const ref = useRef();
   useHoverCursor(isHovered);
 
-  const dynamicColor = useMemo(() => {
-    const avgScore =
+  const dynamic = useMemo(() => {
+    const avg =
       ((log.clarity_score || 0) + (log.immune_score || 0) + (log.physical_readiness_score || 0)) /
       30;
-    return new THREE.Color().lerpColors(
-      new THREE.Color(0xff4d4d),
-      new THREE.Color(0x00f0ff),
-      avgScore
-    );
+    return new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avg);
   }, [log]);
 
   useFrame(() => {
-    if (!meshRef.current) return;
+    if (!ref.current) return;
     const target = isSelected ? 1.8 : isHovered ? 1.3 : 1;
-    const s = THREE.MathUtils.lerp(meshRef.current.scale.x, target, 0.1);
-    meshRef.current.scale.setScalar(s);
+    const s = THREE.MathUtils.lerp(ref.current.scale.x, target, 0.1);
+    ref.current.scale.setScalar(s);
   });
 
   return (
     <mesh
-      ref={meshRef}
+      ref={ref}
       position={position}
       onClick={(e) => {
         e.stopPropagation();
@@ -392,10 +384,10 @@ function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, is
     >
       <sphereGeometry args={[0.2, 32, 32]} />
       <meshStandardMaterial
-        color={dynamicColor}
+        color={dynamic}
         metalness={0.95}
         roughness={0.1}
-        emissive={dynamicColor}
+        emissive={dynamic}
         emissiveIntensity={isSelected || isHovered ? 0.5 : 0}
       />
     </mesh>
@@ -405,14 +397,14 @@ function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, is
 function Constellation({ logs, setSelectedItem, selectedItem, setHoveredLog, hoveredLog }) {
   return useMemo(() => {
     const radius = 6;
-    return logs.map((log, index) => {
-      const angle = (index / logs.length) * Math.PI * 2;
-      const position = [radius * Math.cos(angle), radius * Math.sin(angle), 0];
+    return logs.map((log, i) => {
+      const angle = (i / logs.length) * Math.PI * 2;
+      const pos = [radius * Math.cos(angle), radius * Math.sin(angle), 0];
       return (
         <LogNode
           key={log.created_at}
           log={log}
-          position={position}
+          position={pos}
           setSelectedItem={setSelectedItem}
           isSelected={selectedItem?.log?.created_at === log.created_at}
           setHoveredLog={setHoveredLog}
@@ -426,6 +418,7 @@ function Constellation({ logs, setSelectedItem, selectedItem, setHoveredLog, hov
 function LogEntryButton({ onClick }) {
   const [hovered, setHovered] = useState(false);
   useHoverCursor(hovered);
+
   return (
     <Float speed={4} floatIntensity={1.5}>
       <group
@@ -452,7 +445,7 @@ function LogEntryButton({ onClick }) {
   );
 }
 
-/* ------------------------ MAIN ------------------------ */
+/* ------------------------ Main ------------------------ */
 function NeuralCortex({ onSwitchView }) {
   const [logHistory, setLogHistory] = useState([]);
   const [latestScores, setLatestScores] = useState(null);
@@ -478,6 +471,24 @@ function NeuralCortex({ onSwitchView }) {
     };
   }, []);
 
+  const requestGuidance = async (authHeader) => {
+    try {
+      const json = await fetchWithTimeout(
+        fetch('/.netlify/functions/generate-guidance', {
+          method: 'POST',
+          headers: { ...authHeader, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: 'neural-cortex' }),
+        }).then((r) => (r.ok ? r.json() : null)),
+        10000
+      );
+      const g = normalizeGuidance(json);
+      if (g) setGuideData(g);
+      return g;
+    } catch {
+      return null;
+    }
+  };
+
   const fetchAllData = async () => {
     setIsLoading(true);
     try {
@@ -491,10 +502,7 @@ function NeuralCortex({ onSwitchView }) {
           .select('id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes')
           .order('created_at', { ascending: false })
           .limit(30),
-        supabase
-          .from('nudges')
-          .select('*')
-          .eq('is_acknowledged', false),
+        supabase.from('nudges').select('*').eq('is_acknowledged', false),
       ]);
 
       const { data: logs, error: logError } = logRes;
@@ -512,6 +520,7 @@ function NeuralCortex({ onSwitchView }) {
 
       setIsLoading(false); // render scene
 
+      // Background fetches that shouldn't block UI
       fetchWithTimeout(
         fetch('/.netlify/functions/fetch-health-data', { headers: authHeader }).then((r) => (r.ok ? r.json() : null)),
         6000
@@ -521,19 +530,7 @@ function NeuralCortex({ onSwitchView }) {
         })
         .catch(() => {});
 
-      fetchWithTimeout(
-        fetch('/.netlify/functions/generate-guidance', {
-          method: 'POST',
-          headers: { ...authHeader, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source: 'neural-cortex' }),
-        }).then((r) => (r.ok ? r.json() : null)),
-        10000
-      )
-        .then((gj) => {
-          const g = normalizeGuidance(gj);
-          if (g) setGuideData(g);
-        })
-        .catch(() => {});
+      requestGuidance(authHeader).catch(() => {});
     } catch (e) {
       console.error('fetchAllData failed:', e);
       setIsLoading(false);
@@ -560,17 +557,21 @@ function NeuralCortex({ onSwitchView }) {
     };
   }, []);
 
+  // Auto-open the guide once it first arrives (if nothing else is open)
+  useEffect(() => {
+    if (guideData && !selectedItem) setSelectedItem(guideData);
+  }, [guideData, selectedItem]);
+
   useEffect(() => {
     if (selectedItem && selectedItem.log) {
-      const fetchEventsForDay = async () => {
+      (async () => {
         const { data, error } = await supabase
           .from('events')
           .select('event_type, event_time')
           .eq('log_id', selectedItem.log.id);
         if (error) console.error('Error fetching events:', error);
         else setDayEvents(data || []);
-      };
-      fetchEventsForDay();
+      })();
     } else {
       setDayEvents([]);
     }
@@ -586,8 +587,26 @@ function NeuralCortex({ onSwitchView }) {
     };
   }, [latestScores]);
 
-  const handleLogSubmitted = () => {
-    setIsLogModalOpen(false);
+  const handleLogSubmitted = () => setIsLogModalOpen(false);
+
+  const handleLocusClick = async () => {
+    if (guideData) {
+      setSelectedItem(guideData);
+      return;
+    }
+    // Show a friendly placeholder immediately
+    const placeholder = {
+      current_state: 'Generating your guidance…',
+      positives: [],
+      concerns: [],
+      suggestions: ['Keep logging—your personalized guide is being prepared.'],
+    };
+    setSelectedItem(placeholder);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const header = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+    const g = await requestGuidance(header);
+    if (g) setSelectedItem(g);
   };
 
   return (
@@ -643,11 +662,7 @@ function NeuralCortex({ onSwitchView }) {
         stepCount={stepCount}
       />
 
-      <Canvas
-        dpr={[1, 2]}
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
-        camera={{ position: [0, 0, 12], fov: 75 }}
-      >
+      <Canvas dpr={[1, 2]} gl={{ antialias: true, powerPreference: 'high-performance' }} camera={{ position: [0, 0, 12], fov: 75 }}>
         <color attach="background" args={['#0a0a1a']} />
         <ambientLight intensity={0.2} />
         <pointLight position={[-10, 5, 5]} intensity={lightIntensities.clarity} color="#00f0ff" />
@@ -656,7 +671,7 @@ function NeuralCortex({ onSwitchView }) {
 
         {!isLoading && (
           <>
-            <Locus onLocusClick={() => guideData && setSelectedItem(guideData)} />
+            <Locus onLocusClick={handleLocusClick} />
             <Constellation
               logs={logHistory}
               setSelectedItem={setSelectedItem}
@@ -665,13 +680,8 @@ function NeuralCortex({ onSwitchView }) {
               hoveredLog={hoveredLog}
             />
             <SynapticLinks selectedLog={selectedItem} events={dayEvents} />
-            {activeNudges.map((nudge, index) => (
-              <AnomalyGlyph
-                key={nudge.id}
-                nudge={nudge}
-                position={[-8, 4 - index * 2, -5]}
-                onGlyphClick={setSelectedItem}
-              />
+            {activeNudges.map((nudge, idx) => (
+              <AnomalyGlyph key={nudge.id} nudge={nudge} position={[-8, 4 - idx * 2, -5]} onGlyphClick={setSelectedItem} />
             ))}
             <LogEntryButton onClick={() => setIsLogModalOpen(true)} />
           </>
