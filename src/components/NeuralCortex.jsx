@@ -13,16 +13,17 @@ const EVENT_CONFIG = {
   Default: { color: '#a78bfa' },
 };
 
-// ---------- UTIL ----------
+/* ------------------------- UTIL ------------------------- */
 function normalizeGuidance(raw) {
   if (!raw) return null;
   const g = raw.guidance_for_user || raw.lightcoreGuide || raw.guidance || raw.guide || raw;
   if (!g) return null;
+  const clamp = (arr, n) => (Array.isArray(arr) ? arr.slice(0, n) : []);
   return {
     current_state: g.current_state || g.currentState || g.summary || g.message || '',
-    positives: g.positives || g.strengths || [],
-    concerns: g.concerns || g.risks || g.issues || [],
-    suggestions: g.suggestions || g.actions || g.recommendations || [],
+    positives: clamp(g.positives || g.strengths, 5),
+    concerns: clamp(g.concerns || g.risks || g.issues, 5),
+    suggestions: clamp(g.suggestions || g.actions || g.recommendations, 8),
   };
 }
 
@@ -34,7 +35,19 @@ function useHoverCursor(isHovered) {
   }, [isHovered]);
 }
 
-// ---------- HUD ----------
+async function fetchWithTimeout(promise, ms) {
+  let t;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, rej) => (t = setTimeout(() => rej(new Error('timeout')), ms))),
+    ]);
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/* ------------------------- HUD ------------------------- */
 function Hud({ item, onClose }) {
   if (!item) return null;
 
@@ -55,56 +68,120 @@ function Hud({ item, onClose }) {
   return (
     <>
       <style>{`.hud-scroll::-webkit-scrollbar { display: none; } .hud-scroll { -ms-overflow-style: none; scrollbar-width: none; }`}</style>
-      <div style={{
-        position: 'absolute', top: '2rem', left: '2rem', width: '400px', color: '#00f0ff',
-        background: 'rgba(10, 25, 47, 0.7)', border: '1px solid rgba(0, 240, 255, 0.2)',
-        backdropFilter: 'blur(10px)', borderRadius: '0.5rem', padding: '1.5rem',
-        fontFamily: "'Roboto Mono', monospace", fontSize: '14px', animation: 'fadeIn 0.5s ease-out', zIndex: 10
-      }}>
-        <button onClick={onClose} style={{
-          position: 'absolute', top: '0.5rem', right: '0.5rem', background: 'none',
-          border: 'none', color: '#00f0ff', fontSize: '1.5rem', cursor: 'pointer'
-        }}>&times;</button>
+      <div
+        style={{
+          position: 'absolute',
+          top: '2rem',
+          left: '2rem',
+          width: '400px',
+          color: '#00f0ff',
+          background: 'rgba(10, 25, 47, 0.7)',
+          border: '1px solid rgba(0, 240, 255, 0.2)',
+          backdropFilter: 'blur(10px)',
+          borderRadius: '0.5rem',
+          padding: '1.5rem',
+          fontFamily: "'Roboto Mono', monospace",
+          fontSize: '14px',
+          animation: 'fadeIn 0.5s ease-out',
+          zIndex: 10,
+        }}
+      >
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            top: '0.5rem',
+            right: '0.5rem',
+            background: 'none',
+            border: 'none',
+            color: '#00f0ff',
+            fontSize: '1.5rem',
+            cursor: 'pointer',
+          }}
+        >
+          &times;
+        </button>
 
-        <h2 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '1.25rem', textShadow: '0 0 5px #00f0ff', marginBottom: '1rem' }}>
+        <h2
+          style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '1.25rem',
+            textShadow: '0 0 5px #00f0ff',
+            marginBottom: '1rem',
+          }}
+        >
           {title}
         </h2>
 
         {isGuide && (
-          <p className="hud-scroll" style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: '1.6', fontStyle: 'italic', marginBottom: '1rem' }}>
+          <p
+            className="hud-scroll"
+            style={{
+              color: 'white',
+              whiteSpace: 'pre-wrap',
+              lineHeight: '1.6',
+              fontStyle: 'italic',
+              marginBottom: '1rem',
+            }}
+          >
             {item.current_state}
           </p>
         )}
 
-        <div className="hud-scroll" style={{ maxHeight: '200px', overflowY: 'auto', paddingRight: '1rem', marginBottom: '1rem' }}>
-          {isLog && (<p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{logObj.ai_notes}</p>)}
-          {isNudge && (<p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{item.body_text}</p>)}
-          {isGuide && (item.positives || []).map((p) => (<p key={p} style={{ color: '#00ff88' }}>+ {p}</p>))}
-          {isGuide && (item.concerns || []).map((c) => (<p key={c} style={{ color: '#ffd700' }}>- {c}</p>))}
+        <div
+          className="hud-scroll"
+          style={{ maxHeight: '200px', overflowY: 'auto', paddingRight: '1rem', marginBottom: '1rem' }}
+        >
+          {isLog && (
+            <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+              {logObj.ai_notes}
+            </p>
+          )}
+          {isNudge && (
+            <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+              {item.body_text}
+            </p>
+          )}
+          {isGuide &&
+            (item.positives || []).map((p) => (
+              <p key={p} style={{ color: '#00ff88' }}>
+                + {p}
+              </p>
+            ))}
+          {isGuide &&
+            (item.concerns || []).map((c) => (
+              <p key={c} style={{ color: '#ffd700' }}>
+                - {c}
+              </p>
+            ))}
         </div>
 
-        <div style={{ borderTop: '1px solid rgba(0, 240, 255, 0.2)', paddingTop: '1rem' }}>
-          <h3 style={{ fontFamily: "'Orbitron', sans-serif", marginBottom: '0.75rem' }}>
-            {isLog ? 'TAGS' : (isNudge ? 'SUGGESTED ACTIONS' : 'SUGGESTIONS')}
-          </h3>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-            {isLog && (logObj.tags || []).map((tag) => (
-              <span key={tag} style={{ background: 'rgba(0, 240, 255, 0.1)', padding: '0.25rem 0.75rem', borderRadius: '99px', fontSize: '12px' }}>{tag}</span>
-            ))}
-            {isNudge && (item.suggested_actions || []).map((action) => (
-              <span key={action} style={{ background: 'rgba(255, 77, 77, 0.2)', padding: '0.25rem 0.75rem', borderRadius: '99px', fontSize: '12px' }}>{action}</span>
-            ))}
-            {isGuide && (item.suggestions || []).map((s) => (
-              <span key={s} style={{ background: 'rgba(0, 240, 255, 0.1)', padding: '0.25rem 0.75rem', borderRadius: '99px', fontSize: '12px' }}>{s}</span>
-            ))}
+        {isGuide && item.suggestions?.length > 0 && (
+          <div style={{ borderTop: '1px solid rgba(0, 240, 255, 0.2)', paddingTop: '1rem' }}>
+            <h3 style={{ fontFamily: "'Orbitron', sans-serif", marginBottom: '0.75rem' }}>SUGGESTIONS</h3>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {item.suggestions.map((s) => (
+                <span
+                  key={s}
+                  style={{
+                    background: 'rgba(0, 240, 255, 0.1)',
+                    padding: '0.25rem 0.75rem',
+                    borderRadius: '99px',
+                    fontSize: '12px',
+                  }}
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </>
   );
 }
 
-// ---------- SHADERS ----------
+/* ---------------------- SHADERS ---------------------- */
 const vertexShader = `
   varying vec3 vNormal;
   void main() {
@@ -123,21 +200,28 @@ const fragmentShader = `
   }
 `;
 
-// ---------- 3D ELEMENTS ----------
+/* -------------------- 3D ELEMENTS -------------------- */
 function Locus({ onLocusClick }) {
   const meshRef = useRef();
   const [hovered, setHovered] = useState(false);
   useHoverCursor(hovered);
 
-  const uniforms = useMemo(() => ({
-    uHover: { value: 0.0 },
-    uColor: { value: new THREE.Color('#00f0ff') },
-  }), []);
+  const uniforms = useMemo(
+    () => ({
+      uHover: { value: 0.0 },
+      uColor: { value: new THREE.Color('#00f0ff') },
+    }),
+    []
+  );
 
   useFrame(() => {
     if (meshRef.current) {
       meshRef.current.rotation.y += 0.001;
-      uniforms.uHover.value = THREE.MathUtils.lerp(uniforms.uHover.value, hovered ? 1.0 : 0.0, 0.1);
+      uniforms.uHover.value = THREE.MathUtils.lerp(
+        uniforms.uHover.value,
+        hovered ? 1.0 : 0.0,
+        0.1
+      );
     }
   });
 
@@ -219,7 +303,7 @@ function SynapticLinks({ selectedLog, events }) {
   const links = useMemo(() => {
     const startPoint = new THREE.Vector3(...selectedLog.position);
     return events.map((event, index) => {
-      const angle = (Math.PI / 2) + (index - (events.length - 1) / 2) * 0.5;
+      const angle = Math.PI / 2 + (index - (events.length - 1) / 2) * 0.5;
       const endPoint = new THREE.Vector3(
         startPoint.x + Math.cos(angle) * 3,
         startPoint.y + Math.sin(angle) * 3,
@@ -259,13 +343,19 @@ function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, is
   useHoverCursor(isHovered);
 
   const dynamicColor = useMemo(() => {
-    const avgScore = ((log.clarity_score || 0) + (log.immune_score || 0) + (log.physical_readiness_score || 0)) / 30;
-    return new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avgScore);
+    const avgScore =
+      ((log.clarity_score || 0) + (log.immune_score || 0) + (log.physical_readiness_score || 0)) /
+      30;
+    return new THREE.Color().lerpColors(
+      new THREE.Color(0xff4d4d),
+      new THREE.Color(0x00f0ff),
+      avgScore
+    );
   }, [log]);
 
   useFrame(() => {
     if (!meshRef.current) return;
-    const target = isSelected ? 1.8 : (isHovered ? 1.3 : 1);
+    const target = isSelected ? 1.8 : isHovered ? 1.3 : 1;
     const s = THREE.MathUtils.lerp(meshRef.current.scale.x, target, 0.1);
     meshRef.current.scale.setScalar(s);
   });
@@ -274,8 +364,14 @@ function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, is
     <mesh
       ref={meshRef}
       position={position}
-      onClick={(e) => { e.stopPropagation(); setSelectedItem({ log, position }); }}
-      onPointerOver={(e) => { e.stopPropagation(); setHoveredLog(log); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        setSelectedItem({ log, position });
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHoveredLog(log);
+      }}
       onPointerOut={() => setHoveredLog(null)}
     >
       <sphereGeometry args={[0.2, 32, 32]} />
@@ -324,15 +420,23 @@ function LogEntryButton({ onClick }) {
       >
         <mesh>
           <torusGeometry args={[0.6, 0.1, 16, 100]} />
-          <meshStandardMaterial color="#00f0ff" emissive="#00f0ff" emissiveIntensity={hovered ? 2 : 1} roughness={0.2} metalness={0.8} />
+          <meshStandardMaterial
+            color="#00f0ff"
+            emissive="#00f0ff"
+            emissiveIntensity={hovered ? 2 : 1}
+            roughness={0.2}
+            metalness={0.8}
+          />
         </mesh>
-        <Text color="white" fontSize={0.2} position={[0, 0, 0]}>+ LOG</Text>
+        <Text color="white" fontSize={0.2} position={[0, 0, 0]}>
+          + LOG
+        </Text>
       </group>
     </Float>
   );
 }
 
-// ---------- MAIN ----------
+/* ------------------------ MAIN ------------------------ */
 function NeuralCortex({ onSwitchView }) {
   const [logHistory, setLogHistory] = useState([]);
   const [latestScores, setLatestScores] = useState(null);
@@ -359,34 +463,23 @@ function NeuralCortex({ onSwitchView }) {
   }, []);
 
   const fetchAllData = async () => {
-    setIsLoading(true);
+    setIsLoading(true); // unblock quickly after logs/nudges
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { setIsLoading(false); return; }
       const authHeader = { Authorization: `Bearer ${session.access_token}` };
 
-      const logsPromise = supabase
-        .from('daily_logs')
-        .select('id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes')
-        .order('created_at', { ascending: false })
-        .limit(30);
-
-      const nudgesPromise = supabase
-        .from('nudges')
-        .select('*')
-        .eq('is_acknowledged', false);
-
-      const stepsPromise = fetch('/.netlify/functions/fetch-health-data', { headers: authHeader })
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null);
-
-      // Try Classic's dashboard first (parity), then fall back to generate-guidance (POST)
-      const classicPromise = fetch('/.netlify/functions/get-dashboard-data', { headers: authHeader })
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null);
-
-      const [logRes, nudgeRes, stepRes, classicJson] = await Promise.all([
-        logsPromise, nudgesPromise, stepsPromise, classicPromise
+      // Logs + nudges first (drive the scene)
+      const [logRes, nudgeRes] = await Promise.all([
+        supabase
+          .from('daily_logs')
+          .select('id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes')
+          .order('created_at', { ascending: false })
+          .limit(30),
+        supabase
+          .from('nudges')
+          .select('*')
+          .eq('is_acknowledged', false),
       ]);
 
       const { data: logs, error: logError } = logRes;
@@ -402,26 +495,35 @@ function NeuralCortex({ onSwitchView }) {
       if (nudgeError) console.error('Error fetching nudges:', nudgeError);
       setActiveNudges(nudges || []);
 
-      if (stepRes && stepRes.steps) setStepCount(stepRes.steps);
+      // Unblock render; guidance/steps load in background
+      setIsLoading(false);
 
-      // Normalize any classic response
-      let guide = normalizeGuidance(classicJson?.lightcoreGuide) ||
-                  normalizeGuidance(classicJson?.guidance) ||
-                  normalizeGuidance(classicJson?.guide);
+      // Steps (background, with timeout)
+      fetchWithTimeout(
+        fetch('/.netlify/functions/fetch-health-data', { headers: authHeader }).then((r) => (r.ok ? r.json() : null)),
+        6000
+      )
+        .then((stepRes) => {
+          if (stepRes?.steps) setStepCount(stepRes.steps);
+        })
+        .catch(() => {});
 
-      // Fallback to generate-guidance if needed
-      if (!guide) {
-        const gj = await fetch('/.netlify/functions/generate-guidance', {
+      // Guidance (background, with timeout)
+      fetchWithTimeout(
+        fetch('/.netlify/functions/generate-guidance', {
           method: 'POST',
           headers: { ...authHeader, 'Content-Type': 'application/json' },
           body: JSON.stringify({ source: 'neural-cortex' }),
-        }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-
-        guide = normalizeGuidance(gj);
-      }
-
-      if (guide) setGuideData(guide);
-    } finally {
+        }).then((r) => (r.ok ? r.json() : null)),
+        10000
+      )
+        .then((gj) => {
+          const g = normalizeGuidance(gj);
+          if (g) setGuideData(g);
+        })
+        .catch(() => {});
+    } catch (e) {
+      console.error('fetchAllData failed:', e);
       setIsLoading(false);
     }
   };
@@ -436,7 +538,9 @@ function NeuralCortex({ onSwitchView }) {
       })
       .subscribe();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(() => { fetchAllData(); });
+    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
+      fetchAllData();
+    });
 
     return () => {
       supabase.removeChannel(channel);
@@ -470,11 +574,14 @@ function NeuralCortex({ onSwitchView }) {
     };
   }, [latestScores]);
 
-  const handleLogSubmitted = () => { setIsLogModalOpen(false); };
+  const handleLogSubmitted = () => {
+    setIsLogModalOpen(false);
+  };
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
-      <Hud item={selectedItem || (guideData ? null : null)} onClose={() => setSelectedItem(null)} />
+      {/* Single HUD anchored to current selection */}
+      <Hud item={selectedItem} onClose={() => setSelectedItem(null)} />
 
       <div style={{ position: 'absolute', top: '2rem', right: '2rem', zIndex: 10, display: 'flex', gap: '1rem' }}>
         <a
@@ -525,7 +632,11 @@ function NeuralCortex({ onSwitchView }) {
         stepCount={stepCount}
       />
 
-      <Canvas dpr={[1, 2]} gl={{ antialias: true, powerPreference: 'high-performance' }} camera={{ position: [0, 0, 12], fov: 75 }}>
+      <Canvas
+        dpr={[1, 2]}
+        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        camera={{ position: [0, 0, 12], fov: 75 }}
+      >
         <color attach="background" args={['#0a0a1a']} />
         <ambientLight intensity={0.2} />
         <pointLight position={[-10, 5, 5]} intensity={lightIntensities.clarity} color="#00f0ff" />
@@ -544,7 +655,12 @@ function NeuralCortex({ onSwitchView }) {
             />
             <SynapticLinks selectedLog={selectedItem} events={dayEvents} />
             {activeNudges.map((nudge, index) => (
-              <AnomalyGlyph key={nudge.id} nudge={nudge} position={[-8, 4 - index * 2, -5]} onGlyphClick={setSelectedItem} />
+              <AnomalyGlyph
+                key={nudge.id}
+                nudge={nudge}
+                position={[-8, 4 - index * 2, -5]}  /* FIXED: array, not comma operator */
+                onGlyphClick={setSelectedItem}
+              />
             ))}
             <LogEntryButton onClick={() => setIsLogModalOpen(true)} />
           </>
@@ -555,8 +671,14 @@ function NeuralCortex({ onSwitchView }) {
           enableZoom={true}
           autoRotate={autoRotate}
           autoRotateSpeed={0.3}
-          onStart={() => { setAutoRotate(false); clearTimeout(idleRef.current); }}
-          onEnd={() => { clearTimeout(idleRef.current); idleRef.current = setTimeout(() => setAutoRotate(true), 4000); }}
+          onStart={() => {
+            setAutoRotate(false);
+            clearTimeout(idleRef.current);
+          }}
+          onEnd={() => {
+            clearTimeout(idleRef.current);
+            idleRef.current = setTimeout(() => setAutoRotate(true), 4000);
+          }}
         />
 
         <EffectComposer multisampling={0}>
@@ -564,9 +686,6 @@ function NeuralCortex({ onSwitchView }) {
           <Bloom intensity={1.0} luminanceThreshold={0.45} luminanceSmoothing={0.8} />
         </EffectComposer>
       </Canvas>
-
-      {/* When a guide exists but nothing is selected, show it by default */}
-      {!selectedItem && guideData && <Hud item={guideData} onClose={() => setSelectedItem(null)} />}
     </div>
   );
 }

@@ -1,6 +1,4 @@
-// LightCore v2025-08-16 build-03 — generate-guidance
-// Netlify function: /.netlify/functions/generate-guidance
-
+// LightCore v2025-08-16 build-04 — generate-guidance (non-blocking + capping)
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
@@ -64,10 +62,11 @@ function formatContextForAI(ctx) {
 
 function buildPrompt(formatted) {
   return (
-    `You are LightCore – a unified, personalized health AI guide. Review the user's context and produce ONE valid JSON object.\n\n` +
+    `You are LightCore – a unified, personalized health AI guide. Produce ONE valid JSON object only.\n\n` +
     `Top-level keys:\n` +
     `- "guidance_for_user": { "current_state", "positives", "concerns", "suggestions" }\n` +
     `- "memory_update": { "new_user_summary", "new_ai_persona_memo" }\n\n` +
+    `Limits (IMPORTANT): Return **at most** 5 positives, 5 concerns, 8 suggestions. Pick the most actionable and non-duplicative.\n` +
     `Guidelines: Be app-aware (use LightCore features), be specific (1–3 day experiments), no external apps, no medical advice.\n\n` +
     `Output JSON only. No extra text.\n\n` +
     `DATA CONTEXT:\n${formatted}`
@@ -103,14 +102,13 @@ exports.handler = async (event) => {
     }
     console.info(`${TAG} uid=${user.id}`);
 
-    // Try full brain context first
+    // Try brain context; if missing, build minimal context
     let { data: ctx, error: ctxErr } = await supabase
       .from('lightcore_brain_context')
       .select('*')
       .eq('user_id', user.id)
       .single();
 
-    // If missing, build a minimal live context (NO 2-log gate)
     if (ctxErr || !ctx) {
       console.info(`${TAG} no brain context → building minimal context`);
       const { data: recentLogs } = await supabase
@@ -178,11 +176,13 @@ exports.handler = async (event) => {
     const guidanceRaw = parsed.guidance_for_user || parsed.guidance || parsed.guide || {};
     const memoryUpdate = parsed.memory_update || null;
 
+    // Normalize + cap
+    const cap = (arr, n) => Array.isArray(arr) ? arr.slice(0, n) : [];
     const guidance = {
       current_state: guidanceRaw.current_state || guidanceRaw.currentState || guidanceRaw.summary || guidanceRaw.message || 'Here’s your current state.',
-      positives: guidanceRaw.positives || guidanceRaw.strengths || [],
-      concerns: guidanceRaw.concerns || guidanceRaw.risks || guidanceRaw.issues || [],
-      suggestions: guidanceRaw.suggestions || guidanceRaw.actions || guidanceRaw.recommendations || [],
+      positives: cap(guidanceRaw.positives || guidanceRaw.strengths, 5),
+      concerns: cap(guidanceRaw.concerns || guidanceRaw.risks || guidanceRaw.issues, 5),
+      suggestions: cap(guidanceRaw.suggestions || guidanceRaw.actions || guidanceRaw.recommendations, 8),
     };
 
     if (memoryUpdate) {
