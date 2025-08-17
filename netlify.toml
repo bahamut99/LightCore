@@ -1,6 +1,22 @@
-[build] 
-  command = "npm run build" 
-  publish = "dist" 
- 
-[functions] 
-  directory = "functions"
+[[headers]]
+for = "/*"
+  [headers.values]
+  Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
+  X-Content-Type-Options = "nosniff"
+  Referrer-Policy = "strict-origin-when-cross-origin"
+  Permissions-Policy = "geolocation=(), microphone=(), camera=(), payment=()"
+  X-Frame-Options = "DENY"
+  Cross-Origin-Opener-Policy = "same-origin"
+  # Keep CSP reasonable for our app: self + Supabase + Netlify Functions, images (incl. imgur), inline styles for now
+  Content-Security-Policy = """
+    default-src 'self';
+    script-src 'self';
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' https://i.imgur.com data:;
+    font-src 'self' data:;
+    connect-src 'self' https://*.supabase.co;
+    frame-ancestors 'none';
+    base-uri 'self';
+    form-action 'self';
+    upgrade-insecure-requests;
+  """
