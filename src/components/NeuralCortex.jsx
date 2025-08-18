@@ -1,5 +1,9 @@
 // src/components/NeuralCortex.jsx
-// LightCore Neural-Cortex — streamlined + timezone-aware steps fetch
+// LightCore — Neural-Cortex view (stable)
+// - UI preference write-through to profiles.preferred_view
+// - Guidance fetch (throttled)
+// - Realtime logs + nudge glyphs
+// - Local-timezone Google Steps fetch: on-load + every 120s
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -10,6 +14,7 @@ import { supabase } from '../supabaseClient';
 import LogEntryModal from './LogEntryModal.jsx';
 
 /* ---------------------- Config ---------------------- */
+
 const EVENT_CONFIG = {
   Workout: { color: '#4ade80' },
   Meal: { color: '#facc15' },
@@ -22,7 +27,11 @@ const hideScrollbarCSS = `
   *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
 `;
 
+// Steps polling every 120s
+const STEPS_POLL_MS = 120000;
+
 /* ------------------------- Utils ------------------------- */
+
 function normalizeGuidance(raw) {
   if (!raw) return null;
   const g =
@@ -45,7 +54,9 @@ function useHoverCursor(isHovered) {
   useEffect(() => {
     const prev = document.body.style.cursor;
     document.body.style.cursor = isHovered ? 'pointer' : 'auto';
-    return () => (document.body.style.cursor = prev);
+    return () => {
+      document.body.style.cursor = prev;
+    };
   }, [isHovered]);
 }
 
@@ -65,6 +76,7 @@ const fmtDate = (d) =>
   new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
 /* ------------------------- Shared UI ------------------------- */
+
 const neoBtnStyle = {
   fontFamily: "'Orbitron', sans-serif",
   fontSize: '0.8rem',
@@ -121,6 +133,7 @@ function NeoButton({ as = 'button', href, children, onClick, title, style = {} }
 }
 
 /* ------------------------- Left Stack ------------------------- */
+
 function LeftStack({ onSwitchView, onOpenSettings }) {
   return (
     <div
@@ -145,6 +158,7 @@ function LeftStack({ onSwitchView, onOpenSettings }) {
 }
 
 /* ------------------------- Settings Drawer ------------------------- */
+
 function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, currentUIPref }) {
   if (!open) return null;
   return (
@@ -271,6 +285,7 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
 }
 
 /* ------------------------- Guide Panel ------------------------- */
+
 function GuidePanel({ guide }) {
   const g =
     guide || {
@@ -391,6 +406,7 @@ function GuidePanel({ guide }) {
 }
 
 /* ------------------------- HUD (logs/nudges) ------------------------- */
+
 function Hud({ item, onClose }) {
   const logObj = item?.ai_notes ? item : item?.log;
   const isLog = !!logObj?.created_at || !!logObj?.ai_notes;
@@ -416,7 +432,14 @@ function Hud({ item, onClose }) {
         zIndex: 11,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          marginBottom: '0.75rem',
+        }}
+      >
         <h2
           style={{
             fontFamily: "'Orbitron', sans-serif",
@@ -448,13 +471,22 @@ function Hud({ item, onClose }) {
           ×
         </button>
       </div>
-      {isLog && <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{logObj.ai_notes}</p>}
-      {isNudge && <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{item.body_text}</p>}
+      {isLog && (
+        <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+          {logObj.ai_notes}
+        </p>
+      )}
+      {isNudge && (
+        <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+          {item.body_text}
+        </p>
+      )}
     </div>
   );
 }
 
 /* ---------------------- Shaders ---------------------- */
+
 const fresnelVertex = `
   varying vec3 vNormal;
   varying vec3 vWorldPosition;
@@ -481,6 +513,7 @@ const fresnelFragment = `
 `;
 
 /* -------------------- 3D Elements -------------------- */
+
 function Locus({ onLocusClick }) {
   const groupRef = useRef();
   const [hovered, setHovered] = useState(false);
@@ -497,16 +530,28 @@ function Locus({ onLocusClick }) {
   useFrame(() => {
     if (!groupRef.current) return;
     groupRef.current.rotation.y += 0.001;
-    uniforms.uHover.value = THREE.MathUtils.lerp(uniforms.uHover.value, hovered ? 1.0 : 0.0, 0.18);
+    uniforms.uHover.value = THREE.MathUtils.lerp(
+      uniforms.uHover.value,
+      hovered ? 1.0 : 0.0,
+      0.18
+    );
   });
 
   return (
     <group ref={groupRef}>
-      <mesh onClick={onLocusClick} onPointerOver={() => setHovered(true)} onPointerOut={() => setHovered(false)}>
+      <mesh
+        onClick={onLocusClick}
+        onPointerOver={() => setHovered(true)}
+        onPointerOut={() => setHovered(false)}
+      >
         <icosahedronGeometry args={[3, 5]} />
         <meshStandardMaterial color="#f0f0f0" metalness={0.9} roughness={0.05} />
       </mesh>
-      <mesh onClick={onLocusClick} onPointerOver={() => setHovered(true)} onPointerOut={() => setHovered(false)}>
+      <mesh
+        onClick={onLocusClick}
+        onPointerOver={() => setHovered(true)}
+        onPointerOut={() => setHovered(false)}
+      >
         <icosahedronGeometry args={[3.03, 5]} />
         <shaderMaterial
           vertexShader={fresnelVertex}
@@ -525,14 +570,12 @@ function AnomalyGlyph({ nudge, position, onGlyphClick }) {
   const ref = useRef();
   const [hovered, setHovered] = useState(false);
   useHoverCursor(hovered);
-
   useFrame((state) => {
     if (ref.current) {
       ref.current.rotation.y += 0.01;
       ref.current.position.y = position[1] + Math.sin(state.clock.getElapsedTime()) * 0.2;
     }
   });
-
   return (
     <group
       ref={ref}
@@ -570,7 +613,6 @@ function EventNode({ event, position }) {
 
 function SynapticLinks({ selectedLog, events }) {
   if (!selectedLog || !selectedLog.position || !selectedLog.log || events.length === 0) return null;
-
   const links = useMemo(() => {
     const start = new THREE.Vector3(...selectedLog.position);
     return events.map((event, i) => {
@@ -584,7 +626,6 @@ function SynapticLinks({ selectedLog, events }) {
       return { event, start, mid, end, key: `${event.event_time}-${i}` };
     });
   }, [selectedLog, events]);
-
   return (
     <group>
       {links.map(({ event, start, mid, end, key }) => (
@@ -608,7 +649,6 @@ function SynapticLinks({ selectedLog, events }) {
 function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, isHovered }) {
   const ref = useRef();
   useHoverCursor(isHovered);
-
   const dynamic = useMemo(() => {
     const avg =
       ((log.clarity_score || 0) +
@@ -617,14 +657,12 @@ function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, is
       30;
     return new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avg);
   }, [log]);
-
   useFrame(() => {
     if (!ref.current) return;
     const target = isSelected ? 1.8 : isHovered ? 1.3 : 1;
     const s = THREE.MathUtils.lerp(ref.current.scale.x, target, 0.1);
     ref.current.scale.setScalar(s);
   });
-
   return (
     <mesh
       ref={ref}
@@ -685,6 +723,8 @@ function LogEntryButton({ onClick }) {
       >
         <mesh>
           <torusGeometry args={[0.6, 0.1, 16, 100]} />
+        </mesh>
+        <mesh>
           <meshStandardMaterial
             color="#00f0ff"
             emissive="#00f0ff"
@@ -702,6 +742,7 @@ function LogEntryButton({ onClick }) {
 }
 
 /* ------------------------ Main ------------------------ */
+
 function NeuralCortex({ onSwitchView }) {
   const [logHistory, setLogHistory] = useState([]);
   const [latestScores, setLatestScores] = useState(null);
@@ -717,33 +758,35 @@ function NeuralCortex({ onSwitchView }) {
   const [uiPref, setUiPref] = useState('neural');
 
   const lastGuideRequestRef = useRef(0);
+  const idleRef = useRef(null);
 
   useEffect(() => {
     document.body.style.margin = '0';
     document.body.style.padding = '0';
     document.body.style.overflow = 'hidden';
-    const style = document.createElement('style');
-    style.innerHTML = hideScrollbarCSS;
-    document.head.appendChild(style);
     return () => {
       document.body.style.margin = '';
       document.body.style.padding = '';
       document.body.style.overflow = '';
-      document.head.removeChild(style);
     };
   }, []);
 
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = hideScrollbarCSS;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
+
   const getAuthHeader = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
     return session ? { Authorization: `Bearer ${session.access_token}` } : {};
   };
 
   const requestGuidance = async () => {
     try {
       const now = Date.now();
-      if (now - lastGuideRequestRef.current < 15000) return null; // throttle 15s
+      if (now - lastGuideRequestRef.current < 15000) return null;
       lastGuideRequestRef.current = now;
 
       const headers = await getAuthHeader();
@@ -766,9 +809,7 @@ function NeuralCortex({ onSwitchView }) {
   const fetchAllData = async () => {
     setIsLoading(true);
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         setIsLoading(false);
         return;
@@ -803,13 +844,16 @@ function NeuralCortex({ onSwitchView }) {
       setActiveNudges(nudges || []);
       setIsLoading(false);
 
-      // Non-blocking steps fetch with LOCAL timezone
-      const headers = await getAuthHeader();
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      // One-off steps fetch (local timezone)
       fetchWithTimeout(
-        fetch(`/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`, {
-          headers,
-        }).then((r) => (r.ok ? r.json() : null)),
+        (async () => {
+          const headers = await getAuthHeader();
+          const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          return fetch(
+            `/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`,
+            { headers }
+          ).then((r) => (r.ok ? r.json() : null));
+        })(),
         6000
       )
         .then((stepRes) => {
@@ -821,16 +865,21 @@ function NeuralCortex({ onSwitchView }) {
     }
   };
 
+  // Realtime + initial fetch
   useEffect(() => {
     fetchAllData();
 
     const channel = supabase
       .channel('realtime:daily_logs')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'daily_logs' }, (p) => {
-        setLogHistory((prev) => [p.new, ...prev].slice(0, 30));
-        setLatestScores({ ...p.new });
-        requestGuidance().catch(() => {});
-      })
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'daily_logs' },
+        (payload) => {
+          setLogHistory((prev) => [payload.new, ...prev].slice(0, 30));
+          setLatestScores({ ...payload.new });
+          requestGuidance().catch(() => {});
+        }
+      )
       .subscribe();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(() => {
@@ -843,6 +892,39 @@ function NeuralCortex({ onSwitchView }) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Steps polling every 120s (local timezone)
+  useEffect(() => {
+    let timer;
+    let cancelled = false;
+
+    const tick = async () => {
+      try {
+        const headers = await getAuthHeader();
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const res = await fetch(
+          `/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`,
+          { headers }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && typeof data?.steps === 'number') {
+          setStepCount(data.steps);
+        }
+      } catch {
+        // ignore transient network errors
+      }
+    };
+
+    tick(); // run immediately on mount
+    timer = setInterval(tick, STEPS_POLL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []); // steady polling
+
+  // Load day events when a log is selected
   useEffect(() => {
     if (selectedItem && selectedItem.log) {
       (async () => {
@@ -874,7 +956,10 @@ function NeuralCortex({ onSwitchView }) {
       try {
         await supabase
           .from('nudges')
-          .update({ is_acknowledged: true, acknowledged_at: new Date().toISOString() })
+          .update({
+            is_acknowledged: true,
+            acknowledged_at: new Date().toISOString(),
+          })
           .eq('id', item.id);
         setActiveNudges((prev) => prev.filter((n) => n.id !== item.id));
       } catch {}
@@ -884,6 +969,9 @@ function NeuralCortex({ onSwitchView }) {
   const handleLocusClick = async () => {
     await requestGuidance();
   };
+
+  const handleOpenSettings = () => setDrawerOpen(true);
+  const handleCloseSettings = () => setDrawerOpen(false);
 
   const onExport = async () => {
     try {
@@ -920,9 +1008,7 @@ function NeuralCortex({ onSwitchView }) {
   const onSetUIPref = async (view) => {
     setUiPref(view);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser(); // <- fixed typo here
+      const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         await supabase.from('profiles').update({ preferred_view: view }).eq('id', user.id);
       }
@@ -931,13 +1017,13 @@ function NeuralCortex({ onSwitchView }) {
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
-      <LeftStack onSwitchView={onSwitchView} onOpenSettings={() => setDrawerOpen(true)} />
+      <LeftStack onSwitchView={onSwitchView} onOpenSettings={handleOpenSettings} />
       <GuidePanel guide={guideData} />
       <Hud item={selectedItem} onClose={handleCloseHud} />
 
       <SettingsDrawer
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={handleCloseSettings}
         onExport={onExport}
         onDelete={onDelete}
         onSetUIPref={onSetUIPref}
@@ -985,7 +1071,19 @@ function NeuralCortex({ onSwitchView }) {
           </>
         )}
 
-        <OrbitControls enablePan={false} enableZoom={true} autoRotate={true} autoRotateSpeed={0.3} />
+        <OrbitControls
+          enablePan={false}
+          enableZoom={true}
+          autoRotate={true}
+          autoRotateSpeed={0.3}
+          onStart={() => {
+            clearTimeout(idleRef.current);
+          }}
+          onEnd={() => {
+            clearTimeout(idleRef.current);
+            idleRef.current = setTimeout(() => {}, 4000);
+          }}
+        />
 
         <EffectComposer multisampling={0}>
           <FXAA />
