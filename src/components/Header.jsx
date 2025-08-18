@@ -21,7 +21,7 @@ function Header() {
   return (
     <div className="header-container">
       <img
-        src="https://i.imgur.com/d5N9dkk.png"
+        src="/logo.png"
         alt="LightCore Logo"
         style={{ height: '44px' }}
       />

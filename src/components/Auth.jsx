@@ -35,7 +35,7 @@ export default function Auth() {
   return (
     <div id="auth-container">
       <div className="header-container">
-        <img src="https://i.imgur.com/d5N9dkk.png" alt="LightCore Logo" style={{ height: '44px' }} />
+        <img src="/logo.png" alt="LightCore Logo" style={{ height: '44px' }} />
         <h1>LightCore</h1>
       </div>
       <div className="card">
