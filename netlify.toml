@@ -1,6 +1,23 @@
+# netlify.toml  — simple + stable
+
 [build]
   command = "npm run build"
   publish = "dist"
 
 [functions]
+  # Your repo keeps serverless functions in the root "functions" folder
   directory = "functions"
+  node_bundler = "esbuild"
+
+# Optional helper if you ever choose to call functions via /api/*
+# (doesn't change existing /.netlify/functions/* calls)
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# SPA fallback so deep links route to index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
