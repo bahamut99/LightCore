@@ -1,8 +1,5 @@
 // src/components/NeuralCortex.jsx
-// LightCore v2025-08-17 build-09 — Left stack controls + Settings drawer + hidden scrollbars
-// - Classic View & Settings stacked vertically (top-left).
-// - Settings drawer holds Export / Delete (+ UI preference stub).
-// - Guide is pinned at right; no visible scrollbars (hidden thumbs), modern styling.
+// LightCore v2025-08-17 build-09 — with UI preference persistence & scoped nudges
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -29,7 +26,12 @@ const hideScrollbarCSS = `
 /* ------------------------- Utils ------------------------- */
 function normalizeGuidance(raw) {
   if (!raw) return null;
-  const g = raw.guidance_for_user || raw.guidance || raw.lightcoreGuide || raw.guide || (raw.current_state ? raw : null);
+  const g =
+    raw.guidance_for_user ||
+    raw.guidance ||
+    raw.lightcoreGuide ||
+    raw.guide ||
+    (raw.current_state ? raw : null);
   if (!g) return null;
   const clip = (a, n) => (Array.isArray(a) ? a.slice(0, n) : []);
   return {
@@ -449,7 +451,6 @@ function NeuralCortex({ onSwitchView }) {
   const [hoveredLog, setHoveredLog] = useState(null);
   const [dayEvents, setDayEvents] = useState([]);
   const [activeNudges, setActiveNudges] = useState([]);
-  const [autoRotate, setAutoRotate] = useState(true);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [stepCount, setStepCount] = useState(null);
   const [guideData, setGuideData] = useState(null);
@@ -468,6 +469,14 @@ function NeuralCortex({ onSwitchView }) {
       document.body.style.padding = '';
       document.body.style.overflow = '';
     };
+  }, []);
+
+  // No-visible-scrollbars global style
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = hideScrollbarCSS;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
   }, []);
 
   const getAuthHeader = async () => {
@@ -503,8 +512,9 @@ function NeuralCortex({ onSwitchView }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { setIsLoading(false); return; }
+      const userId = session.user.id;
 
-      // kick guidance load (will hit cache fast after first success)
+      // Kick guidance load (cache-friendly after first success)
       if (!guideData) requestGuidance().catch(() => {});
 
       const [logRes, nudgeRes] = await Promise.all([
@@ -513,7 +523,12 @@ function NeuralCortex({ onSwitchView }) {
           .select('id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes')
           .order('created_at', { ascending: false })
           .limit(30),
-        supabase.from('nudges').select('*').eq('is_acknowledged', false),
+        supabase
+          .from('nudges')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('is_acknowledged', false)
+          .order('created_at', { ascending: false })
       ]);
 
       const { data: logs } = logRes;
@@ -542,14 +557,7 @@ function NeuralCortex({ onSwitchView }) {
     }
   };
 
-  useEffect(() => {
-    // inject global no-scrollbar style once
-    const style = document.createElement('style');
-    style.innerHTML = hideScrollbarCSS;
-    document.head.appendChild(style);
-    return () => document.head.removeChild(style);
-  }, []);
-
+  // Initial data + realtime
   useEffect(() => {
     fetchAllData();
 
@@ -568,6 +576,22 @@ function NeuralCortex({ onSwitchView }) {
       supabase.removeChannel(channel);
       authListener?.subscription?.unsubscribe?.();
     };
+  }, []);
+
+  // Load initial UI preference for Drawer toggle state
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase
+          .from('profiles')
+          .select('preferred_view')
+          .eq('id', user.id)
+          .maybeSingle();
+        setUiPref(data?.preferred_view === 'classic' ? 'classic' : 'neural');
+      } catch {}
+    })();
   }, []);
 
   useEffect(() => {
@@ -599,7 +623,10 @@ function NeuralCortex({ onSwitchView }) {
     setSelectedItem(null);
     if (item?.id && (item?.headline || item?.body_text)) {
       try {
-        await supabase.from('nudges').update({ is_acknowledged: true, acknowledged_at: new Date().toISOString() }).eq('id', item.id);
+        await supabase
+          .from('nudges')
+          .update({ is_acknowledged: true, acknowledged_at: new Date().toISOString() })
+          .eq('id', item.id);
         setActiveNudges((prev) => prev.filter((n) => n.id !== item.id));
       } catch {}
     }
@@ -638,8 +665,18 @@ function NeuralCortex({ onSwitchView }) {
     setUiPref(view);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) await supabase.from('profiles').update({ preferred_view: view }).eq('id', user.id);
-    } catch {}
+      if (user) {
+        await supabase
+          .from('profiles')
+          .upsert({ id: user.id, preferred_view: view }, { onConflict: 'id' });
+      }
+      localStorage.setItem('lc_view', view);
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', view);
+      window.history.replaceState({}, '', url.toString());
+    } catch (e) {
+      console.warn('Failed to save UI preference:', e);
+    }
   };
 
   return (
@@ -657,7 +694,12 @@ function NeuralCortex({ onSwitchView }) {
         currentUIPref={uiPref}
       />
 
-      <LogEntryModal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} onLogSubmitted={() => setIsLogModalOpen(false)} stepCount={stepCount} />
+      <LogEntryModal
+        isOpen={isLogModalOpen}
+        onClose={() => setIsLogModalOpen(false)}
+        onLogSubmitted={() => setIsLogModalOpen(false)}
+        stepCount={stepCount}
+      />
 
       <Canvas dpr={[1, 2]} gl={{ antialias: true, powerPreference: 'high-performance' }} camera={{ position: [0, 0, 12], fov: 75 }}>
         <color attach="background" args={['#0a0a1a']} />
@@ -669,7 +711,13 @@ function NeuralCortex({ onSwitchView }) {
         {!isLoading && (
           <>
             <Locus onLocusClick={handleLocusClick} />
-            <Constellation logs={logHistory} setSelectedItem={setSelectedItem} selectedItem={selectedItem} setHoveredLog={setHoveredLog} hoveredLog={hoveredLog} />
+            <Constellation
+              logs={logHistory}
+              setSelectedItem={setSelectedItem}
+              selectedItem={selectedItem}
+              setHoveredLog={setHoveredLog}
+              hoveredLog={hoveredLog}
+            />
             <SynapticLinks selectedLog={selectedItem} events={dayEvents} />
             {activeNudges.map((nudge, idx) => (
               <AnomalyGlyph key={nudge.id} nudge={nudge} position={[-8, 4 - idx * 2, -5]} onGlyphClick={setSelectedItem} />
@@ -697,3 +745,4 @@ function NeuralCortex({ onSwitchView }) {
 }
 
 export default NeuralCortex;
+
