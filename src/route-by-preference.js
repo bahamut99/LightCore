@@ -1,18 +1,26 @@
-// src/route-by-preference.js
-// SPA mode: Only runs on index.html. Ensures URL carries ?view=<neural|classic>
-// and stores the choice in localStorage for your React app to read.
+// Ensures the URL carries ?view=<neural|classic> in SPA mode and
+// keeps localStorage in sync with the user's saved preference.
 
 import { supabase } from '/src/supabaseClient.js';
 
-// In SPA, both dashboards live at the same HTML (index.html)
 const ENTRY_PATHS = ['/', '/index.html'];
+const VALID = new Set(['neural', 'classic']);
 
-// Helpers
 const pathname = () => new URL(window.location.href).pathname || '/';
 const onEntryPage = () => ENTRY_PATHS.includes(pathname());
-const getViewFromUrl = () => new URL(window.location.href).searchParams.get('view');
+const getUrlView = () => {
+  const v = new URL(window.location.href).searchParams.get('view');
+  return VALID.has(v) ? v : null;
+};
 
-async function getPreferredView() {
+function setUrlViewParam(view) {
+  const url = new URL(window.location.href);
+  if (url.searchParams.get('view') === view) return;
+  url.searchParams.set('view', view);
+  window.history.replaceState({}, '', url.toString());
+}
+
+async function getPreferredViewFromDB() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return null;
 
@@ -23,33 +31,37 @@ async function getPreferredView() {
     .maybeSingle();
 
   if (error) return null;
-  // DB stores 'classic' or 'neural' (where 'neural' = Cortex)
-  return data?.preferred_view === 'classic' ? 'classic' : 'neural';
-}
 
-function setUrlViewParam(view) {
-  const url = new URL(window.location.href);
-  const current = url.searchParams.get('view');
-  if (current === view) return;
-  url.searchParams.set('view', view);
-  // Do not reload; just replace the URL so React can read it
-  window.history.replaceState({}, '', url.toString());
+  if (!data) {
+    // seed default
+    await supabase.from('profiles').upsert({
+      id: session.user.id,
+      preferred_view: 'neural',
+      updated_at: new Date().toISOString()
+    });
+    return 'neural';
+  }
+  const v = data?.preferred_view;
+  return VALID.has(v) ? v : 'neural';
 }
 
 async function applyRouting() {
   if (!onEntryPage()) return;
 
-  const pref = await getPreferredView();
-  if (!pref) return;
+  // Priority: URL > DB > localStorage > default
+  const urlView = getUrlView();
+  if (urlView) {
+    localStorage.setItem('lc_view', urlView);
+    return;
+  }
 
-  // Persist for React to read if it wants
-  localStorage.setItem('lc_view', pref);         // e.g., 'neural' or 'classic'
-  window.__LC_VIEW__ = pref;                     // optional global
+  const dbView = await getPreferredViewFromDB();
+  const fallback = localStorage.getItem('lc_view');
+  const view = dbView || (VALID.has(fallback) ? fallback : 'neural');
 
-  // Ensure URL carries ?view=...
-  setUrlViewParam(pref);
+  localStorage.setItem('lc_view', view);
+  setUrlViewParam(view);
 }
 
-// Run on load + on auth changes
 applyRouting();
 supabase.auth.onAuthStateChange(() => applyRouting());
