@@ -1,60 +1,58 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../supabaseClient.js';
 
-function Settings() {
+export default function Settings() {
   const [preferredUi, setPreferredUi] = useState('neural');
   const [isLoading, setIsLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
   const fetchSettings = useCallback(async () => {
     setIsLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user?.id) {
-      setIsLoading(false);
-      return;
-    }
-    try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('preferred_view')
-        .eq('id', session.user.id)
-        .maybeSingle();
+    if (!session) { setIsLoading(false); return; }
 
-      const v = data?.preferred_view || 'neural';
-      setPreferredUi(v);
-    } catch (e) {
-      console.error('Error fetching settings:', e);
-      setMessage('Error loading your settings.');
-    } finally {
-      setIsLoading(false);
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('preferred_view')
+      .eq('id', session.user.id)
+      .maybeSingle();
+
+    if (!error && data) {
+      setPreferredUi(data.preferred_view === 'classic' ? 'classic' : 'neural');
+    } else {
+      setPreferredUi('neural'); // default
     }
+    setIsLoading(false);
   }, []);
 
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
   const handlePreferenceChange = async (newPreference) => {
     setPreferredUi(newPreference);
-    setMessage('Saving...');
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user?.id) { setMessage('Not signed in.'); return; }
+    setSaving(true);
+    setMessage('Saving…');
 
-    try {
-      await supabase
-        .from('profiles')
-        .upsert({ id: session.user.id, preferred_view: newPreference, updated_at: new Date().toISOString() });
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSaving(false); setMessage('Not signed in.'); return; }
 
-      // keep SPA in sync immediately
-      localStorage.setItem('lc_view', newPreference);
-      const url = new URL(window.location.href);
-      url.searchParams.set('view', newPreference);
-      window.history.replaceState({}, '', url.toString());
+    // upsert so the row always exists
+    const { error } = await supabase
+      .from('profiles')
+      .upsert({ id: user.id, preferred_view: newPreference }, { onConflict: 'id' });
 
-      setMessage('Preference saved!');
-      setTimeout(() => setMessage(''), 2000);
-    } catch (e) {
-      console.error('Error saving settings:', e);
-      setMessage('Error saving. Please try again.');
+    setSaving(false);
+    if (error) {
+      setMessage('Could not save. Please try again.');
+      return;
     }
+
+    // reflect globally
+    try { localStorage.setItem('lc_view', newPreference); } catch {}
+    window.dispatchEvent(new CustomEvent('lc:view-changed', { detail: { view: newPreference } }));
+
+    setMessage('Preference saved!');
+    setTimeout(() => setMessage(''), 1800);
   };
 
   return (
@@ -63,12 +61,13 @@ function Settings() {
         <img src="https://i.imgur.com/d5N9dkk.png" alt="LightCore Logo" className="logo" />
         <h1>Settings</h1>
       </header>
+
       <section className="card">
         <h2>Dashboard Preference</h2>
-        <p>Choose your default dashboard experience. You can switch between them at any time.</p>
+        <p>Choose your default dashboard. You can still switch any time.</p>
 
         {isLoading ? (
-          <div className="loader" style={{ margin: '2rem auto' }}></div>
+          <div className="loader" style={{ margin: '2rem auto' }} />
         ) : (
           <div className="preference-options" style={{ marginTop: '2rem' }}>
             <label style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem', cursor: 'pointer' }}>
@@ -78,12 +77,14 @@ function Settings() {
                 value="neural"
                 checked={preferredUi === 'neural'}
                 onChange={() => handlePreferenceChange('neural')}
+                disabled={saving}
               />
               <span style={{ marginLeft: '1rem' }}>
                 <strong style={{ color: 'white', display: 'block' }}>Neural-Cortex</strong>
-                <span style={{ fontSize: '0.9rem', color: '#9CA3AF' }}>The immersive, 3D data visualization experience.</span>
+                <span style={{ fontSize: '0.9rem', color: '#9CA3AF' }}>Immersive 3D experience.</span>
               </span>
             </label>
+
             <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
               <input
                 type="radio"
@@ -91,22 +92,22 @@ function Settings() {
                 value="classic"
                 checked={preferredUi === 'classic'}
                 onChange={() => handlePreferenceChange('classic')}
+                disabled={saving}
               />
               <span style={{ marginLeft: '1rem' }}>
-                <strong style={{ color: 'white', display: 'block' }}>LightCore Classic View</strong>
-                <span style={{ fontSize: '0.9rem', color: '#9CA3AF' }}>The original, data-dense card layout.</span>
+                <strong style={{ color: 'white', display: 'block' }}>Classic View</strong>
+                <span style={{ fontSize: '0.9rem', color: '#9CA3AF' }}>Data-dense card layout.</span>
               </span>
             </label>
+
+            {message && <p className="message" style={{ marginTop: '1.25rem' }}>{message}</p>}
           </div>
         )}
-
-        {message && <p className="message" style={{ marginTop: '2rem' }}>{message}</p>}
       </section>
+
       <div className="cta-section">
         <a href="/" className="button-secondary">Return to Dashboard</a>
       </div>
     </div>
   );
 }
-
-export default Settings;
