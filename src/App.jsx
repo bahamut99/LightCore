@@ -1,115 +1,123 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import Auth from './components/Auth.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import NeuralCortex from './components/NeuralCortex.jsx';
 
-// helpers
-const getUrlView = () => new URL(window.location.href).searchParams.get('view');
-const getStoredView = () => localStorage.getItem('lc_view');
+/**
+ * Rules:
+ * - Read / write UI pref straight from public.profiles.preferred_view
+ * - If row’s missing (first login), upsert one with default 'neural'
+ * - Always show a visible loader (no more null/blank)
+ * - Fall back to localStorage('lc_view') if DB not reachable
+ */
+
+const fallbackPref = () => localStorage.getItem('lc_view') || 'neural';
 
 export default function App() {
   const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [currentView, setCurrentView] = useState('neural'); // default
+  const [booting, setBooting] = useState(true);
+  const [currentView, setCurrentView] = useState(fallbackPref());
 
-  // write the view everywhere so other tabs / scripts can see it
-  const applyView = useCallback((view) => {
-    const v = view === 'classic' ? 'classic' : 'neural';
-    setCurrentView(v);
-    try {
-      const url = new URL(window.location.href);
-      if (url.searchParams.get('view') !== v) {
-        url.searchParams.set('view', v);
-        window.history.replaceState({}, '', url.toString());
-      }
-    } catch {}
-    try { localStorage.setItem('lc_view', v); } catch {}
+  const loadSession = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    setSession(session || null);
+    return session;
   }, []);
 
-  // read user preference from DB
-  const fetchPreferredView = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return null;
-
-    const { data, error } = await supabase
+  const ensureProfileAndGetPref = useCallback(async (userId) => {
+    // Try to read
+    const { data: row, error: selErr } = await supabase
       .from('profiles')
       .select('preferred_view')
-      .eq('id', session.user.id)
+      .eq('id', userId)
       .maybeSingle();
 
-    if (error) return null;
-    return (data?.preferred_view === 'classic') ? 'classic' : 'neural';
+    if (selErr) throw selErr;
+
+    // If missing, create default
+    if (!row) {
+      const { error: upErr } = await supabase
+        .from('profiles')
+        .upsert({ id: userId, preferred_view: 'neural' }, { onConflict: 'id' });
+      if (upErr) throw upErr;
+      return 'neural';
+    }
+
+    // Guard
+    return row.preferred_view === 'classic' ? 'classic' : 'neural';
   }, []);
 
-  // initial boot
   useEffect(() => {
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-
-      // 1) DB wins (if logged in)
-      let view = null;
-      if (session) {
-        view = await fetchPreferredView();
+      try {
+        const sess = await loadSession();
+        if (!sess) {
+          // Not logged in; use fallback pref
+          setCurrentView(fallbackPref());
+        } else {
+          const pref = await ensureProfileAndGetPref(sess.user.id);
+          setCurrentView(pref);
+          localStorage.setItem('lc_view', pref);
+        }
+      } catch (e) {
+        console.warn('Pref load failed, using fallback:', e);
+        setCurrentView(fallbackPref());
+      } finally {
+        setBooting(false);
       }
-
-      // 2) URL ?view=… next
-      if (!view) {
-        const urlView = getUrlView();
-        if (urlView === 'classic' || urlView === 'neural') view = urlView;
-      }
-
-      // 3) localStorage fallback
-      if (!view) {
-        const stored = getStoredView();
-        if (stored === 'classic' || stored === 'neural') view = stored;
-      }
-
-      applyView(view || 'neural');
-      setLoading(false);
     })();
 
-    // auth change: keep session & reset to default when logged out
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, sess) => {
-      setSession(sess);
-      if (!sess) applyView('neural');
-      else {
-        const v = await fetchPreferredView();
-        applyView(v || 'neural');
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, sess) => {
+      setSession(sess || null);
+      if (!sess) {
+        setCurrentView('neural');
+        localStorage.setItem('lc_view', 'neural');
       }
     });
+    return () => sub?.subscription?.unsubscribe?.();
+  }, [loadSession, ensureProfileAndGetPref]);
 
-    // listen for cross-component changes
-    const handler = (e) => applyView(e.detail?.view);
-    window.addEventListener('lc:view-changed', handler);
-
-    return () => {
-      subscription?.unsubscribe?.();
-      window.removeEventListener('lc:view-changed', handler);
-    };
-  }, [applyView, fetchPreferredView]);
-
-  if (loading) return null;
-
-  const renderActiveView = () => {
-    if (currentView === 'neural') {
-      return (
-        <NeuralCortex
-          onSwitchView={() => applyView('classic')}
-        />
-      );
-    }
+  // Always render something (no blank)
+  if (booting) {
     return (
-      <Dashboard
-        onSwitchView={() => applyView('neural')}
-      />
+      <div style={{
+        minHeight: '100vh',
+        display: 'grid',
+        placeItems: 'center',
+        background: '#0a0a1a',
+        color: '#cfefff',
+        fontFamily: 'Inter, system-ui, sans-serif'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="loader" style={{ margin: '0 auto 12px' }} />
+          <div>Booting LightCore…</div>
+        </div>
+      </div>
     );
+  }
+
+  const switchTo = async (view) => {
+    setCurrentView(view);
+    localStorage.setItem('lc_view', view);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('profiles').update({ preferred_view: view }).eq('id', user.id);
+      }
+    } catch (e) {
+      console.warn('Could not persist preference (RLS/Offline). Will retry next boot.', e);
+    }
   };
+
+  const renderActive = () =>
+    currentView === 'neural'
+      ? <NeuralCortex onSwitchView={() => switchTo('classic')} />
+      : <Dashboard onSwitchView={() => switchTo('neural')} />;
 
   return (
     <div>
-      {!session ? <Auth /> : renderActiveView()}
+      {!session ? <Auth /> : renderActive()}
     </div>
   );
 }
