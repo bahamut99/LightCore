@@ -1,262 +1,162 @@
 // netlify/functions/fetch-health-data.js
-//
-// Hardened version:
-// - Always returns 200 with { steps } so the UI never shows errors
-// - Uses the client-supplied IANA timezone (?tz=America/Los_Angeles) for *today*
-// - Verifies the Supabase user from the bearer token and reads that user's Google tokens
-// - Tries Google Fit aggregate; on any failure, falls back to { steps: 0 } (stale-safe)
-// - Sets Cache-Control: no-store to avoid caching stale values
+// Quiet step fetcher: never leaks errors to users; timezone-aware.
+// Returns: 200 { steps: number } in all cases.
 
-import fetch from "node-fetch";
-import { createClient } from "@supabase/supabase-js";
+const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
+const { createClient } = require('@supabase/supabase-js');
 
-// --- Config from environment ---
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY; // Works with RLS if your policies allow user to read their own integration row
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Optional (only needed for refresh flow; function still works without it)
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+// helper: permissive CORS for your app origin
+const json = (status, body) => ({
+  statusCode: status,
+  headers: {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, content-type',
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  },
+  body: JSON.stringify(body),
+});
 
-// Table/column assumptions (adjust if your schema differs)
-const INTEGRATIONS_TABLE = "user_integrations";
-// Either `provider: 'google'` or `'google_fit'` — include both to be safe
-const PROVIDERS = ["google", "google_fit"];
+exports.handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') return json(204, {});
 
-export async function handler(event) {
-  const safeJson = (status, body) => ({
-    statusCode: status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
-    },
-    body: JSON.stringify(body),
-  });
+  // Always be quiet to the browser
+  const safeReturn = (n) => json(200, { steps: Number.isFinite(n) && n >= 0 ? n : 0 });
 
   try {
-    // ---------- 1) Basic request parsing ----------
-    const authHeader = event.headers?.authorization || event.headers?.Authorization || "";
-    const tzParam = (event.queryStringParameters?.tz || "UTC").trim();
+    // 1) Read auth (supabase JWT) if present; not strictly required for a quiet response
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-    // naive tz validation — allow letters, slash, underscore only
-    const tz = /^[A-Za-z_/-]+$/.test(tzParam) ? tzParam : "UTC";
+    // 2) Input window
+    const url = new URL(event.rawUrl || `https://x.example${event.path}${event.rawQuery ? '?' + event.rawQuery : ''}`);
+    const tz = url.searchParams.get('tz') || 'UTC';
+    const fromParam = url.searchParams.get('from'); // optional client-computed ms
+    const now = Date.now();
 
-    // ---------- 2) Supabase: verify user (via the same JWT you use on the client) ----------
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      // Misconfig shouldn't break UX
-      return safeJson(200, { steps: 0, stale: true });
+    // compute midnight in requested tz (fallback if 'from' not provided)
+    const startMs = fromParam
+      ? Math.min(Math.max(0, Number(fromParam)), now)
+      : (() => {
+          // lightweight tz start-of-day:
+          const nowLocalInTz = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+          const tzMid = new Date(nowLocalInTz.getFullYear(), nowLocalInTz.getMonth(), nowLocalInTz.getDate());
+          // Align that "calendar midnight" back to UTC by compensating the difference between
+          // the server clock and the tz wall time we just created
+          const diff = nowLocalInTz.getTime() - Date.now();
+          return tzMid.getTime() - diff;
+        })();
+
+    // 3) Look up OAuth tokens (Google Fit) from your `user_integrations` table
+    //    If you keep tokens elsewhere, adjust this query to match your schema.
+    const authHeader = event.headers.authorization || event.headers.Authorization || '';
+    let userId = null;
+    try {
+      const { data, error } = await supabase.auth.getUser(authHeader.replace(/^Bearer\s+/i, ''));
+      if (data?.user?.id) userId = data.user.id;
+    } catch (_) {
+      // ignore; we’ll just return 0 quietly
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userData?.user) {
-      return safeJson(200, { steps: 0, stale: true });
-    }
-    const userId = userData.user.id;
-
-    // ---------- 3) Pull Google tokens from your integration table (RLS should allow own-row read) ----------
-    const { data: integrations, error: integErr } = await supabase
-      .from(INTEGRATIONS_TABLE)
-      .select("provider, access_token, refresh_token, expires_at")
-      .eq("id", userId);
-
-    if (integErr || !integrations || integrations.length === 0) {
-      return safeJson(200, { steps: 0, stale: true });
+    if (!userId) {
+      // no session -> just return 0 quietly
+      return safeReturn(0);
     }
 
-    // Pick the first Google-like provider row with an access token
-    const row =
-      integrations.find((r) => PROVIDERS.includes(String(r.provider))) ||
-      integrations[0];
+    const { data: integRow } = await supabase
+      .from('user_integrations')
+      .select('provider, access_token, refresh_token, expires_at')
+      .eq('user_id', userId)
+      .eq('provider', 'google')
+      .maybeSingle();
 
-    let accessToken = row?.access_token || "";
-    const refreshToken = row?.refresh_token || "";
-    const expiresAt = row?.expires_at ? Number(row.expires_at) : 0;
-
-    if (!accessToken) {
-      return safeJson(200, { steps: 0, stale: true });
+    if (!integRow?.access_token) {
+      return safeReturn(0);
     }
 
-    // ---------- 4) Refresh token if clearly expired and we have client/secret ----------
-    const nowSec = Math.floor(Date.now() / 1000);
-    const isExpired = expiresAt && expiresAt <= nowSec + 60; // 1-minute grace
-
-    if (isExpired && refreshToken && GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
+    // 4) Refresh token if needed
+    let accessToken = integRow.access_token;
+    const exp = Number(integRow.expires_at || 0) * 1000;
+    if (!exp || exp < Date.now() + 60_000) {
       try {
-        const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        const r = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
-            client_id: GOOGLE_CLIENT_ID,
-            client_secret: GOOGLE_CLIENT_SECRET,
-            refresh_token: refreshToken,
-            grant_type: "refresh_token",
+            client_id: process.env.GOOGLE_CLIENT_ID,
+            client_secret: process.env.GOOGLE_CLIENT_SECRET,
+            grant_type: 'refresh_token',
+            refresh_token: integRow.refresh_token || '',
           }),
         });
-
-        if (refreshRes.ok) {
-          const refreshJson = await refreshRes.json();
-          if (refreshJson?.access_token) {
-            accessToken = refreshJson.access_token;
-
-            // Optionally persist new tokens (ignore failures; UX should stay smooth)
+        if (r.ok) {
+          const j = await r.json();
+          if (j.access_token) {
+            accessToken = j.access_token;
+            const newExp = j.expires_in ? Math.floor(Date.now() / 1000) + Number(j.expires_in) : null;
             await supabase
-              .from(INTEGRATIONS_TABLE)
-              .update({
-                access_token: accessToken,
-                expires_at: refreshJson.expires_in
-                  ? Math.floor(Date.now() / 1000) + Number(refreshJson.expires_in)
-                  : expiresAt,
-              })
-              .eq("id", userId)
-              .eq("provider", row.provider);
+              .from('user_integrations')
+              .update({ access_token: accessToken, expires_at: newExp })
+              .eq('user_id', userId)
+              .eq('provider', 'google');
           }
         }
-      } catch {
-        // Ignore refresh errors; fall back to stale-safe
+      } catch (_) {
+        // ignore and try with existing token
       }
     }
 
-    // ---------- 5) Compute today window in the user's IANA timezone ----------
-    const { startMs, endMs } = getTodayBoundsInTZ(tz);
+    // 5) Google Fit steps aggregated for [startMs, now]
+    //    Using the Dataset endpoint; times must be in nanoseconds
+    const startNs = String(Math.max(0, Math.floor(startMs)) * 1_000_000);
+    const endNs = String(Math.floor(now) * 1_000_000);
+    const ds =
+      'derived:com.google.step_count.delta:com.google.android.gms:estimated_steps';
 
-    // ---------- 6) Google Fit aggregate for steps ----------
-    // Using derived estimated steps source; if not available on the account, Google will still aggregate com.google.step_count.delta
-    const aggregateUrl =
-      "https://fitness.googleapis.com/fitness/v1/users/me/dataset:aggregate";
-
-    const payload = {
-      aggregateBy: [
-        {
-          dataTypeName: "com.google.step_count.delta",
-          // dataSourceId optional; leaving it off lets Google choose valid sources
-          // dataSourceId:
-          //   "derived:com.google.step_count.delta:com.google.android.gms:estimated_steps",
-        },
-      ],
-      bucketByTime: { durationMillis: endMs - startMs },
-      startTimeMillis: startMs,
-      endTimeMillis: endMs,
+    const fitUrl = `https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate`;
+    const body = {
+      aggregateBy: [{ dataSourceId: `derived:com.google.step_count.delta:com.google.android.gms:estimated_steps` }],
+      bucketByTime: { durationMillis: now - startMs },
+      startTimeMillis: Math.floor(startMs),
+      endTimeMillis: Math.floor(now),
     };
 
-    const fitRes = await fetch(aggregateUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!fitRes.ok) {
-      // Swallow the error and return 0 — we never want a 5xx back to the client
-      return safeJson(200, { steps: 0, stale: true });
-    }
-
-    const fitJson = await fitRes.json();
-    const steps = sumStepsFromAggregate(fitJson);
-
-    return safeJson(200, {
-      steps: Number.isFinite(steps) ? steps : 0,
-      tz,
-      range: { start: startMs, end: endMs },
-    });
-  } catch {
-    // Final safety net: never surface errors
-    return safeJson(200, { steps: 0, stale: true });
-  }
-}
-
-/* ---------------- Helpers ---------------- */
-
-/**
- * Sums steps from Google Fit aggregate response.
- */
-function sumStepsFromAggregate(agg) {
-  if (!agg || !Array.isArray(agg.bucket)) return 0;
-  let total = 0;
-  for (const b of agg.bucket) {
-    if (!Array.isArray(b.dataset)) continue;
-    for (const ds of b.dataset) {
-      if (!Array.isArray(ds.point)) continue;
-      for (const p of ds.point) {
-        if (!Array.isArray(p.value)) continue;
-        for (const v of p.value) {
-          // intVal or fpVal may be present depending on account/source
-          const val =
-            (typeof v.intVal === "number" && v.intVal) ||
-            (typeof v.fpVal === "number" && Math.round(v.fpVal)) ||
-            0;
-          total += val;
+    let stepsTotal = 0;
+    try {
+      const r = await fetch(fitUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        const buckets = Array.isArray(j.bucket) ? j.bucket : [];
+        for (const b of buckets) {
+          const sets = Array.isArray(b.dataset) ? b.dataset : [];
+          for (const s of sets) {
+            const points = Array.isArray(s.point) ? s.point : [];
+            for (const p of points) {
+              const v = p.value?.[0]?.intVal ?? 0;
+              stepsTotal += Number(v || 0);
+            }
+          }
         }
+      } else {
+        // silently fall back
+        return safeReturn(0);
       }
+    } catch (_) {
+      return safeReturn(0);
     }
+
+    return safeReturn(stepsTotal);
+  } catch (_) {
+    return safeReturn(0);
   }
-  return total;
-}
-
-/**
- * Returns start/end of "today" in the target IANA timezone as epoch millis.
- * Works without external libs by computing the timezone offset at midnight via Intl.
- */
-function getTodayBoundsInTZ(timeZone) {
-  const now = new Date();
-
-  // Get Y/M/D in the target TZ
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  })
-    .formatToParts(now)
-    .reduce((acc, p) => ((acc[p.type] = p.value), acc), {});
-
-  const y = Number(parts.year);
-  const m = Number(parts.month);
-  const d = Number(parts.day);
-
-  // Compute the UTC instant that corresponds to 00:00:00 in the target TZ
-  const startUtcGuess = Date.UTC(y, m - 1, d, 0, 0, 0);
-  const offsetAtStart = tzOffsetAtInstant(startUtcGuess, timeZone);
-  const startMs = startUtcGuess - offsetAtStart;
-
-  // Next midnight
-  const nextUtcGuess = Date.UTC(y, m - 1, d + 1, 0, 0, 0);
-  const offsetAtNext = tzOffsetAtInstant(nextUtcGuess, timeZone);
-  const endMs = nextUtcGuess - offsetAtNext;
-
-  return { startMs, endMs };
-}
-
-/**
- * Finds the timezone offset in milliseconds for a given UTC instant in an IANA timezone.
- * Positive result means "ahead of UTC".
- */
-function tzOffsetAtInstant(utcMs, timeZone) {
-  // Represent the given UTC instant in the target TZ, then read what the local wall clock says.
-  const dt = new Date(utcMs);
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  })
-    .formatToParts(dt)
-    .reduce((acc, p) => ((acc[p.type] = p.value), acc), {});
-
-  // Interpret that wall-clock time as *UTC* and see the difference
-  const asIfUtc = Date.parse(
-    `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}Z`
-  );
-
-  // offset = (wall-clock-as-UTC) - (actual UTC)
-  return asIfUtc - utcMs;
-}
+};
