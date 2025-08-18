@@ -1,34 +1,6 @@
-# Build the Vite app and publish the compiled /dist
 [build]
   command = "npm run build"
   publish = "dist"
 
-# Tell Netlify where your serverless functions live
 [functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
-  # if you use require('node-fetch') v2, keep it bundled:
-  external_node_modules = ["node-fetch"]
-
-# Security headers (kept sane for an SPA + inline scripts on settings/history)
-[[headers]]
-for = "/*"
-  [headers.values]
-  Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
-  X-Content-Type-Options = "nosniff"
-  Referrer-Policy = "strict-origin-when-cross-origin"
-  Permissions-Policy = "geolocation=(), microphone=(), camera=(), payment=()"
-  X-Frame-Options = "DENY"
-  Cross-Origin-Opener-Policy = "same-origin"
-  Content-Security-Policy = """
-    default-src 'self';
-    script-src 'self' 'unsafe-inline';
-    style-src 'self' 'unsafe-inline';
-    img-src 'self' https://i.imgur.com data:;
-    font-src 'self' data:;
-    connect-src 'self' https://*.supabase.co;
-    frame-ancestors 'none';
-    base-uri 'self';
-    form-action 'self';
-    upgrade-insecure-requests;
-  """
+  directory = "functions"
