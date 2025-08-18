@@ -1,115 +1,151 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../supabaseClient.js';
+// src/components/Settings.jsx
+// Classic Settings panel — keeps UI preference sticky
+// - Writes to public.profiles.preferred_view (RLS protected)
+// - Mirrors to localStorage
+// - Syncs URL ?view=… so routing stays consistent
 
-function Settings() {
-  const [preferredUi, setPreferredUi] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [message, setMessage] = useState('');
+import React, { useEffect, useState } from 'react';
+import { supabase } from '../supabaseClient';
 
-  const fetchSettings = useCallback(async () => {
-    setIsLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      setIsLoading(false);
-      return;
+const btn = {
+  height: 36,
+  padding: '0 14px',
+  borderRadius: 10,
+  border: '1px solid rgba(0,240,255,.35)',
+  background: 'linear-gradient(180deg, rgba(10,25,47,.85) 0%, rgba(10,25,47,.7) 100%)',
+  color: '#cfefff',
+  cursor: 'pointer',
+  fontFamily: "'Orbitron', sans-serif",
+  fontSize: 13,
+  letterSpacing: '.04em',
+};
+
+function setURLView(view) {
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('view') !== view) {
+      url.searchParams.set('view', view);
+      window.history.replaceState({}, '', url.toString());
     }
+  } catch {}
+}
 
-    try {
-      const response = await fetch('/.netlify/functions/get-user-settings', {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      if (!response.ok) throw new Error('Could not load settings.');
+export default function Settings() {
+  const [saving, setSaving] = useState(false);
+  const [savedTick, setSavedTick] = useState(false);
+  const [pref, setPref] = useState('neural'); // default
 
-      const settings = await response.json();
-      setPreferredUi(settings.preferred_ui || 'neural');
-    } catch (error) {
-      console.error('Error fetching settings:', error);
-      setMessage('Error loading your settings.');
-    } finally {
-      setIsLoading(false);
-    }
+  // Load current preference (URL → localStorage → profiles)
+  useEffect(() => {
+    (async () => {
+      // URL override first
+      const url = new URL(window.location.href);
+      const q = url.searchParams.get('view');
+      if (q === 'neural' || q === 'classic') {
+        setPref(q);
+        localStorage.setItem('preferred_view', q);
+        return;
+      }
+
+      // localStorage next
+      const stored = localStorage.getItem('preferred_view');
+      if (stored === 'neural' || stored === 'classic') {
+        setPref(stored);
+        setURLView(stored);
+        return;
+      }
+
+      // profiles (requires session)
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('preferred_view')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (!error && data?.preferred_view) {
+          setPref(data.preferred_view);
+          localStorage.setItem('preferred_view', data.preferred_view);
+          setURLView(data.preferred_view);
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
   }, []);
 
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
+  async function applyPref(view) {
+    setPref(view);
+    setSaving(true);
+    setSavedTick(false);
 
-  const handlePreferenceChange = async (newPreference) => {
-    setPreferredUi(newPreference);
-    setMessage('Saving...');
+    // Always mirror locally
+    localStorage.setItem('preferred_view', view);
+    setURLView(view);
 
-    const { data: { session } } = await supabase.auth.getSession();
+    // Best effort write-through to profiles
     try {
-      const response = await fetch('/.netlify/functions/set-user-settings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({ settings: { preferred_ui: newPreference } })
-      });
-
-      if (!response.ok) throw new Error('Failed to save preference.');
-
-      setMessage('Preference saved!');
-      setTimeout(() => setMessage(''), 2000);
-    } catch (error) {
-      console.error('Error saving settings:', error);
-      setMessage('Error saving. Please try again.');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // update (profile row should exist via your auth trigger)
+        await supabase.from('profiles').update({ preferred_view: view }).eq('id', user.id);
+      }
+    } catch {
+      // swallow; local + url still keep it sticky
+    } finally {
+      setSaving(false);
+      setSavedTick(true);
+      setTimeout(() => setSavedTick(false), 1600);
     }
-  };
+  }
 
   return (
-    <div className="container">
-      <header className="page-header">
-        <img src="/logo.png" alt="LightCore Logo" className="logo" />
-        <h1>Settings</h1>
-      </header>
-      <section className="card">
-        <h2>Dashboard Preference</h2>
-        <p>Choose your default dashboard experience. You can switch between them at any time.</p>
+    <div className="card" style={{ maxWidth: 520 }}>
+      <h2>Settings</h2>
 
-        {isLoading ? (
-          <div className="loader" style={{margin: '2rem auto'}}></div>
-        ) : (
-          <div className="preference-options" style={{marginTop: '2rem'}}>
-            <label style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem', cursor: 'pointer' }}>
-              <input
-                type="radio"
-                name="ui-preference"
-                value="neural"
-                checked={preferredUi === 'neural'}
-                onChange={() => handlePreferenceChange('neural')}
-              />
-              <span style={{ marginLeft: '1rem' }}>
-                <strong style={{ color: 'white', display: 'block' }}>Neural-Cortex</strong>
-                <span style={{ fontSize: '0.9rem', color: '#9CA3AF' }}>The immersive, 3D data visualization experience.</span>
-              </span>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-              <input
-                type="radio"
-                name="ui-preference"
-                value="classic"
-                checked={preferredUi === 'classic'}
-                onChange={() => handlePreferenceChange('classic')}
-              />
-              <span style={{ marginLeft: '1rem' }}>
-                <strong style={{ color: 'white', display: 'block' }}>LightCore Classic View</strong>
-                <span style={{ fontSize: '0.9rem', color: '#9CA3AF' }}>The original, data-dense card layout.</span>
-              </span>
-            </label>
-          </div>
-        )}
-
-        {message && <p className="message" style={{marginTop: '2rem'}}>{message}</p>}
-      </section>
-      <div className="cta-section">
-        <a href="/" className="button-secondary">Return to Dashboard</a>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ color: '#9bd9ff', fontFamily: "'Orbitron', sans-serif", fontSize: 13, marginBottom: 8 }}>
+          UI Preference
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => applyPref('neural')}
+            disabled={saving}
+            style={{
+              ...btn,
+              flex: 1,
+              borderColor: pref === 'neural' ? '#38e8ff' : 'rgba(0,240,255,.35)',
+            }}
+          >
+            Neural-Cortex
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPref('classic')}
+            disabled={saving}
+            style={{
+              ...btn,
+              flex: 1,
+              borderColor: pref === 'classic' ? '#38e8ff' : 'rgba(0,240,255,.35)',
+            }}
+          >
+            Classic
+          </button>
+        </div>
+        <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+          {saving && <span style={{ color: '#9aa7bd', fontSize: 12 }}>Saving…</span>}
+          {savedTick && <span style={{ color: '#00ff88', fontSize: 12 }}>Saved ✓</span>}
+          {!saving && !savedTick && (
+            <span style={{ color: '#98a9c1', fontSize: 12 }}>Loads automatically next sign-in.</span>
+          )}
+        </div>
       </div>
+
+      {/* You can keep the rest of your settings sections below if you have them */}
     </div>
   );
 }
-
-export default Settings;
-Yea

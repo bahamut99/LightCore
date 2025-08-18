@@ -1,31 +1,75 @@
-// SPA helper: keep ?view= in the URL and mirror to localStorage.
-// IMPORTANT: no Supabase calls here (keeps boot fast & simple).
+// src/route-by-preference.js
+// Runs early to keep the app routed by a sticky preference.
+// Order of truth: URL ?view → localStorage → profiles.preferred_view → 'neural'
 
-const ENTRY_PATHS = ['/', '/index.html'];
-const pathname = () => new URL(window.location.href).pathname || '/';
-const onEntryPage = () => ENTRY_PATHS.includes(pathname());
+import { supabase } from './supabaseClient';
 
-function readStored() {
-  const v = localStorage.getItem('lc_view');
-  return v === 'classic' || v === 'neural' ? v : null;
+const DEFAULT_VIEW = 'neural';
+
+function setURLView(view) {
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('view') !== view) {
+      url.searchParams.set('view', view);
+      window.history.replaceState({}, '', url.toString());
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
-function setUrlViewParam(view) {
-  const url = new URL(window.location.href);
-  if (url.searchParams.get('view') === view) return;
-  url.searchParams.set('view', view);
-  window.history.replaceState({}, '', url.toString());
+async function resolveFromProfiles() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('preferred_view')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (!error && data?.preferred_view) return data.preferred_view;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
-(function applyRouting() {
-  if (!onEntryPage()) return;
+// IIFE so it executes on import before your SPA mounts.
+(async function routeByPreference() {
+  // 1) Explicit URL override (also mirror locally)
+  try {
+    const url = new URL(window.location.href);
+    const q = url.searchParams.get('view');
+    if (q === 'neural' || q === 'classic') {
+      localStorage.setItem('preferred_view', q);
+      setURLView(q);
+      // best-effort write to profile (no blocking)
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) await supabase.from('profiles').update({ preferred_view: q }).eq('id', user.id);
+      } catch {}
+      return;
+    }
+  } catch {}
 
-  const url = new URL(window.location.href);
-  let view = url.searchParams.get('view');
-  if (view !== 'classic' && view !== 'neural') {
-    view = readStored() || 'neural';
+  // 2) localStorage
+  const stored = localStorage.getItem('preferred_view');
+  if (stored === 'neural' || stored === 'classic') {
+    setURLView(stored);
+    return;
   }
 
-  localStorage.setItem('lc_view', view);
-  setUrlViewParam(view);
+  // 3) profiles
+  const prof = await resolveFromProfiles();
+  if (prof) {
+    localStorage.setItem('preferred_view', prof);
+    setURLView(prof);
+    return;
+  }
+
+  // 4) default
+  localStorage.setItem('preferred_view', DEFAULT_VIEW);
+  setURLView(DEFAULT_VIEW);
 })();
