@@ -1,8 +1,5 @@
 // src/components/NeuralCortex.jsx
-// LightCore — Neural-Cortex UI (pruned, stable)
-// Changes in this version:
-// 1) Added toast() helper + used it after saving UI preference
-// 2) Added savingUIPref state to temporarily disable UI preference buttons
+// LightCore Neural-Cortex — streamlined + timezone-aware steps fetch
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -12,31 +9,7 @@ import * as THREE from 'three';
 import { supabase } from '../supabaseClient';
 import LogEntryModal from './LogEntryModal.jsx';
 
-/* ---------------------- Small helpers ---------------------- */
-
-// Minimal toast (no dependencies)
-function toast(msg) {
-  try {
-    const n = document.createElement('div');
-    n.textContent = msg;
-    Object.assign(n.style, {
-      position: 'fixed',
-      bottom: '20px',
-      right: '20px',
-      background: 'rgba(0,0,0,.7)',
-      color: '#cfefff',
-      border: '1px solid rgba(0,240,255,.35)',
-      borderRadius: '10px',
-      padding: '10px 14px',
-      zIndex: 9999,
-      fontFamily: 'Inter, system-ui',
-      boxShadow: '0 0 12px rgba(0,240,255,.25)',
-    });
-    document.body.appendChild(n);
-    setTimeout(() => n.remove(), 1800);
-  } catch (_) {}
-}
-
+/* ---------------------- Config ---------------------- */
 const EVENT_CONFIG = {
   Workout: { color: '#4ade80' },
   Meal: { color: '#facc15' },
@@ -108,20 +81,17 @@ const neoBtnStyle = {
   cursor: 'pointer',
   backdropFilter: 'blur(6px)',
   textDecoration: 'none',
-  transition: 'transform .12s ease, box-shadow .12s ease, border-color .12s ease, opacity .12s',
+  transition: 'transform .12s ease, box-shadow .12s ease, border-color .12s ease',
 };
 
-function NeoButton({ as = 'button', href, children, onClick, title, style = {}, disabled = false }) {
+function NeoButton({ as = 'button', href, children, onClick, title, style = {} }) {
   const [hover, setHover] = useState(false);
   const s = {
     ...neoBtnStyle,
     ...style,
-    boxShadow: hover && !disabled ? '0 0 12px rgba(0,240,255,0.35)' : '0 0 6px rgba(0,240,255,0.15)',
-    borderColor: hover && !disabled ? 'rgba(0,240,255,0.6)' : 'rgba(0,240,255,0.35)',
-    transform: hover && !disabled ? 'translateY(-1px)' : 'translateY(0)',
-    opacity: disabled ? 0.55 : 1,
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    pointerEvents: disabled ? 'none' : 'auto',
+    boxShadow: hover ? '0 0 12px rgba(0,240,255,0.35)' : '0 0 6px rgba(0,240,255,0.15)',
+    borderColor: hover ? 'rgba(0,240,255,0.6)' : 'rgba(0,240,255,0.35)',
+    transform: hover ? 'translateY(-1px)' : 'translateY(0)',
   };
   if (as === 'a') {
     return (
@@ -142,7 +112,6 @@ function NeoButton({ as = 'button', href, children, onClick, title, style = {}, 
       title={title}
       style={s}
       onClick={onClick}
-      disabled={disabled}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
@@ -176,15 +145,7 @@ function LeftStack({ onSwitchView, onOpenSettings }) {
 }
 
 /* ------------------------- Settings Drawer ------------------------- */
-function SettingsDrawer({
-  open,
-  onClose,
-  onExport,
-  onDelete,
-  onSetUIPref,
-  currentUIPref,
-  savingUIPref, // NEW: disable buttons while saving
-}) {
+function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, currentUIPref }) {
   if (!open) return null;
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 20, pointerEvents: 'none' }}>
@@ -259,10 +220,9 @@ function SettingsDrawer({
               onClick={() => onSetUIPref('neural')}
               style={{
                 flex: 1,
-                borderColor: currentUIPref === 'neural' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
+                borderColor:
+                  currentUIPref === 'neural' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
               }}
-              disabled={savingUIPref}
-              title={savingUIPref ? 'Saving…' : 'Set Neural-Cortex'}
             >
               NEURAL-CORTEX
             </NeoButton>
@@ -270,10 +230,9 @@ function SettingsDrawer({
               onClick={() => onSetUIPref('classic')}
               style={{
                 flex: 1,
-                borderColor: currentUIPref === 'classic' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
+                borderColor:
+                  currentUIPref === 'classic' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
               }}
-              disabled={savingUIPref}
-              title={savingUIPref ? 'Saving…' : 'Set Classic'}
             >
               CLASSIC
             </NeoButton>
@@ -313,12 +272,13 @@ function SettingsDrawer({
 
 /* ------------------------- Guide Panel ------------------------- */
 function GuidePanel({ guide }) {
-  const g = guide || {
-    current_state: 'Generating your guidance…',
-    positives: [],
-    concerns: [],
-    suggestions: ['Keep logging — your personalized guide is being prepared.'],
-  };
+  const g =
+    guide || {
+      current_state: 'Generating your guidance…',
+      positives: [],
+      concerns: [],
+      suggestions: ['Keep logging — your personalized guide is being prepared.'],
+    };
 
   return (
     <div
@@ -391,7 +351,10 @@ function GuidePanel({ guide }) {
       {g.suggestions?.length > 0 && (
         <>
           <div
-            style={{ borderTop: '1px solid rgba(0,240,255,0.18)', margin: '0.5rem 0 0.75rem' }}
+            style={{
+              borderTop: '1px solid rgba(0,240,255,0.18)',
+              margin: '0.5rem 0 0.75rem',
+            }}
           />
           <h3
             style={{
@@ -427,7 +390,7 @@ function GuidePanel({ guide }) {
   );
 }
 
-/* ------------------------- HUD ------------------------- */
+/* ------------------------- HUD (logs/nudges) ------------------------- */
 function Hud({ item, onClose }) {
   const logObj = item?.ai_notes ? item : item?.log;
   const isLog = !!logObj?.created_at || !!logObj?.ai_notes;
@@ -524,17 +487,17 @@ function Locus({ onLocusClick }) {
   useHoverCursor(hovered);
 
   const uniforms = useMemo(
-    () => ({ uHover: { value: 0.0 }, uColor: { value: new THREE.Color('#00f0ff') } }),
+    () => ({
+      uHover: { value: 0.0 },
+      uColor: { value: new THREE.Color('#00f0ff') },
+    }),
     []
   );
+
   useFrame(() => {
     if (!groupRef.current) return;
     groupRef.current.rotation.y += 0.001;
-    uniforms.uHover.value = THREE.MathUtils.lerp(
-      uniforms.uHover.value,
-      hovered ? 1.0 : 0.0,
-      0.18
-    );
+    uniforms.uHover.value = THREE.MathUtils.lerp(uniforms.uHover.value, hovered ? 1.0 : 0.0, 0.18);
   });
 
   return (
@@ -562,12 +525,14 @@ function AnomalyGlyph({ nudge, position, onGlyphClick }) {
   const ref = useRef();
   const [hovered, setHovered] = useState(false);
   useHoverCursor(hovered);
+
   useFrame((state) => {
     if (ref.current) {
       ref.current.rotation.y += 0.01;
       ref.current.position.y = position[1] + Math.sin(state.clock.getElapsedTime()) * 0.2;
     }
   });
+
   return (
     <group
       ref={ref}
@@ -605,6 +570,7 @@ function EventNode({ event, position }) {
 
 function SynapticLinks({ selectedLog, events }) {
   if (!selectedLog || !selectedLog.position || !selectedLog.log || events.length === 0) return null;
+
   const links = useMemo(() => {
     const start = new THREE.Vector3(...selectedLog.position);
     return events.map((event, i) => {
@@ -618,6 +584,7 @@ function SynapticLinks({ selectedLog, events }) {
       return { event, start, mid, end, key: `${event.event_time}-${i}` };
     });
   }, [selectedLog, events]);
+
   return (
     <group>
       {links.map(({ event, start, mid, end, key }) => (
@@ -641,18 +608,23 @@ function SynapticLinks({ selectedLog, events }) {
 function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, isHovered }) {
   const ref = useRef();
   useHoverCursor(isHovered);
+
   const dynamic = useMemo(() => {
     const avg =
-      ((log.clarity_score || 0) + (log.immune_score || 0) + (log.physical_readiness_score || 0)) /
+      ((log.clarity_score || 0) +
+        (log.immune_score || 0) +
+        (log.physical_readiness_score || 0)) /
       30;
     return new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avg);
   }, [log]);
+
   useFrame(() => {
     if (!ref.current) return;
     const target = isSelected ? 1.8 : isHovered ? 1.3 : 1;
     const s = THREE.MathUtils.lerp(ref.current.scale.x, target, 0.1);
     ref.current.scale.setScalar(s);
   });
+
   return (
     <mesh
       ref={ref}
@@ -713,8 +685,6 @@ function LogEntryButton({ onClick }) {
       >
         <mesh>
           <torusGeometry args={[0.6, 0.1, 16, 100]} />
-        </mesh>
-        <mesh>
           <meshStandardMaterial
             color="#00f0ff"
             emissive="#00f0ff"
@@ -746,32 +716,34 @@ function NeuralCortex({ onSwitchView }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [uiPref, setUiPref] = useState('neural');
 
-  // NEW: simple lock to prevent double-tap on UI pref buttons
-  const [savingUIPref, setSavingUIPref] = useState(false);
-
   const lastGuideRequestRef = useRef(0);
-  const idleRef = useRef(null);
 
   useEffect(() => {
     document.body.style.margin = '0';
     document.body.style.padding = '0';
     document.body.style.overflow = 'hidden';
+    const style = document.createElement('style');
+    style.innerHTML = hideScrollbarCSS;
+    document.head.appendChild(style);
     return () => {
       document.body.style.margin = '';
       document.body.style.padding = '';
       document.body.style.overflow = '';
+      document.head.removeChild(style);
     };
   }, []);
 
   const getAuthHeader = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     return session ? { Authorization: `Bearer ${session.access_token}` } : {};
   };
 
   const requestGuidance = async () => {
     try {
       const now = Date.now();
-      if (now - lastGuideRequestRef.current < 15000) return null; // throttle
+      if (now - lastGuideRequestRef.current < 15000) return null; // throttle 15s
       lastGuideRequestRef.current = now;
 
       const headers = await getAuthHeader();
@@ -794,7 +766,9 @@ function NeuralCortex({ onSwitchView }) {
   const fetchAllData = async () => {
     setIsLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
         setIsLoading(false);
         return;
@@ -818,25 +792,28 @@ function NeuralCortex({ onSwitchView }) {
         setLogHistory(logs);
         setLatestScores({ ...logs[0] });
       } else {
-        setLatestScores({ clarity_score: 8, immune_score: 8, physical_readiness_score: 8 });
+        setLatestScores({
+          clarity_score: 8,
+          immune_score: 8,
+          physical_readiness_score: 8,
+        });
       }
 
       const { data: nudges } = nudgeRes;
       setActiveNudges(nudges || []);
-
       setIsLoading(false);
 
+      // Non-blocking steps fetch with LOCAL timezone
+      const headers = await getAuthHeader();
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
       fetchWithTimeout(
-        (async () => {
-          const headers = await getAuthHeader();
-          return fetch('/.netlify/functions/fetch-health-data', { headers }).then((r) =>
-            r.ok ? r.json() : null
-          );
-        })(),
+        fetch(`/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`, {
+          headers,
+        }).then((r) => (r.ok ? r.json() : null)),
         6000
       )
         .then((stepRes) => {
-          if (stepRes?.steps) setStepCount(stepRes.steps);
+          if (typeof stepRes?.steps === 'number') setStepCount(stepRes.steps);
         })
         .catch(() => {});
     } catch {
@@ -845,21 +822,13 @@ function NeuralCortex({ onSwitchView }) {
   };
 
   useEffect(() => {
-    // hide scrollbars
-    const style = document.createElement('style');
-    style.innerHTML = hideScrollbarCSS;
-    document.head.appendChild(style);
-    return () => document.head.removeChild(style);
-  }, []);
-
-  useEffect(() => {
     fetchAllData();
 
     const channel = supabase
       .channel('realtime:daily_logs')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'daily_logs' }, (payload) => {
-        setLogHistory((prev) => [payload.new, ...prev].slice(0, 30));
-        setLatestScores({ ...payload.new });
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'daily_logs' }, (p) => {
+        setLogHistory((prev) => [p.new, ...prev].slice(0, 30));
+        setLatestScores({ ...p.new });
         requestGuidance().catch(() => {});
       })
       .subscribe();
@@ -872,7 +841,7 @@ function NeuralCortex({ onSwitchView }) {
       supabase.removeChannel(channel);
       authListener?.subscription?.unsubscribe?.();
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (selectedItem && selectedItem.log) {
@@ -916,9 +885,6 @@ function NeuralCortex({ onSwitchView }) {
     await requestGuidance();
   };
 
-  const handleOpenSettings = () => setDrawerOpen(true);
-  const handleCloseSettings = () => setDrawerOpen(false);
-
   const onExport = async () => {
     try {
       const headers = await getAuthHeader();
@@ -951,39 +917,31 @@ function NeuralCortex({ onSwitchView }) {
     }
   };
 
-  // UPDATED: save UI preference with a very short lock + toast feedback
   const onSetUIPref = async (view) => {
-    if (savingUIPref) return; // prevent double taps
-    setSavingUIPref(true);
     setUiPref(view);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser(); // <- fixed typo here
       if (user) {
-        await supabase.from('profiles').upsert({ id: user.id, preferred_view: view }).select();
-        toast('Preference saved');
+        await supabase.from('profiles').update({ preferred_view: view }).eq('id', user.id);
       }
-    } catch {
-      // silent; UI already flipped locally
-    } finally {
-      // let the UI breathe for a moment (prevents rapid re-clicks)
-      setTimeout(() => setSavingUIPref(false), 800);
-    }
+    } catch {}
   };
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
-      <LeftStack onSwitchView={onSwitchView} onOpenSettings={handleOpenSettings} />
+      <LeftStack onSwitchView={onSwitchView} onOpenSettings={() => setDrawerOpen(true)} />
       <GuidePanel guide={guideData} />
       <Hud item={selectedItem} onClose={handleCloseHud} />
 
       <SettingsDrawer
         open={drawerOpen}
-        onClose={handleCloseSettings}
+        onClose={() => setDrawerOpen(false)}
         onExport={onExport}
         onDelete={onDelete}
         onSetUIPref={onSetUIPref}
         currentUIPref={uiPref}
-        savingUIPref={savingUIPref} // NEW: pass down to disable buttons
       />
 
       <LogEntryModal
@@ -1027,19 +985,7 @@ function NeuralCortex({ onSwitchView }) {
           </>
         )}
 
-        <OrbitControls
-          enablePan={false}
-          enableZoom={true}
-          autoRotate={true}
-          autoRotateSpeed={0.3}
-          onStart={() => {
-            clearTimeout(idleRef.current);
-          }}
-          onEnd={() => {
-            clearTimeout(idleRef.current);
-            idleRef.current = setTimeout(() => {}, 4000);
-          }}
-        />
+        <OrbitControls enablePan={false} enableZoom={true} autoRotate={true} autoRotateSpeed={0.3} />
 
         <EffectComposer multisampling={0}>
           <FXAA />

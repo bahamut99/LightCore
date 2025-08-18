@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 
 function Integrations() {
     const [isConnected, setIsConnected] = useState(false);
-    const [isChecked, setIsChecked] = useState(false); 
+    const [isChecked, setIsChecked] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [isFetchingSteps, setIsFetchingSteps] = useState(false);
     const [stepCount, setStepCount] = useState(null);
@@ -12,11 +12,11 @@ function Integrations() {
     const fetchSteps = async (token) => {
         setIsFetchingSteps(true);
         try {
-            const response = await fetch('/.netlify/functions/fetch-health-data', {
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone; // 👈 pass local timezone
+            const response = await fetch(`/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!response.ok) throw new Error('Failed to fetch step data.');
-            
             const data = await response.json();
             setStepCount(data.steps);
         } catch (err) {
@@ -29,7 +29,7 @@ function Integrations() {
     const checkIntegrationStatus = useCallback(async () => {
         setIsLoading(true);
         setError(null);
-        
+
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
             setIsLoading(false);
@@ -50,7 +50,7 @@ function Integrations() {
         } else if (data) {
             setIsConnected(true);
             setIsChecked(true);
-            fetchSteps(session.access_token); // Fetch steps if connected
+            fetchSteps(session.access_token); // fetch with tz
         } else {
             setIsConnected(false);
             setIsChecked(false);
@@ -76,7 +76,7 @@ function Integrations() {
                 });
 
                 if (!response.ok) throw new Error('Could not get auth URL from server.');
-                
+
                 const data = await response.json();
                 window.location.href = data.authUrl;
 
@@ -90,7 +90,7 @@ function Integrations() {
             try {
                 await fetch('/.netlify/functions/delete-integration', {
                     method: 'POST',
-                    headers: { 
+                    headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${session.access_token}`
                     },
@@ -100,12 +100,12 @@ function Integrations() {
                 setStepCount(null);
             } catch (err) {
                 setError("Failed to disconnect.");
-                setIsChecked(true); 
+                setIsChecked(true);
             }
             setIsLoading(false);
         }
     };
-    
+
     return (
         <div className="card">
             <h2>Connected Services</h2>
