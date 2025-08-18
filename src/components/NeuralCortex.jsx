@@ -1,5 +1,8 @@
 // src/components/NeuralCortex.jsx
-// Neural-Cortex view (full file)
+// LightCore — Neural-Cortex UI (pruned, stable)
+// Changes in this version:
+// 1) Added toast() helper + used it after saving UI preference
+// 2) Added savingUIPref state to temporarily disable UI preference buttons
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -9,7 +12,31 @@ import * as THREE from 'three';
 import { supabase } from '../supabaseClient';
 import LogEntryModal from './LogEntryModal.jsx';
 
-/* ---------------------- Config ---------------------- */
+/* ---------------------- Small helpers ---------------------- */
+
+// Minimal toast (no dependencies)
+function toast(msg) {
+  try {
+    const n = document.createElement('div');
+    n.textContent = msg;
+    Object.assign(n.style, {
+      position: 'fixed',
+      bottom: '20px',
+      right: '20px',
+      background: 'rgba(0,0,0,.7)',
+      color: '#cfefff',
+      border: '1px solid rgba(0,240,255,.35)',
+      borderRadius: '10px',
+      padding: '10px 14px',
+      zIndex: 9999,
+      fontFamily: 'Inter, system-ui',
+      boxShadow: '0 0 12px rgba(0,240,255,.25)',
+    });
+    document.body.appendChild(n);
+    setTimeout(() => n.remove(), 1800);
+  } catch (_) {}
+}
+
 const EVENT_CONFIG = {
   Workout: { color: '#4ade80' },
   Meal: { color: '#facc15' },
@@ -25,7 +52,12 @@ const hideScrollbarCSS = `
 /* ------------------------- Utils ------------------------- */
 function normalizeGuidance(raw) {
   if (!raw) return null;
-  const g = raw.guidance_for_user || raw.guidance || raw.lightcoreGuide || raw.guide || (raw.current_state ? raw : null);
+  const g =
+    raw.guidance_for_user ||
+    raw.guidance ||
+    raw.lightcoreGuide ||
+    raw.guide ||
+    (raw.current_state ? raw : null);
   if (!g) return null;
   const clip = (a, n) => (Array.isArray(a) ? a.slice(0, n) : []);
   return {
@@ -76,21 +108,30 @@ const neoBtnStyle = {
   cursor: 'pointer',
   backdropFilter: 'blur(6px)',
   textDecoration: 'none',
-  transition: 'transform .12s ease, box-shadow .12s ease, border-color .12s ease',
+  transition: 'transform .12s ease, box-shadow .12s ease, border-color .12s ease, opacity .12s',
 };
 
-function NeoButton({ as = 'button', href, children, onClick, title, style = {} }) {
+function NeoButton({ as = 'button', href, children, onClick, title, style = {}, disabled = false }) {
   const [hover, setHover] = useState(false);
   const s = {
     ...neoBtnStyle,
     ...style,
-    boxShadow: hover ? '0 0 12px rgba(0,240,255,0.35)' : '0 0 6px rgba(0,240,255,0.15)',
-    borderColor: hover ? 'rgba(0,240,255,0.6)' : 'rgba(0,240,255,0.35)',
-    transform: hover ? 'translateY(-1px)' : 'translateY(0)',
+    boxShadow: hover && !disabled ? '0 0 12px rgba(0,240,255,0.35)' : '0 0 6px rgba(0,240,255,0.15)',
+    borderColor: hover && !disabled ? 'rgba(0,240,255,0.6)' : 'rgba(0,240,255,0.35)',
+    transform: hover && !disabled ? 'translateY(-1px)' : 'translateY(0)',
+    opacity: disabled ? 0.55 : 1,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    pointerEvents: disabled ? 'none' : 'auto',
   };
   if (as === 'a') {
     return (
-      <a href={href} title={title} style={s} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <a
+        href={href}
+        title={title}
+        style={s}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+      >
         {children}
       </a>
     );
@@ -101,6 +142,7 @@ function NeoButton({ as = 'button', href, children, onClick, title, style = {} }
       title={title}
       style={s}
       onClick={onClick}
+      disabled={disabled}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
@@ -112,21 +154,49 @@ function NeoButton({ as = 'button', href, children, onClick, title, style = {} }
 /* ------------------------- Left Stack ------------------------- */
 function LeftStack({ onSwitchView, onOpenSettings }) {
   return (
-    <div style={{ position: 'absolute', top: '2rem', left: '2rem', zIndex: 12, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-      <NeoButton onClick={onSwitchView} title="Switch to Classic Dashboard">CLASSIC VIEW</NeoButton>
-      <NeoButton onClick={onOpenSettings} title="Open Settings">SETTINGS</NeoButton>
+    <div
+      style={{
+        position: 'absolute',
+        top: '2rem',
+        left: '2rem',
+        zIndex: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.75rem',
+      }}
+    >
+      <NeoButton onClick={onSwitchView} title="Switch to Classic Dashboard">
+        CLASSIC VIEW
+      </NeoButton>
+      <NeoButton onClick={onOpenSettings} title="Open Settings">
+        SETTINGS
+      </NeoButton>
     </div>
   );
 }
 
 /* ------------------------- Settings Drawer ------------------------- */
-function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, currentUIPref }) {
+function SettingsDrawer({
+  open,
+  onClose,
+  onExport,
+  onDelete,
+  onSetUIPref,
+  currentUIPref,
+  savingUIPref, // NEW: disable buttons while saving
+}) {
   if (!open) return null;
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 20, pointerEvents: 'none' }}>
       <div
         onClick={onClose}
-        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(2px)', pointerEvents: 'auto' }}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'rgba(0,0,0,0.35)',
+          backdropFilter: 'blur(2px)',
+          pointerEvents: 'auto',
+        }}
       />
       <div
         style={{
@@ -144,26 +214,67 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '0.75rem' }}>
-          <h2 style={{ fontFamily: "'Orbitron', sans-serif", color: '#cfefff', fontSize: '1.1rem', letterSpacing: '0.04em', margin: 0 }}>
+          <h2
+            style={{
+              fontFamily: "'Orbitron', sans-serif",
+              color: '#cfefff',
+              fontSize: '1.1rem',
+              letterSpacing: '0.04em',
+              margin: 0,
+            }}
+          >
             SETTINGS
           </h2>
           <div style={{ flex: 1 }} />
           <button
             onClick={onClose}
             title="Close"
-            style={{ width: 32, height: 32, color: '#00f0ff', background: 'transparent', border: '1px solid rgba(0,240,255,0.35)', borderRadius: 8, cursor: 'pointer' }}
+            style={{
+              width: 32,
+              height: 32,
+              color: '#00f0ff',
+              background: 'transparent',
+              border: '1px solid rgba(0,240,255,0.35)',
+              borderRadius: 8,
+              cursor: 'pointer',
+            }}
           >
             ×
           </button>
         </div>
 
         <section style={{ marginBottom: '1rem' }}>
-          <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '0.9rem', color: '#9bd9ff', margin: '0 0 0.5rem' }}>UI PREFERENCE</h3>
+          <h3
+            style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '0.9rem',
+              color: '#9bd9ff',
+              margin: '0 0 0.5rem',
+            }}
+          >
+            UI PREFERENCE
+          </h3>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <NeoButton onClick={() => onSetUIPref('neural')} style={{ flex: 1, borderColor: currentUIPref==='neural'?'#38e8ff':'rgba(0,240,255,0.35)' }}>
+            <NeoButton
+              onClick={() => onSetUIPref('neural')}
+              style={{
+                flex: 1,
+                borderColor: currentUIPref === 'neural' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
+              }}
+              disabled={savingUIPref}
+              title={savingUIPref ? 'Saving…' : 'Set Neural-Cortex'}
+            >
               NEURAL-CORTEX
             </NeoButton>
-            <NeoButton onClick={() => onSetUIPref('classic')} style={{ flex: 1, borderColor: currentUIPref==='classic'?'#38e8ff':'rgba(0,240,255,0.35)' }}>
+            <NeoButton
+              onClick={() => onSetUIPref('classic')}
+              style={{
+                flex: 1,
+                borderColor: currentUIPref === 'classic' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
+              }}
+              disabled={savingUIPref}
+              title={savingUIPref ? 'Saving…' : 'Set Classic'}
+            >
               CLASSIC
             </NeoButton>
           </div>
@@ -173,12 +284,27 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
         </section>
 
         <section style={{ marginBottom: '1rem' }}>
-          <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '0.9rem', color: '#9bd9ff', margin: '0 0 0.5rem' }}>PRIVACY</h3>
+          <h3
+            style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '0.9rem',
+              color: '#9bd9ff',
+              margin: '0 0 0.5rem',
+            }}
+          >
+            PRIVACY
+          </h3>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <NeoButton onClick={onExport} style={{ flex: 1 }}>EXPORT MY DATA</NeoButton>
-            <NeoButton onClick={onDelete} style={{ flex: 1 }}>DELETE ACCOUNT</NeoButton>
+            <NeoButton onClick={onExport} style={{ flex: 1 }}>
+              EXPORT MY DATA
+            </NeoButton>
+            <NeoButton onClick={onDelete} style={{ flex: 1 }}>
+              DELETE ACCOUNT
+            </NeoButton>
           </div>
-          <p style={{ color: '#98a9c1', fontSize: 12, marginTop: 8 }}>Stored with RLS. No selling of data.</p>
+          <p style={{ color: '#98a9c1', fontSize: 12, marginTop: 8 }}>
+            Stored with RLS. No selling of data.
+          </p>
         </section>
       </div>
     </div>
@@ -214,28 +340,83 @@ function GuidePanel({ guide }) {
         zIndex: 11,
       }}
     >
-      <h2 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '1.1rem', textShadow: '0 0 5px #00f0ff', margin: 0, marginBottom: '0.75rem', letterSpacing: '0.04em' }}>
+      <h2
+        style={{
+          fontFamily: "'Orbitron', sans-serif",
+          fontSize: '1.1rem',
+          textShadow: '0 0 5px #00f0ff',
+          margin: 0,
+          marginBottom: '0.75rem',
+          letterSpacing: '0.04em',
+        }}
+      >
         LIGHTCØRE GUIDE
       </h2>
 
-      <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: 1.6, fontStyle: 'italic', marginTop: 0, marginBottom: '0.75rem' }}>
+      <p
+        style={{
+          color: 'white',
+          whiteSpace: 'pre-wrap',
+          lineHeight: 1.6,
+          fontStyle: 'italic',
+          marginTop: 0,
+          marginBottom: '0.75rem',
+        }}
+      >
         {g.current_state}
       </p>
 
       {(g.positives?.length || g.concerns?.length) > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.25rem', marginBottom: '0.75rem' }}>
-          {(g.positives || []).map((p) => <p key={`p-${p}`} style={{ color: '#00ff88', margin: 0 }}>+ {p}</p>)}
-          {(g.concerns || []).map((c) => <p key={`c-${c}`} style={{ color: '#ffd700', margin: 0 }}>- {c}</p>)}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr',
+            gap: '0.25rem',
+            marginBottom: '0.75rem',
+          }}
+        >
+          {(g.positives || []).map((p) => (
+            <p key={`p-${p}`} style={{ color: '#00ff88', margin: 0 }}>
+              + {p}
+            </p>
+          ))}
+          {(g.concerns || []).map((c) => (
+            <p key={`c-${c}`} style={{ color: '#ffd700', margin: 0 }}>
+              - {c}
+            </p>
+          ))}
         </div>
       )}
 
       {g.suggestions?.length > 0 && (
         <>
-          <div style={{ borderTop: '1px solid rgba(0,240,255,0.18)', margin: '0.5rem 0 0.75rem' }} />
-          <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '0.9rem', margin: 0, marginBottom: '0.5rem', letterSpacing: '0.04em' }}>SUGGESTIONS</h3>
+          <div
+            style={{ borderTop: '1px solid rgba(0,240,255,0.18)', margin: '0.5rem 0 0.75rem' }}
+          />
+          <h3
+            style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '0.9rem',
+              margin: 0,
+              marginBottom: '0.5rem',
+              letterSpacing: '0.04em',
+            }}
+          >
+            SUGGESTIONS
+          </h3>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
             {g.suggestions.map((s) => (
-              <span key={`s-${s}`} style={{ background: 'rgba(0,240,255,0.12)', padding: '0.3rem 0.75rem', borderRadius: '999px', fontSize: '12px', color: '#cfefff', border: '1px solid rgba(0,240,255,0.25)' }}>
+              <span
+                key={`s-${s}`}
+                style={{
+                  background: 'rgba(0,240,255,0.12)',
+                  padding: '0.3rem 0.75rem',
+                  borderRadius: '999px',
+                  fontSize: '12px',
+                  color: '#cfefff',
+                  border: '1px solid rgba(0,240,255,0.25)',
+                }}
+              >
                 {s}
               </span>
             ))}
@@ -246,7 +427,7 @@ function GuidePanel({ guide }) {
   );
 }
 
-/* ------------------------- HUD (logs/nudges) ------------------------- */
+/* ------------------------- HUD ------------------------- */
 function Hud({ item, onClose }) {
   const logObj = item?.ai_notes ? item : item?.log;
   const isLog = !!logObj?.created_at || !!logObj?.ai_notes;
@@ -254,13 +435,55 @@ function Hud({ item, onClose }) {
   if (!isLog && !isNudge) return null;
 
   return (
-    <div style={{ position: 'absolute', top: '2rem', left: '2rem', width: '480px', color: '#00f0ff', background: 'rgba(10, 25, 47, 0.72)', border: '1px solid rgba(0, 240, 255, 0.25)', boxShadow: '0 0 24px rgba(0,240,255,0.15)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '1rem', fontFamily: "'Roboto Mono', monospace", fontSize: '14px', zIndex: 11 }}>
+    <div
+      style={{
+        position: 'absolute',
+        top: '2rem',
+        left: '2rem',
+        width: '480px',
+        color: '#00f0ff',
+        background: 'rgba(10, 25, 47, 0.72)',
+        border: '1px solid rgba(0, 240, 255, 0.25)',
+        boxShadow: '0 0 24px rgba(0,240,255,0.15)',
+        backdropFilter: 'blur(10px)',
+        borderRadius: '12px',
+        padding: '1rem',
+        fontFamily: "'Roboto Mono', monospace",
+        fontSize: '14px',
+        zIndex: 11,
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-        <h2 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '1.1rem', textShadow: '0 0 5px #00f0ff', margin: 0, letterSpacing: '0.04em', color: '#cfefff' }}>
-          {isLog ? `LOG ENTRY: ${fmtDate(logObj.created_at)}` : `ANOMALY: ${item.headline?.toUpperCase?.() ?? ''}`}
+        <h2
+          style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '1.1rem',
+            textShadow: '0 0 5px #00f0ff',
+            margin: 0,
+            letterSpacing: '0.04em',
+            color: '#cfefff',
+          }}
+        >
+          {isLog
+            ? `LOG ENTRY: ${fmtDate(logObj.created_at)}`
+            : `ANOMALY: ${item.headline?.toUpperCase?.() ?? ''}`}
         </h2>
         <div style={{ flex: 1 }} />
-        <button onClick={onClose} title="Close" style={{ width: 32, height: 32, color: '#00f0ff', background: 'transparent', border: '1px solid rgba(0,240,255,0.35)', borderRadius: 8, cursor: 'pointer' }}>×</button>
+        <button
+          onClick={onClose}
+          title="Close"
+          style={{
+            width: 32,
+            height: 32,
+            color: '#00f0ff',
+            background: 'transparent',
+            border: '1px solid rgba(0,240,255,0.35)',
+            borderRadius: 8,
+            cursor: 'pointer',
+          }}
+        >
+          ×
+        </button>
       </div>
       {isLog && <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{logObj.ai_notes}</p>}
       {isNudge && <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{item.body_text}</p>}
@@ -300,11 +523,18 @@ function Locus({ onLocusClick }) {
   const [hovered, setHovered] = useState(false);
   useHoverCursor(hovered);
 
-  const uniforms = useMemo(() => ({ uHover: { value: 0.0 }, uColor: { value: new THREE.Color('#00f0ff') } }), []);
+  const uniforms = useMemo(
+    () => ({ uHover: { value: 0.0 }, uColor: { value: new THREE.Color('#00f0ff') } }),
+    []
+  );
   useFrame(() => {
     if (!groupRef.current) return;
     groupRef.current.rotation.y += 0.001;
-    uniforms.uHover.value = THREE.MathUtils.lerp(uniforms.uHover.value, hovered ? 1.0 : 0.0, 0.18);
+    uniforms.uHover.value = THREE.MathUtils.lerp(
+      uniforms.uHover.value,
+      hovered ? 1.0 : 0.0,
+      0.18
+    );
   });
 
   return (
@@ -315,7 +545,14 @@ function Locus({ onLocusClick }) {
       </mesh>
       <mesh onClick={onLocusClick} onPointerOver={() => setHovered(true)} onPointerOut={() => setHovered(false)}>
         <icosahedronGeometry args={[3.03, 5]} />
-        <shaderMaterial vertexShader={fresnelVertex} fragmentShader={fresnelFragment} uniforms={uniforms} transparent depthWrite={false} blending={THREE.AdditiveBlending} />
+        <shaderMaterial
+          vertexShader={fresnelVertex}
+          fragmentShader={fresnelFragment}
+          uniforms={uniforms}
+          transparent
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
       </mesh>
     </group>
   );
@@ -332,9 +569,26 @@ function AnomalyGlyph({ nudge, position, onGlyphClick }) {
     }
   });
   return (
-    <group ref={ref} position={position} onClick={() => onGlyphClick(nudge)} onPointerOver={() => setHovered(true)} onPointerOut={() => setHovered(false)}>
-      <mesh><octahedronGeometry args={[0.5]} /><meshStandardMaterial color="#ff4d4d" emissive="#ff4d4d" emissiveIntensity={hovered ? 2 : 1} roughness={0.2} metalness={0.8} /></mesh>
-      <Text color="white" fontSize={0.8} position={[0, 0, 0.6]}>!</Text>
+    <group
+      ref={ref}
+      position={position}
+      onClick={() => onGlyphClick(nudge)}
+      onPointerOver={() => setHovered(true)}
+      onPointerOut={() => setHovered(false)}
+    >
+      <mesh>
+        <octahedronGeometry args={[0.5]} />
+        <meshStandardMaterial
+          color="#ff4d4d"
+          emissive="#ff4d4d"
+          emissiveIntensity={hovered ? 2 : 1}
+          roughness={0.2}
+          metalness={0.8}
+        />
+      </mesh>
+      <Text color="white" fontSize={0.8} position={[0, 0, 0.6]}>
+        !
+      </Text>
     </group>
   );
 }
@@ -355,7 +609,11 @@ function SynapticLinks({ selectedLog, events }) {
     const start = new THREE.Vector3(...selectedLog.position);
     return events.map((event, i) => {
       const angle = Math.PI / 2 + (i - (events.length - 1) / 2) * 0.5;
-      const end = new THREE.Vector3(start.x + Math.cos(angle) * 3, start.y + Math.sin(angle) * 3, start.z);
+      const end = new THREE.Vector3(
+        start.x + Math.cos(angle) * 3,
+        start.y + Math.sin(angle) * 3,
+        start.z
+      );
       const mid = new THREE.Vector3((start.x + end.x) / 2, (start.y + end.y) / 2 + 0.8, start.z);
       return { event, start, mid, end, key: `${event.event_time}-${i}` };
     });
@@ -365,7 +623,15 @@ function SynapticLinks({ selectedLog, events }) {
       {links.map(({ event, start, mid, end, key }) => (
         <group key={key}>
           <EventNode event={event} position={end} />
-          <QuadraticBezierLine start={start} end={end} mid={mid} color="#00f0ff" lineWidth={1} transparent opacity={0.55} />
+          <QuadraticBezierLine
+            start={start}
+            end={end}
+            mid={mid}
+            color="#00f0ff"
+            lineWidth={1}
+            transparent
+            opacity={0.55}
+          />
         </group>
       ))}
     </group>
@@ -376,7 +642,9 @@ function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, is
   const ref = useRef();
   useHoverCursor(isHovered);
   const dynamic = useMemo(() => {
-    const avg = ((log.clarity_score || 0) + (log.immune_score || 0) + (log.physical_readiness_score || 0)) / 30;
+    const avg =
+      ((log.clarity_score || 0) + (log.immune_score || 0) + (log.physical_readiness_score || 0)) /
+      30;
     return new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avg);
   }, [log]);
   useFrame(() => {
@@ -389,12 +657,24 @@ function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, is
     <mesh
       ref={ref}
       position={position}
-      onClick={(e) => { e.stopPropagation(); setSelectedItem({ log, position }); }}
-      onPointerOver={(e) => { e.stopPropagation(); setHoveredLog(log); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        setSelectedItem({ log, position });
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHoveredLog(log);
+      }}
       onPointerOut={() => setHoveredLog(null)}
     >
       <sphereGeometry args={[0.2, 32, 32]} />
-      <meshStandardMaterial color={dynamic} metalness={0.95} roughness={0.1} emissive={dynamic} emissiveIntensity={isSelected || isHovered ? 0.5 : 0} />
+      <meshStandardMaterial
+        color={dynamic}
+        metalness={0.95}
+        roughness={0.1}
+        emissive={dynamic}
+        emissiveIntensity={isSelected || isHovered ? 0.5 : 0}
+      />
     </mesh>
   );
 }
@@ -425,19 +705,34 @@ function LogEntryButton({ onClick }) {
   useHoverCursor(hovered);
   return (
     <Float speed={4} floatIntensity={1.5}>
-      <group position={[0, -5, 0]} onClick={onClick} onPointerOver={() => setHovered(true)} onPointerOut={() => setHovered(false)}>
-        <mesh><torusGeometry args={[0.6, 0.1, 16, 100]} /></mesh>
+      <group
+        position={[0, -5, 0]}
+        onClick={onClick}
+        onPointerOver={() => setHovered(true)}
+        onPointerOut={() => setHovered(false)}
+      >
         <mesh>
-          <meshStandardMaterial color="#00f0ff" emissive="#00f0ff" emissiveIntensity={hovered ? 2 : 1} roughness={0.2} metalness={0.8} />
+          <torusGeometry args={[0.6, 0.1, 16, 100]} />
         </mesh>
-        <Text color="white" fontSize={0.2} position={[0, 0, 0]}>+ LOG</Text>
+        <mesh>
+          <meshStandardMaterial
+            color="#00f0ff"
+            emissive="#00f0ff"
+            emissiveIntensity={hovered ? 2 : 1}
+            roughness={0.2}
+            metalness={0.8}
+          />
+        </mesh>
+        <Text color="white" fontSize={0.2} position={[0, 0, 0]}>
+          + LOG
+        </Text>
       </group>
     </Float>
   );
 }
 
 /* ------------------------ Main ------------------------ */
-export default function NeuralCortex({ onSwitchView }) {
+function NeuralCortex({ onSwitchView }) {
   const [logHistory, setLogHistory] = useState([]);
   const [latestScores, setLatestScores] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -450,6 +745,10 @@ export default function NeuralCortex({ onSwitchView }) {
   const [guideData, setGuideData] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [uiPref, setUiPref] = useState('neural');
+
+  // NEW: simple lock to prevent double-tap on UI pref buttons
+  const [savingUIPref, setSavingUIPref] = useState(false);
+
   const lastGuideRequestRef = useRef(0);
   const idleRef = useRef(null);
 
@@ -472,7 +771,7 @@ export default function NeuralCortex({ onSwitchView }) {
   const requestGuidance = async () => {
     try {
       const now = Date.now();
-      if (now - lastGuideRequestRef.current < 15000) return null; // throttle 15s
+      if (now - lastGuideRequestRef.current < 15000) return null; // throttle
       lastGuideRequestRef.current = now;
 
       const headers = await getAuthHeader();
@@ -496,14 +795,19 @@ export default function NeuralCortex({ onSwitchView }) {
     setIsLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { setIsLoading(false); return; }
+      if (!session) {
+        setIsLoading(false);
+        return;
+      }
 
       if (!guideData) requestGuidance().catch(() => {});
 
       const [logRes, nudgeRes] = await Promise.all([
         supabase
           .from('daily_logs')
-          .select('id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes')
+          .select(
+            'id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes'
+          )
           .order('created_at', { ascending: false })
           .limit(30),
         supabase.from('nudges').select('*').eq('is_acknowledged', false),
@@ -522,21 +826,26 @@ export default function NeuralCortex({ onSwitchView }) {
 
       setIsLoading(false);
 
-      // Non-blocking health fetch
       fetchWithTimeout(
         (async () => {
           const headers = await getAuthHeader();
-          return fetch('/.netlify/functions/fetch-health-data', { headers }).then((r) => (r.ok ? r.json() : null));
+          return fetch('/.netlify/functions/fetch-health-data', { headers }).then((r) =>
+            r.ok ? r.json() : null
+          );
         })(),
         6000
-      ).then((stepRes) => { if (stepRes?.steps) setStepCount(stepRes.steps); }).catch(() => {});
+      )
+        .then((stepRes) => {
+          if (stepRes?.steps) setStepCount(stepRes.steps);
+        })
+        .catch(() => {});
     } catch {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    // inject global no-scrollbar style once
+    // hide scrollbars
     const style = document.createElement('style');
     style.innerHTML = hideScrollbarCSS;
     document.head.appendChild(style);
@@ -555,7 +864,9 @@ export default function NeuralCortex({ onSwitchView }) {
       })
       .subscribe();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(() => { fetchAllData(); });
+    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
+      fetchAllData();
+    });
 
     return () => {
       supabase.removeChannel(channel);
@@ -592,13 +903,18 @@ export default function NeuralCortex({ onSwitchView }) {
     setSelectedItem(null);
     if (item?.id && (item?.headline || item?.body_text)) {
       try {
-        await supabase.from('nudges').update({ is_acknowledged: true, acknowledged_at: new Date().toISOString() }).eq('id', item.id);
+        await supabase
+          .from('nudges')
+          .update({ is_acknowledged: true, acknowledged_at: new Date().toISOString() })
+          .eq('id', item.id);
         setActiveNudges((prev) => prev.filter((n) => n.id !== item.id));
       } catch {}
     }
   };
 
-  const handleLocusClick = async () => { await requestGuidance(); };
+  const handleLocusClick = async () => {
+    await requestGuidance();
+  };
 
   const handleOpenSettings = () => setDrawerOpen(true);
   const handleCloseSettings = () => setDrawerOpen(false);
@@ -611,9 +927,13 @@ export default function NeuralCortex({ onSwitchView }) {
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = 'lightcore-export.json'; a.click();
+      a.href = url;
+      a.download = 'lightcore-export.json';
+      a.click();
       window.URL.revokeObjectURL(url);
-    } catch { alert('Export failed.'); }
+    } catch {
+      alert('Export failed.');
+    }
   };
 
   const onDelete = async () => {
@@ -621,27 +941,33 @@ export default function NeuralCortex({ onSwitchView }) {
     try {
       const headers = await getAuthHeader();
       const res = await fetch('/.netlify/functions/delete-my-data', { headers });
-      if (res.ok) { alert('Deleted. You will be signed out.'); await supabase.auth.signOut(); window.location.href = '/'; }
-      else alert('Delete failed.');
-    } catch { alert('Delete failed.'); }
+      if (res.ok) {
+        alert('Deleted. You will be signed out.');
+        await supabase.auth.signOut();
+        window.location.href = '/';
+      } else alert('Delete failed.');
+    } catch {
+      alert('Delete failed.');
+    }
   };
 
+  // UPDATED: save UI preference with a very short lock + toast feedback
   const onSetUIPref = async (view) => {
+    if (savingUIPref) return; // prevent double taps
+    setSavingUIPref(true);
     setUiPref(view);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        await supabase.from('profiles').upsert({ id: user.id, preferred_view: view });
+        await supabase.from('profiles').upsert({ id: user.id, preferred_view: view }).select();
+        toast('Preference saved');
       }
-    } catch { /* non-fatal */ }
-
-    // Mirror locally so reloads are instant and Classic <-> Cortex router sees it
-    localStorage.setItem('lc_view', view);
-    const url = new URL(window.location.href);
-    url.searchParams.set('view', view);
-    history.replaceState({}, '', url);
-
-    alert(`Default view set to ${view.toUpperCase()}.`);
+    } catch {
+      // silent; UI already flipped locally
+    } finally {
+      // let the UI breathe for a moment (prevents rapid re-clicks)
+      setTimeout(() => setSavingUIPref(false), 800);
+    }
   };
 
   return (
@@ -657,17 +983,20 @@ export default function NeuralCortex({ onSwitchView }) {
         onDelete={onDelete}
         onSetUIPref={onSetUIPref}
         currentUIPref={uiPref}
+        savingUIPref={savingUIPref} // NEW: pass down to disable buttons
       />
 
-      <LogEntryModal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} onLogSubmitted={() => setIsLogModalOpen(false)} stepCount={stepCount} />
+      <LogEntryModal
+        isOpen={isLogModalOpen}
+        onClose={() => setIsLogModalOpen(false)}
+        onLogSubmitted={() => setIsLogModalOpen(false)}
+        stepCount={stepCount}
+      />
 
       <Canvas
         dpr={[1, 2]}
-        gl={{ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: false }}
+        gl={{ antialias: true, powerPreference: 'high-performance' }}
         camera={{ position: [0, 0, 12], fov: 75 }}
-        onCreated={({ gl }) => {
-          gl.domElement.addEventListener('webglcontextlost', (e) => { e.preventDefault(); console.warn('WebGL context lost.'); }, { once: true });
-        }}
       >
         <color attach="background" args={['#0a0a1a']} />
         <ambientLight intensity={0.2} />
@@ -678,10 +1007,21 @@ export default function NeuralCortex({ onSwitchView }) {
         {!isLoading && (
           <>
             <Locus onLocusClick={handleLocusClick} />
-            <Constellation logs={logHistory} setSelectedItem={setSelectedItem} selectedItem={selectedItem} setHoveredLog={setHoveredLog} hoveredLog={hoveredLog} />
+            <Constellation
+              logs={logHistory}
+              setSelectedItem={setSelectedItem}
+              selectedItem={selectedItem}
+              setHoveredLog={setHoveredLog}
+              hoveredLog={hoveredLog}
+            />
             <SynapticLinks selectedLog={selectedItem} events={dayEvents} />
             {activeNudges.map((nudge, idx) => (
-              <AnomalyGlyph key={nudge.id} nudge={nudge} position={[-8, 4 - idx * 2, -5]} onGlyphClick={setSelectedItem} />
+              <AnomalyGlyph
+                key={nudge.id}
+                nudge={nudge}
+                position={[-8, 4 - idx * 2, -5]}
+                onGlyphClick={setSelectedItem}
+              />
             ))}
             <LogEntryButton onClick={() => setIsLogModalOpen(true)} />
           </>
@@ -692,8 +1032,13 @@ export default function NeuralCortex({ onSwitchView }) {
           enableZoom={true}
           autoRotate={true}
           autoRotateSpeed={0.3}
-          onStart={() => { clearTimeout(idleRef.current); }}
-          onEnd={() => { clearTimeout(idleRef.current); idleRef.current = setTimeout(() => {}, 4000); }}
+          onStart={() => {
+            clearTimeout(idleRef.current);
+          }}
+          onEnd={() => {
+            clearTimeout(idleRef.current);
+            idleRef.current = setTimeout(() => {}, 4000);
+          }}
         />
 
         <EffectComposer multisampling={0}>
@@ -704,3 +1049,5 @@ export default function NeuralCortex({ onSwitchView }) {
     </div>
   );
 }
+
+export default NeuralCortex;
