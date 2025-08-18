@@ -1,7 +1,7 @@
 // src/components/NeuralCortex.jsx
-// LightCore Neural-Cortex — preferences stick + save feedback
+// Neural-Cortex view (full file)
 
-import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, Float, QuadraticBezierLine } from '@react-three/drei';
 import { EffectComposer, Bloom, FXAA } from '@react-three/postprocessing';
@@ -79,15 +79,13 @@ const neoBtnStyle = {
   transition: 'transform .12s ease, box-shadow .12s ease, border-color .12s ease',
 };
 
-function NeoButton({ as = 'button', href, children, onClick, title, style = {}, disabled }) {
+function NeoButton({ as = 'button', href, children, onClick, title, style = {} }) {
   const [hover, setHover] = useState(false);
   const s = {
     ...neoBtnStyle,
     ...style,
-    opacity: disabled ? 0.6 : 1,
-    pointerEvents: disabled ? 'none' : 'auto',
     boxShadow: hover ? '0 0 12px rgba(0,240,255,0.35)' : '0 0 6px rgba(0,240,255,0.15)',
-    borderColor: hover ? 'rgba(0,240,255,0.6)' : (style.borderColor ?? 'rgba(0,240,255,0.35)'),
+    borderColor: hover ? 'rgba(0,240,255,0.6)' : 'rgba(0,240,255,0.35)',
     transform: hover ? 'translateY(-1px)' : 'translateY(0)',
   };
   if (as === 'a') {
@@ -105,7 +103,6 @@ function NeoButton({ as = 'button', href, children, onClick, title, style = {}, 
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      disabled={disabled}
     >
       {children}
     </button>
@@ -123,7 +120,7 @@ function LeftStack({ onSwitchView, onOpenSettings }) {
 }
 
 /* ------------------------- Settings Drawer ------------------------- */
-function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, currentUIPref, savingPref, savedFlag }) {
+function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, currentUIPref }) {
   if (!open) return null;
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 20, pointerEvents: 'none' }}>
@@ -162,29 +159,16 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
 
         <section style={{ marginBottom: '1rem' }}>
           <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '0.9rem', color: '#9bd9ff', margin: '0 0 0.5rem' }}>UI PREFERENCE</h3>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <NeoButton
-              onClick={() => onSetUIPref('neural')}
-              style={{ flex: 1, borderColor: currentUIPref === 'neural' ? '#38e8ff' : undefined }}
-              disabled={savingPref}
-            >
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <NeoButton onClick={() => onSetUIPref('neural')} style={{ flex: 1, borderColor: currentUIPref==='neural'?'#38e8ff':'rgba(0,240,255,0.35)' }}>
               NEURAL-CORTEX
             </NeoButton>
-            <NeoButton
-              onClick={() => onSetUIPref('classic')}
-              style={{ flex: 1, borderColor: currentUIPref === 'classic' ? '#38e8ff' : undefined }}
-              disabled={savingPref}
-            >
+            <NeoButton onClick={() => onSetUIPref('classic')} style={{ flex: 1, borderColor: currentUIPref==='classic'?'#38e8ff':'rgba(0,240,255,0.35)' }}>
               CLASSIC
             </NeoButton>
-
-            {/* little saved badge */}
-            <span style={{ minWidth: 70, textAlign: 'right', fontSize: 12, color: savedFlag ? '#22c55e' : '#98a9c1' }}>
-              {savingPref ? 'Saving…' : savedFlag ? 'Saved ✓' : ''}
-            </span>
           </div>
           <p style={{ color: '#98a9c1', fontSize: 12, marginTop: 8 }}>
-            Your choice loads automatically on next sign-in. (It also switches right now.)
+            Your choice loads automatically on next sign-in.
           </p>
         </section>
 
@@ -466,12 +450,8 @@ export default function NeuralCortex({ onSwitchView }) {
   const [guideData, setGuideData] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [uiPref, setUiPref] = useState('neural');
-
-  // save-state feedback
-  const [savingPref, setSavingPref] = useState(false);
-  const [savedFlag, setSavedFlag] = useState(false);
-
   const lastGuideRequestRef = useRef(0);
+  const idleRef = useRef(null);
 
   useEffect(() => {
     document.body.style.margin = '0';
@@ -492,7 +472,7 @@ export default function NeuralCortex({ onSwitchView }) {
   const requestGuidance = async () => {
     try {
       const now = Date.now();
-      if (now - lastGuideRequestRef.current < 15000) return null; // throttle
+      if (now - lastGuideRequestRef.current < 15000) return null; // throttle 15s
       lastGuideRequestRef.current = now;
 
       const headers = await getAuthHeader();
@@ -512,22 +492,13 @@ export default function NeuralCortex({ onSwitchView }) {
     }
   };
 
-  const fetchAllData = useCallback(async () => {
+  const fetchAllData = async () => {
     setIsLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { setIsLoading(false); return; }
 
-      // pull current UI pref for highlighting buttons
-      const { data: prefRow } = await supabase
-        .from('profiles')
-        .select('preferred_view')
-        .eq('id', session.user.id)
-        .maybeSingle();
-      setUiPref(prefRow?.preferred_view === 'classic' ? 'classic' : 'neural');
-
-      // kick guidance load
-      requestGuidance().catch(() => {});
+      if (!guideData) requestGuidance().catch(() => {});
 
       const [logRes, nudgeRes] = await Promise.all([
         supabase
@@ -562,7 +533,7 @@ export default function NeuralCortex({ onSwitchView }) {
     } catch {
       setIsLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     // inject global no-scrollbar style once
@@ -590,7 +561,7 @@ export default function NeuralCortex({ onSwitchView }) {
       supabase.removeChannel(channel);
       authListener?.subscription?.unsubscribe?.();
     };
-  }, [fetchAllData]);
+  }, []);
 
   useEffect(() => {
     if (selectedItem && selectedItem.log) {
@@ -656,30 +627,21 @@ export default function NeuralCortex({ onSwitchView }) {
   };
 
   const onSetUIPref = async (view) => {
-    setSavingPref(true);
-    setSavedFlag(false);
-    const v = view === 'classic' ? 'classic' : 'neural';
+    setUiPref(view);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // make sure row exists and update
-        await supabase
-          .from('profiles')
-          .upsert({ id: user.id, preferred_view: v }, { onConflict: 'id' });
+        await supabase.from('profiles').upsert({ id: user.id, preferred_view: view });
       }
-      setUiPref(v);
+    } catch { /* non-fatal */ }
 
-      // share with the rest of the app immediately
-      try { localStorage.setItem('lc_view', v); } catch {}
-      window.dispatchEvent(new CustomEvent('lc:view-changed', { detail: { view: v } }));
+    // Mirror locally so reloads are instant and Classic <-> Cortex router sees it
+    localStorage.setItem('lc_view', view);
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', view);
+    history.replaceState({}, '', url);
 
-      setSavedFlag(true);
-      setTimeout(() => setSavedFlag(false), 1500);
-    } catch {
-      // noop; the UI will simply not show "Saved"
-    } finally {
-      setSavingPref(false);
-    }
+    alert(`Default view set to ${view.toUpperCase()}.`);
   };
 
   return (
@@ -695,18 +657,18 @@ export default function NeuralCortex({ onSwitchView }) {
         onDelete={onDelete}
         onSetUIPref={onSetUIPref}
         currentUIPref={uiPref}
-        savingPref={savingPref}
-        savedFlag={savedFlag}
       />
 
-      <LogEntryModal
-        isOpen={isLogModalOpen}
-        onClose={() => setIsLogModalOpen(false)}
-        onLogSubmitted={() => setIsLogModalOpen(false)}
-        stepCount={stepCount}
-      />
+      <LogEntryModal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} onLogSubmitted={() => setIsLogModalOpen(false)} stepCount={stepCount} />
 
-      <Canvas dpr={[1, 2]} gl={{ antialias: true, powerPreference: 'high-performance' }} camera={{ position: [0, 0, 12], fov: 75 }}>
+      <Canvas
+        dpr={[1, 2]}
+        gl={{ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: false }}
+        camera={{ position: [0, 0, 12], fov: 75 }}
+        onCreated={({ gl }) => {
+          gl.domElement.addEventListener('webglcontextlost', (e) => { e.preventDefault(); console.warn('WebGL context lost.'); }, { once: true });
+        }}
+      >
         <color attach="background" args={['#0a0a1a']} />
         <ambientLight intensity={0.2} />
         <pointLight position={[-10, 5, 5]} intensity={lightIntensities.clarity} color="#00f0ff" />
@@ -725,7 +687,14 @@ export default function NeuralCortex({ onSwitchView }) {
           </>
         )}
 
-        <OrbitControls enablePan={false} enableZoom={true} autoRotate={true} autoRotateSpeed={0.3} />
+        <OrbitControls
+          enablePan={false}
+          enableZoom={true}
+          autoRotate={true}
+          autoRotateSpeed={0.3}
+          onStart={() => { clearTimeout(idleRef.current); }}
+          onEnd={() => { clearTimeout(idleRef.current); idleRef.current = setTimeout(() => {}, 4000); }}
+        />
 
         <EffectComposer multisampling={0}>
           <FXAA />
