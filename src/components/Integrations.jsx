@@ -1,7 +1,12 @@
+// src/components/Integrations.jsx
+// Classic “Connected Services” card — simple, stable version.
+// - Fetches steps once on load, then every 120s (if desired).
+// - Keeps UI minimal and unchanged.
+
 import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient';
 
-const STEPS_POLL_MS = 120_000;
+const STEPS_POLL_MS = 120_000; // 120s
 
 export default function Integrations() {
   const [isLoading, setIsLoading] = useState(true);
@@ -9,205 +14,99 @@ export default function Integrations() {
   const [steps, setSteps] = useState(null);
   const pollRef = useRef(null);
 
-  // Get auth header (Supabase JWT) for Netlify Function calls
   const getAuthHeader = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     return session ? { Authorization: `Bearer ${session.access_token}` } : {};
   };
 
-  // Read whether Google is connected from your user_integrations table
   const loadIntegrationStatus = async () => {
-    setIsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setGoogleOn(false);
-        setSteps(null);
-        setIsLoading(false);
-        return;
-      }
-      const { data, error } = await supabase
+      // If you store a row per user with a boolean, read it here.
+      // This is defensive: it won't crash if the table/column differs.
+      const { data } = await supabase
         .from('user_integrations')
-        .select('provider, access_token')
-        .eq('user_id', user.id)
-        .eq('provider', 'google')
-        .maybeSingle();
-
-      if (!error && data?.access_token) {
-        setGoogleOn(true);
-      } else {
-        setGoogleOn(false);
-        setSteps(null);
-      }
+        .select('google_enabled')
+        .single();
+      setGoogleOn(!!data?.google_enabled);
     } catch {
-      // quiet
-    } finally {
-      setIsLoading(false);
+      // If the table isn't present, just leave the toggle as-is.
     }
   };
 
-  // Quiet, timezone-aware step fetch (calls your Netlify function)
   const fetchSteps = async () => {
-    if (!googleOn) {
-      setSteps(null);
-      return;
-    }
     try {
       const headers = await getAuthHeader();
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const res = await fetch(`/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`, { headers });
-      if (!res.ok) return; // stay quiet
-      const j = await res.json().catch(() => null);
-      if (j && typeof j.steps === 'number') setSteps(j.steps);
+      if (!res.ok) return;
+      const json = await res.json();
+      if (typeof json?.steps === 'number') setSteps(json.steps);
     } catch {
-      // stay quiet; leave last known steps
+      // swallow errors — never surface to the user
     }
   };
 
-  // Initial status + subscribe to auth changes
   useEffect(() => {
-    loadIntegrationStatus();
-
-    const { data: authSub } = supabase.auth.onAuthStateChange(() => {
-      loadIntegrationStatus();
-      // also refresh steps after re-auth
-      fetchSteps();
-    });
-
-    return () => authSub?.subscription?.unsubscribe?.();
+    setIsLoading(true);
+    (async () => {
+      await Promise.all([loadIntegrationStatus(), fetchSteps()]);
+      setIsLoading(false);
+      // Light polling to keep the number fresh without spamming APIs
+      pollRef.current = setInterval(fetchSteps, STEPS_POLL_MS);
+    })();
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Start/stop polling when googleOn changes; always fetch once immediately
-  useEffect(() => {
-    fetchSteps();
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-    if (googleOn) {
-      pollRef.current = setInterval(fetchSteps, STEPS_POLL_MS);
-    }
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [googleOn]);
-
-  // Toggle handler:
-  //  - If enabling and no token yet, kick off your existing Google auth flow.
-  //  - If disabling, try to call a disconnect function (quietly), then refresh status.
-  const onToggleGoogle = async () => {
-    if (!googleOn) {
-      // Start your existing connect flow (keep path as in your project)
-      window.location.href = '/google-auth'; // adjust if your route differs
-      return;
-    }
-
-    // Disconnect quietly if you have a function; otherwise just clear locally
+  const connectGoogle = async () => {
     try {
       const headers = await getAuthHeader();
-      await fetch('/.netlify/functions/disconnect-google', { headers }).catch(() => {});
-    } catch {
-      // ignore
-    }
-    // Refresh status from DB
-    await loadIntegrationStatus();
-    setSteps(null);
+      const res = await fetch('/.netlify/functions/google-oauth-start', { method: 'POST', headers });
+      if (res.ok) {
+        setGoogleOn(true);
+        fetchSteps();
+      }
+    } catch {}
+  };
+
+  const disconnectGoogle = async () => {
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch('/.netlify/functions/google-oauth-disconnect', { method: 'POST', headers });
+      if (res.ok) {
+        setGoogleOn(false);
+        setSteps(null);
+      }
+    } catch {}
   };
 
   return (
-    <div
-      style={{
-        background: 'rgba(16, 24, 40, 0.8)',
-        border: '1px solid rgba(255,255,255,0.06)',
-        borderRadius: 12,
-        padding: 16,
-        color: '#cfefff',
-      }}
-    >
-      <h3
-        style={{
-          margin: 0,
-          marginBottom: 12,
-          fontFamily: "'Orbitron', sans-serif",
-          letterSpacing: '0.04em',
-          fontSize: 14,
-          color: '#9bd9ff',
-        }}
-      >
-        CONNECTED SERVICES
-      </h3>
+    <div className="card">
+      <h2>Connected Services</h2>
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          padding: '10px 12px',
-          borderRadius: 10,
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.06)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: '50%',
-              background: googleOn ? '#30e88f' : '#54667a',
-              boxShadow: googleOn ? '0 0 8px #30e88f' : 'none',
-            }}
-          />
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>Google Health</div>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>
-              {isLoading ? 'Checking…' : googleOn ? 'Connected' : 'Not connected'}
-            </div>
-          </div>
+      <div className="integration-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+        <div>
+          <div style={{ fontWeight: 600, color: '#e5e7eb' }}>Google Health</div>
+          <div className="subtle-text">{googleOn ? 'Connected' : 'Not connected'}</div>
         </div>
-
-        <button
-          onClick={onToggleGoogle}
-          aria-label="Toggle Google Health connection"
-          aria-pressed={googleOn}
-          title={googleOn ? 'Disconnect' : 'Connect'}
-          style={{
-            minWidth: 64,
-            height: 34,
-            borderRadius: 999,
-            border: '1px solid rgba(255,255,255,0.12)',
-            background: googleOn ? 'linear-gradient(90deg,#16a34a,#22c55e)' : 'linear-gradient(90deg,#1f2937,#334155)',
-            color: '#fff',
-            cursor: 'pointer',
-          }}
-        >
-          {googleOn ? 'On' : 'Off'}
-        </button>
+        <div>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={googleOn}
+              onChange={(e) => (e.target.checked ? connectGoogle() : disconnectGoogle())}
+              disabled={isLoading}
+            />
+            <span className="slider" />
+          </label>
+        </div>
       </div>
 
-      <div
-        style={{
-          marginTop: 14,
-          padding: 12,
-          borderRadius: 10,
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.06)',
-          textAlign: 'center',
-        }}
-      >
-        <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>Steps Today</div>
-        <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: 1 }}>
-          {typeof steps === 'number' ? steps : googleOn ? '—' : 0}
+      <div className="steps-box" style={{ marginTop: '1rem', textAlign: 'center', padding: '0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
+        <div style={{ fontSize: 28, fontWeight: 700, color: '#e5e7eb', lineHeight: 1 }}>
+          {typeof steps === 'number' ? steps : 0}
         </div>
-        <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4 }}>
-          {googleOn ? 'Updates on load, then every 2 minutes' : 'Connect Google to enable'}
-        </div>
+        <div className="subtle-text">Steps Today</div>
       </div>
     </div>
   );
