@@ -1,209 +1,146 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 
-// Poll every 120s
-const STEPS_POLL_MS = 120_000;
+function Integrations() {
+    const [isConnected, setIsConnected] = useState(false);
+    const [isChecked, setIsChecked] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isFetchingSteps, setIsFetchingSteps] = useState(false);
+    const [stepCount, setStepCount] = useState(null);
+    const [error, setError] = useState(null);
 
-export default function Integrations() {
-  const [googleOn, setGoogleOn] = useState(false);
-  const [steps, setSteps] = useState(null);
-  const [isToggling, setIsToggling] = useState(false);
-  const pollRef = useRef(null);
-
-  // --- helpers ---
-  const getAuthHeader = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session ? { Authorization: `Bearer ${session.access_token}` } : {};
-  };
-
-  const loadIntegrationStatus = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from('user_integrations')
-        .select('google_connected')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (!error && data) {
-        setGoogleOn(!!data.google_connected);
-      } else {
-        setGoogleOn(false);
-      }
-    } catch {
-      setGoogleOn(false);
-    }
-  };
-
-  const fetchStepsOnce = async () => {
-    try {
-      // Only fetch when connected
-      if (!googleOn) return;
-
-      const headers = await getAuthHeader();
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-      const res = await fetch(
-        `/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`,
-        { headers }
-      );
-
-      if (!res.ok) return;
-      const json = await res.json();
-      if (typeof json?.steps === 'number') setSteps(json.steps);
-    } catch {
-      // swallow; no user-facing errors
-    }
-  };
-
-  // --- effects ---
-  // Initial status + first steps fetch
-  useEffect(() => {
-    loadIntegrationStatus().then(fetchStepsOnce).catch(() => {});
-  }, []);
-
-  // Poll steps every 120s while connected
-  useEffect(() => {
-    // clear old timer
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-    if (googleOn) {
-      // run immediately
-      fetchStepsOnce();
-      pollRef.current = setInterval(fetchStepsOnce, STEPS_POLL_MS);
-    }
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [googleOn]);
-
-  // --- actions ---
-  const toggleGoogle = async () => {
-    try {
-      setIsToggling(true);
-      const turningOn = !googleOn;
-
-      if (turningOn) {
-        // Start OAuth – server returns the Google consent URL
-        const headers = await getAuthHeader();
-        const linkRes = await fetch('/.netlify/functions/google-auth-link', { headers });
-        if (!linkRes.ok) {
-          setIsToggling(false);
-          return;
+    const fetchSteps = async (token) => {
+        setIsFetchingSteps(true);
+        try {
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone; // 👈 pass local timezone
+            const response = await fetch(`/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) throw new Error('Failed to fetch step data.');
+            const data = await response.json();
+            setStepCount(data.steps);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setIsFetchingSteps(false);
         }
-        const { url } = await linkRes.json();
-        // Redirect to Google; on return your backend sets google_connected=true
-        window.location.href = url;
-        return; // stop here; page will navigate
-      } else {
-        // Disconnect / revoke
-        const headers = await getAuthHeader();
-        await fetch('/.netlify/functions/google-disconnect', { method: 'POST', headers }).catch(() => {});
-        // Best-effort local state update (DB row is updated by the function)
-        setGoogleOn(false);
-        setSteps(null);
-      }
-    } finally {
-      setIsToggling(false);
-    }
-  };
+    };
 
-  // --- UI (stable, minimal) ---
-  return (
-    <div
-      style={{
-        background: 'rgba(15,25,38,0.95)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 12,
-        padding: 16,
-      }}
-    >
-      <h3 style={{ margin: 0, marginBottom: 12, color: '#cfe3ff', fontWeight: 600 }}>
-        Connected Services
-      </h3>
+    const checkIntegrationStatus = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          padding: '10px 12px',
-          borderRadius: 10,
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.06)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 6,
-              background: '#4285F4',
-              display: 'grid',
-              placeItems: 'center',
-              color: 'white',
-              fontWeight: 700,
-              fontSize: 14,
-            }}
-            aria-hidden
-          >
-            G
-          </div>
-          <div>
-            <div style={{ color: 'white', fontWeight: 600, lineHeight: 1.2 }}>
-              Google Health
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            setIsLoading(false);
+            return;
+        }
+
+        const { data, error: checkError } = await supabase
+            .from('user_integrations')
+            .select('id')
+            .eq('user_id', session.user.id)
+            .eq('provider', 'google-health')
+            .maybeSingle();
+
+        if (checkError) {
+            setError('Could not verify integration status.');
+            setIsConnected(false);
+            setIsChecked(false);
+        } else if (data) {
+            setIsConnected(true);
+            setIsChecked(true);
+            fetchSteps(session.access_token); // fetch with tz
+        } else {
+            setIsConnected(false);
+            setIsChecked(false);
+        }
+        setIsLoading(false);
+    }, []);
+
+    useEffect(() => {
+        checkIntegrationStatus();
+    }, [checkIntegrationStatus]);
+
+    const handleToggle = async (e) => {
+        const isNowChecked = e.target.checked;
+        setIsChecked(isNowChecked);
+
+        if (isNowChecked) {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session) throw new Error("User session not found.");
+
+                const response = await fetch('/.netlify/functions/google-auth', {
+                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                });
+
+                if (!response.ok) throw new Error('Could not get auth URL from server.');
+
+                const data = await response.json();
+                window.location.href = data.authUrl;
+
+            } catch (err) {
+                setError("Failed to start connection process.");
+                setIsChecked(false);
+            }
+        } else {
+            setIsLoading(true);
+            const { data: { session } } = await supabase.auth.getSession();
+            try {
+                await fetch('/.netlify/functions/delete-integration', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`
+                    },
+                    body: JSON.stringify({ provider: 'google-health' })
+                });
+                setIsConnected(false);
+                setStepCount(null);
+            } catch (err) {
+                setError("Failed to disconnect.");
+                setIsChecked(true);
+            }
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="card">
+            <h2>Connected Services</h2>
+            {error && <p className="error-message small">{error}</p>}
+            <div className="integration-row">
+                <div className="integration-label">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="google-logo">
+                        <title id="google-logo">Google G Logo</title>
+                        <path d="M17.64 9.20455C17.64 8.56682 17.5827 7.95273 17.4764 7.36364H9V10.845H13.8436C13.635 11.97 13.0009 12.9232 12.0477 13.5609V15.8195H14.9564C16.6582 14.2527 17.64 11.9455 17.64 9.20455Z" fill="#4285F4"/>
+                        <path d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5609C11.2418 14.1018 10.2109 14.4205 9 14.4205C6.96273 14.4205 5.22091 13.0177 4.63455 11.1805H1.61636V13.5091C3.10636 16.2491 5.82727 18 9 18Z" fill="#34A853"/>
+                        <path d="M4.63455 11.1805C4.42636 10.5664 4.30909 9.90409 4.30909 9.20455C4.30909 8.505 4.42636 7.84273 4.63455 7.22864V4.89909H1.61636C0.978182 6.13773 0.6 7.62591 0.6 9.20455C0.6 10.7832 0.978182 12.2714 1.61636 13.5091L4.63455 11.1805Z" fill="#FBBC05"/>
+                        <path d="M9 3.98864C10.3209 3.98864 11.5077 4.45591 12.4782 5.385L15.0218 2.84045C13.4673 1.37818 11.43 0.409091 9 0.409091C5.82727 0.409091 3.10636 2.15909 1.61636 4.90091L4.63455 7.22864C5.22091 5.39182 6.96273 3.98864 9 3.98864Z" fill="#EA4335"/>
+                    </svg>
+                    <span>Google Health</span>
+                </div>
+                <label className="toggle-switch">
+                    <input type="checkbox" checked={isChecked} onChange={handleToggle} disabled={isLoading} />
+                    <span className="slider"></span>
+                </label>
             </div>
-            <div style={{ color: '#9db4d4', fontSize: 12 }}>
-              {googleOn ? 'Connected' : 'Not connected'}
-            </div>
-          </div>
+            {isConnected && (
+                <div className="integration-data">
+                    <hr />
+                    {isFetchingSteps ? (
+                        <div className="loader" style={{margin: '1rem auto'}}></div>
+                    ) : (
+                        <div className="step-count-display">
+                            <span className="steps">{stepCount !== null ? stepCount.toLocaleString() : '...'}</span>
+                            <span className="label">Steps Today</span>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
-
-        <button
-          onClick={toggleGoogle}
-          disabled={isToggling}
-          style={{
-            minWidth: 72,
-            height: 34,
-            borderRadius: 999,
-            border: '1px solid rgba(255,255,255,0.12)',
-            background: googleOn ? 'linear-gradient(180deg,#2dd4bf,#14b8a6)' : 'rgba(255,255,255,0.06)',
-            color: googleOn ? '#062b27' : '#dbeafe',
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
-          aria-pressed={googleOn}
-        >
-          {googleOn ? 'On' : 'Off'}
-        </button>
-      </div>
-
-      <div
-        style={{
-          marginTop: 14,
-          padding: '18px 14px',
-          borderRadius: 10,
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.06)',
-          textAlign: 'center',
-        }}
-      >
-        <div style={{ color: '#9db4d4', fontSize: 12, marginBottom: 6 }}>Steps Today</div>
-        <div style={{ color: 'white', fontSize: 36, fontWeight: 800, lineHeight: 1 }}>
-          {googleOn ? (steps ?? '—') : 0}
-        </div>
-        {!googleOn && (
-          <div style={{ color: '#8aa0bf', fontSize: 12, marginTop: 6 }}>
-            Connect Google to enable
-          </div>
-        )}
-      </div>
-    </div>
-  );
+    );
 }
+
+export default Integrations;
