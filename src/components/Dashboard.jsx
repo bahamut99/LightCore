@@ -1,3 +1,4 @@
+// src/components/Dashboard.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import Header from './Header.jsx';
@@ -11,22 +12,13 @@ import NudgeNotice from './NudgeNotice.jsx';
 import LightcoreMatrix from './LightcoreMatrix.jsx';
 import Integrations from './Integrations.jsx';
 
-// NEW: daily card hook + UI
-import useDailyCard from '../hooks/useDailyCard';
-import DailyCard from './DailyCard.jsx';
-
 function Dashboard({ onSwitchView }) {
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [range, setRange] = useState(7);
 
-  // NEW: hook state
-  const { isOpen, card, open, close } = useDailyCard();
-
   const fetchDashboardData = useCallback(async (isRefresh = false) => {
-    if (!isRefresh) {
-      setIsLoading(true);
-    }
+    if (!isRefresh) setIsLoading(true);
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -54,21 +46,10 @@ function Dashboard({ onSwitchView }) {
 
   useEffect(() => {
     fetchDashboardData(false);
-
-    // When a new log is submitted (your existing custom event),
-    // we refresh dashboard data AND (optionally) show the daily card
-    const handleNewLog = (evt) => {
-      fetchDashboardData(true);
-
-      // If the event included the new log payload, show the card now.
-      // (See LogEntry change snippet below)
-      const payload = evt?.detail || null;
-      if (payload) open(payload);
-    };
-
+    const handleNewLog = () => fetchDashboardData(true);
     window.addEventListener('newLogSubmitted', handleNewLog);
     return () => window.removeEventListener('newLogSubmitted', handleNewLog);
-  }, [fetchDashboardData, open]);
+  }, [fetchDashboardData]);
 
   return (
     <div id="app-container">
@@ -82,7 +63,10 @@ function Dashboard({ onSwitchView }) {
         </div>
 
         <div className="center-column">
-          <NudgeNotice data={dashboardData?.nudgeData} onAcknowledge={() => fetchDashboardData(true)} />
+          <NudgeNotice
+            data={dashboardData?.nudgeData}
+            onAcknowledge={() => fetchDashboardData(true)}
+          />
           <LogEntry />
           <RecentEntries isLoading={isLoading} data={dashboardData?.recentEntriesData} />
         </div>
@@ -97,7 +81,6 @@ function Dashboard({ onSwitchView }) {
         </div>
       </main>
 
-      {/* Footer */}
       <div className="footer">
         <button onClick={onSwitchView} className="header-btn" style={{ marginRight: '1rem' }}>
           Switch to Neural-Cortex
@@ -108,9 +91,6 @@ function Dashboard({ onSwitchView }) {
           Privacy Policy
         </a>
       </div>
-
-      {/* NEW: overlay daily card */}
-      <DailyCard isOpen={isOpen} card={card} onClose={close} />
     </div>
   );
 }

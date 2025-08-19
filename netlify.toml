@@ -1,79 +1,16 @@
-# netlify.toml — LightCore
+# netlify.toml — known-good minimal
 
-############################################
-# Build
-############################################
 [build]
-  command   = "npm run build"
-  publish   = "dist"            # <-- change if your build outputs somewhere else
-  functions = "functions"       # your repo uses /functions at the project root
+  command  = "npm run build"
+  publish  = "dist"
+  functions = "functions"
 
-# Pin Node so local + CI match (adjust if you prefer 18)
-[build.environment]
-  NODE_VERSION = "20"
+# (Optional) lock Node version if you want builds to match local: 
+# [build.environment]
+#   NODE_VERSION = "20"
 
-############################################
-# Functions (bundle + keep cold starts small)
-############################################
-[functions]
-  directory             = "functions"
-  node_bundler          = "esbuild"
-  external_node_modules = ["luxon"]   # modules that should NOT be inlined by esbuild
-  included_files        = []          # add globs here if a fn needs non-code assets
-
-# Example of per-function overrides (uncomment if/when needed)
-# [[functions]]
-#   name                  = "fetch-health-data"
-#   node_bundler          = "esbuild"
-#   external_node_modules = ["luxon"]
-#   included_files        = []
-
-############################################
-# SPA routing (send unknown routes to index.html)
-############################################
+# Single-page app routing
 [[redirects]]
-  from   = "/*"
-  to     = "/index.html"
+  from = "/*"
+  to   = "/index.html"
   status = 200
-
-############################################
-# Security headers (kept reasonable to avoid blocking APIs)
-############################################
-
-# Global defaults
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy        = "strict-origin-when-cross-origin"
-    Permissions-Policy     = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
-    Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
-
-# Cache static assets aggressively (adjust patterns to your build output)
-[[headers]]
-  for = "/*.js"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/*.css"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/assets/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-# Never cache HTML
-[[headers]]
-  for = "/index.html"
-  [headers.values]
-    Cache-Control = "no-cache"
-
-############################################
-# (Optional) build-skip rule to save minutes
-# Uncomment if you want to skip builds when only docs changed.
-############################################
-# ignore = "bash -lc 'CHANGED=$(git diff --name-only HEAD^ HEAD || echo); echo \"$CHANGED\" | grep -qE \"^(src|public|functions|package(-lock)?\\.json)\" && exit 1 || exit 0'"
-
