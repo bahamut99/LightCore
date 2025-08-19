@@ -1,131 +1,143 @@
-/* /privacy-policy.css */
-
-/* ---- Theme tokens ---- */
-:root {
-  --bg: #0a0f1b;
-  --panel: rgba(10, 25, 47, 0.92);
-  --panel-border: rgba(0, 240, 255, 0.25);
-  --panel-soft: rgba(0, 240, 255, 0.06);
-  --text: #cfefff;
-  --text-strong: #e7fbff;
-  --text-dim: #9bb8cc;
-  --accent: #00f0ff;
-  --accent-soft: rgba(0, 240, 255, 0.12);
-  --muted: #8aa2b3;
-  --shadow: 0 0 24px rgba(0, 240, 255, 0.15);
+/* --- Base (Classic look) -------------------------------------------------- */
+:root{
+  --bg: #0b1220;
+  --panel: #101a2b;
+  --panel-2: #0f1828;
+  --border: rgba(0,240,255,.22);
+  --border-soft: rgba(0,240,255,.12);
+  --text: #d6e7ff;
+  --muted: #9bb3c9;
+  --accent: #38e8ff;
+  --accent-2: #00c2ff;
+  --badge: rgba(56,232,255,.18);
+  --shadow: 0 10px 30px rgba(0,0,0,.45), 0 0 30px rgba(0,240,255,.06) inset;
+  --radius: 14px;
 }
 
-* { box-sizing: border-box; }
-html, body { height: 100%; }
-
-body {
-  margin: 0;
+*{ box-sizing: border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  color:var(--text);
   background: var(--bg);
-  color: var(--text);
-  font: 14px/1.65 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font: 400 16px/1.65 "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
 }
 
-a {
-  color: var(--accent);
-  text-decoration: none;
-}
-a:hover, a:focus {
-  text-decoration: underline;
-  outline: none;
-}
-
-.container {
-  max-width: 980px;
-  margin: 32px auto 64px;
-  padding: 0 16px;
+/* Subtle animated gradient glow behind the content */
+.bg{
+  position: fixed; inset: -30% -30% auto -30%;
+  height: 60vh;
+  background: radial-gradient(60% 60% at 30% 50%, rgba(56,232,255,.12), transparent 60%),
+              radial-gradient(40% 40% at 80% 10%, rgba(0,194,255,.10), transparent 60%);
+  filter: blur(40px);
+  pointer-events:none;
 }
 
-/* ---- Header ---- */
-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 18px;
+/* --- Header/Footer -------------------------------------------------------- */
+.site-header, .site-footer{
+  position: sticky;
+  top:0;
+  z-index:10;
+  background: linear-gradient(180deg, rgba(11,18,32,.85), rgba(11,18,32,.6));
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-soft);
 }
-header img {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-  border-radius: 6px;
-  filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.15));
+.site-footer{
+  top:auto; bottom:0; border-top: 1px solid var(--border-soft); border-bottom: none;
 }
-header h1 {
-  margin: 0;
-  font-family: "Orbitron", system-ui, sans-serif;
-  font-size: 22px;
-  letter-spacing: 0.04em;
-  text-shadow: 0 0 6px rgba(0, 240, 255, 0.25);
+.shell{
+  max-width: 1100px; margin: 0 auto; padding: 14px 20px;
+  display:flex; align-items:center; gap:16px; justify-content:space-between;
 }
-
-/* ---- Cards ---- */
-.card {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
-  padding: 16px 18px;
+.brand{
+  display:flex; align-items:center; gap:12px; text-decoration:none; color:var(--text);
+}
+.logo{ width:28px; height:28px; border-radius:6px; display:block; }
+.title{
+  font-family: "Orbitron", sans-serif;
+  letter-spacing: .06em; font-weight:700; color:var(--accent);
+  text-shadow: 0 0 8px rgba(56,232,255,.35);
+}
+.btn{
+  display:inline-flex; align-items:center; gap:.5rem;
+  padding:.55rem .9rem; border-radius:10px; cursor:pointer;
+  font-weight:600; text-decoration:none;
+  border:1px solid var(--border); color:var(--text);
+  background: linear-gradient(180deg, rgba(15,26,43,.9), rgba(14,24,40,.7));
   box-shadow: var(--shadow);
-  margin: 14px 0;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
 }
-.card h2 {
-  margin: 2px 0 10px;
-  font-family: "Orbitron", system-ui, sans-serif;
-  font-size: 18px;
-  letter-spacing: 0.04em;
-  color: var(--text-strong);
+.btn:hover{
+  transform: translateY(-1px);
+  border-color: var(--accent);
+  box-shadow: 0 12px 26px rgba(0,0,0,.45), 0 0 32px rgba(56,232,255,.25) inset;
 }
-.card p { margin: 8px 0; color: #ffffff; }
-.card ul { padding-left: 18px; margin: 8px 0; }
-.card li { margin: 6px 0; }
-
-/* Callouts */
-.callout {
-  background: var(--accent-soft);
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  color: var(--text-strong);
+.btn.ghost{
+  background: transparent; border-color: var(--border-soft);
+}
+.btn.link{
+  background: transparent; border-color: transparent; padding:0;
+  color: var(--accent); text-decoration: none;
 }
 
-/* ---- Grid (responsive) ---- */
-.grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 1fr;
-  margin: 12px 0;
+/* --- Page Layout ---------------------------------------------------------- */
+.container{
+  max-width: 1100px; margin: 36px auto 96px; padding: 0 20px;
 }
-@media (min-width: 820px) {
-  .grid { grid-template-columns: 1fr 1fr; }
+.hero.card{ border-color: var(--accent); }
+
+.card{
+  background: linear-gradient(180deg, var(--panel), var(--panel-2));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px 22px;
+  margin-bottom: 16px;
+}
+.card h1, .card h2{
+  font-family: "Orbitron", sans-serif; letter-spacing:.04em;
+  margin: 0 0 12px; color: var(--text);
+}
+.card h1{ font-size: 1.6rem; }
+.card h2{ font-size: 1.1rem; color: #cfe9ff; }
+
+.muted{ color: var(--muted); }
+.small{ font-size: .925rem; }
+
+.callout{
+  border:1px dashed var(--border);
+  background: rgba(0,240,255,.06);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 12px 0 4px;
 }
 
-/* ---- Utilities ---- */
-.small { font-size: 12px; color: var(--text-dim); }
-.muted { color: var(--muted); }
-.badge {
-  display: inline-block;
-  padding: 0 6px;
-  border: 1px solid var(--panel-border);
-  background: var(--accent-soft);
-  color: var(--text-strong);
-  border-radius: 999px;
-  font-size: 12px;
-  line-height: 20px;
-  vertical-align: baseline;
+/* Two-column on wide screens */
+.grid{
+  display:grid; gap:16px; margin: 16px 0;
+}
+@media (min-width: 880px){
+  .grid{ grid-template-columns: 1fr 1fr; }
 }
 
-/* ---- Footer ---- */
-footer {
-  margin-top: 18px;
-  text-align: left;
+/* Lists */
+ul.bullets{
+  margin: .25rem 0 0; padding-left: 1.1rem;
 }
-footer p {
-  margin: 0;
-  color: var(--text-dim);
+ul.bullets li{
+  margin: .35rem 0;
+}
+.badge{
+  display:inline-block; padding: .12rem .45rem; border-radius:999px;
+  border:1px solid var(--border);
+  background: var(--badge); color: var(--text);
+  font: 500 .82rem/1 "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* Links */
+a{ color: var(--accent); }
+a:hover{ color: var(--accent-2); }
+
+/* Footer */
+.site-footer .shell{ padding: 18px 20px; }
