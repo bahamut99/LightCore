@@ -1,145 +1,136 @@
 // src/components/DailyCard.jsx
 import React from 'react';
 
-function fmtDate(iso) {
+function fmtDate(d) {
   try {
-    return new Date(iso).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+    return new Date(d).toLocaleString();
   } catch {
     return '';
   }
 }
 
-export default function DailyCard({ card, onClose }) {
-  if (!card) return null;
+/**
+ * Props:
+ *  - isOpen: boolean
+ *  - card: {
+ *      created_at?: string,
+ *      clarity_score?: number,
+ *      immune_score?: number,
+ *      physical_readiness_score?: number,
+ *      ai_notes?: string
+ *    }
+ *  - onClose: () => void
+ */
+export default function DailyCard({ isOpen, card, onClose }) {
+  if (!isOpen || !card) return null;
+
+  const clarity = card.clarity_score ?? '-';
+  const immune  = card.immune_score ?? '-';
+  const physical = card.physical_readiness_score ?? '-';
+  const notes = card.ai_notes || 'No specific notes generated.';
 
   return (
-    <div style={overlayStyle} role="dialog" aria-modal="true" aria-label="Daily summary">
-      <div style={cardStyle}>
-        <button aria-label="Close" onClick={onClose} style={closeBtn}>
+    <div
+      aria-label="Daily Card Overlay"
+      style={{
+        position: 'fixed',
+        bottom: 24,
+        right: 24,
+        zIndex: 40,
+        width: 360,
+        background: 'rgba(10, 25, 47, 0.92)',
+        border: '1px solid rgba(0, 240, 255, 0.25)',
+        borderRadius: 12,
+        boxShadow: '0 0 24px rgba(0,240,255,0.15)',
+        color: '#cfefff',
+        fontFamily: "'Roboto Mono', monospace",
+        padding: '14px 14px 12px',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3
+          style={{
+            margin: 0,
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: 16,
+            letterSpacing: '0.04em',
+            color: '#e7fbff',
+            textShadow: '0 0 5px #00f0ff',
+          }}
+        >
+          Today’s Scores
+        </h3>
+        <div style={{ flex: 1 }} />
+        <button
+          aria-label="Close daily card"
+          onClick={onClose}
+          style={{
+            width: 28,
+            height: 28,
+            background: 'transparent',
+            color: '#00f0ff',
+            border: '1px solid rgba(0,240,255,0.35)',
+            borderRadius: 8,
+            cursor: 'pointer',
+          }}
+        >
           ×
         </button>
+      </div>
 
-        <h3 style={titleStyle}>Today’s Summary — {fmtDate(card.date)}</h3>
+      <p style={{ margin: '6px 0 10px', color: '#9bb8cc', fontSize: 12 }}>
+        {fmtDate(card.created_at)}
+      </p>
 
-        <div style={metricsRow}>
-          <Metric name="Mental Clarity" value={card.clarity} />
-          <Metric name="Immune Defense" value={card.immune} />
-          <Metric name="Physical Readiness" value={card.physical} />
-        </div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 8,
+          marginBottom: 10,
+        }}
+      >
+        <Metric label="Clarity" value={clarity} color="#00f0ff" />
+        <Metric label="Immune" value={immune} color="#ffd700" />
+        <Metric label="Physical" value={physical} color="#00ff88" />
+      </div>
 
-        <div style={notesBox}>
-          <div style={notesHeader}>LightCore AI Notes</div>
-          <p style={notesText}>{card.ai_notes}</p>
-        </div>
+      <div
+        style={{
+          borderTop: '1px solid rgba(0,240,255,0.18)',
+          paddingTop: 8,
+        }}
+      >
+        <p style={{ margin: 0, color: '#ffffff', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+          {notes}
+        </p>
       </div>
     </div>
   );
 }
 
-function Metric({ name, value }) {
+function Metric({ label, value, color }) {
   return (
-    <div style={metricCol}>
-      <div style={metricLabel}>{name}</div>
-      <div style={metricValue}>{value ?? '—'}</div>
+    <div
+      style={{
+        background: 'rgba(0,240,255,0.06)',
+        border: '1px solid rgba(0,240,255,0.25)',
+        borderRadius: 8,
+        padding: '8px 10px',
+      }}
+    >
+      <div style={{ fontSize: 11, color: '#9bb8cc' }}>{label}</div>
+      <div
+        style={{
+          marginTop: 4,
+          fontSize: 18,
+          fontWeight: 700,
+          color,
+          textShadow: `0 0 6px ${color}55`,
+        }}
+      >
+        {value}
+      </div>
     </div>
   );
 }
-
-/* Styles: match your current glass/neo look without changing layout */
-const overlayStyle = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,0.35)',
-  backdropFilter: 'blur(2px)',
-  zIndex: 9999,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-};
-
-const cardStyle = {
-  width: '560px',
-  maxWidth: '92vw',
-  color: '#cfefff',
-  background: 'rgba(10, 25, 47, 0.92)',
-  border: '1px solid rgba(0,240,255,0.25)',
-  boxShadow: '0 0 24px rgba(0,240,255,0.15)',
-  borderRadius: '12px',
-  padding: '1.25rem 1.25rem 1rem',
-  fontFamily: "'Roboto Mono', monospace",
-  position: 'relative',
-};
-
-const closeBtn = {
-  position: 'absolute',
-  top: 10,
-  right: 10,
-  width: 32,
-  height: 32,
-  color: '#00f0ff',
-  background: 'transparent',
-  border: '1px solid rgba(0,240,255,0.35)',
-  borderRadius: 8,
-  cursor: 'pointer',
-};
-
-const titleStyle = {
-  fontFamily: "'Orbitron', sans-serif",
-  fontSize: '1.05rem',
-  margin: 0,
-  marginBottom: '0.75rem',
-  letterSpacing: '0.04em',
-  textShadow: '0 0 5px #00f0ff',
-};
-
-const metricsRow = {
-  display: 'flex',
-  gap: '0.75rem',
-  marginBottom: '0.75rem',
-};
-
-const metricCol = {
-  flex: 1,
-  background: 'rgba(0,240,255,0.06)',
-  border: '1px solid rgba(0,240,255,0.18)',
-  borderRadius: 8,
-  padding: '0.5rem 0.75rem',
-};
-
-const metricLabel = {
-  fontSize: 12,
-  opacity: 0.85,
-  marginBottom: 6,
-};
-
-const metricValue = {
-  fontSize: 18,
-  fontWeight: 700,
-  color: '#e7fbff',
-};
-
-const notesBox = {
-  background: 'rgba(0,240,255,0.06)',
-  border: '1px solid rgba(0,240,255,0.18)',
-  borderRadius: 8,
-  padding: '0.65rem 0.75rem',
-};
-
-const notesHeader = {
-  fontFamily: "'Orbitron', sans-serif",
-  fontSize: 12,
-  letterSpacing: '0.06em',
-  color: '#9bd9ff',
-  marginBottom: 6,
-};
-
-const notesText = {
-  color: 'white',
-  lineHeight: 1.6,
-  margin: 0,
-  whiteSpace: 'pre-wrap',
-};

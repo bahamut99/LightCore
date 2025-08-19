@@ -1,40 +1,37 @@
 // src/hooks/useDailyCard.js
-import { useCallback, useMemo, useState } from 'react';
-import { supabase } from '../supabaseClient';
-import DailyLogCard from '../components/DailyLogCard.jsx';
+import { useEffect, useState, useCallback } from 'react';
 
+/**
+ * Minimal state hook for showing the "daily card" after a log is created.
+ * No JSX here (so .js is fine). UI lives in DailyCard.jsx.
+ *
+ * Usage:
+ *   const { isOpen, card, open, close } = useDailyCard();
+ *   // programmatic open: open(payload)
+ *   // or dispatch a DOM event from anywhere:
+ *   // window.dispatchEvent(new CustomEvent('dailyCard:show', { detail: payload }));
+ */
 export default function useDailyCard() {
-  const [entry, setEntry] = useState(null);
-  const [open, setOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [card, setCard] = useState(null);
 
-  const show = useCallback((row) => {
-    if (!row) return;
-    setEntry(row);
-    setOpen(true);
+  const open = useCallback((payload) => {
+    setCard(payload || null);
+    setIsOpen(true);
   }, []);
 
-  const showFromId = useCallback(async (id) => {
-    if (!id) return;
-    const { data, error } = await supabase
-      .from('daily_logs')
-      .select(
-        'id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes'
-      )
-      .eq('id', id)
-      .maybeSingle();
-    if (!error && data) {
-      setEntry(data);
-      setOpen(true);
+  const close = useCallback(() => {
+    setIsOpen(false);
+  }, []);
+
+  useEffect(() => {
+    function onShow(evt) {
+      open(evt?.detail || null);
     }
-  }, []);
+    window.addEventListener('dailyCard:show', onShow);
+    return () => window.removeEventListener('dailyCard:show', onShow);
+  }, [open]);
 
-  const hide = useCallback(() => setOpen(false), []);
-
-  const Card = useMemo(
-    () => (props) =>
-      <DailyLogCard entry={open ? entry : null} onClose={hide} {...props} />,
-    [open, entry, hide]
-  );
-
-  return { show, showFromId, hide, Card, isOpen: open, entry };
+  return { isOpen, card, open, close };
 }
+
