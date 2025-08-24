@@ -1,9 +1,12 @@
 {
   "name": "lightcore-backend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Serverless functions for LightCore app",
+  "private": true,
+  "engines": { "node": ">=18" },
   "dependencies": {
     "@supabase/supabase-js": "^2.43.4",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "luxon": "^3.5.0"
   }
 }

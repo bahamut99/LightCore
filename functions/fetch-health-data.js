@@ -1,24 +1,35 @@
 // netlify/functions/fetch-health-data.js
-import { createClient } from '@supabase/supabase-js';
-import { DateTime } from 'luxon';
+// Fetch today's Google Fit steps for the signed-in user (Classic View).
+// Improvements:
+// - Accepts expires_at as EPOCH SECONDS or ISO string
+// - Refreshes tokens (with timeout) and persists new expiry as epoch seconds
+// - One retry on 401, 10s request timeouts, better errors
+
+const { createClient } = require('@supabase/supabase-js');
+const { DateTime } = require('luxon');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-
-// Optional, only needed for token refresh
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
-export const handler = async (event) => {
+exports.handler = async (event) => {
   try {
-    const authHeader = event.headers.authorization || event.headers.Authorization;
-    if (!authHeader) {
-      return json(401, { error: 'Missing Authorization header' });
-    }
+    const authHeader =
+      event.headers?.authorization ||
+      event.headers?.Authorization ||
+      event.headers?.AUTHORIZATION;
 
-    // Create RLS-bound client (uses the user's JWT)
+    if (!authHeader) return json(401, { error: 'Missing Authorization header' });
+
+    // Support both "Bearer x" and raw tokens defensively
+    const token = authHeader.startsWith('Bearer ')
+      ? authHeader.split(' ')[1]
+      : authHeader;
+
+    // RLS-bound client (user context)
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } }
+      global: { headers: { Authorization: `Bearer ${token}` } },
     });
 
     // Find the user's Google integration row
@@ -34,82 +45,172 @@ export const handler = async (event) => {
 
     let { access_token, refresh_token, expires_at } = integration;
 
-    // Refresh token if expired (if you store seconds since epoch in expires_at)
-    if (expires_at && Date.now() > Number(expires_at) * 1000 && refresh_token && GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
-      const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: GOOGLE_CLIENT_ID,
-          client_secret: GOOGLE_CLIENT_SECRET,
-          refresh_token,
-          grant_type: 'refresh_token'
-        })
-      });
-      if (refreshRes.ok) {
-        const rjson = await refreshRes.json();
-        access_token = rjson.access_token;
+    // Normalize expires_at (epoch seconds preferred; allow legacy ISO)
+    let expSecs = Number(expires_at);
+    if (!Number.isFinite(expSecs) && typeof expires_at === 'string') {
+      const parsed = Date.parse(expires_at);
+      if (!Number.isNaN(parsed)) expSecs = Math.floor(parsed / 1000);
+    }
 
-        // Try to persist the new token so next calls are fresh
+    const nowSecs = Math.floor(Date.now() / 1000);
+    const skew = 60; // 1 min skew protection
+    const needsRefresh =
+      !!expSecs &&
+      nowSecs >= expSecs - skew &&
+      !!refresh_token &&
+      !!GOOGLE_CLIENT_ID &&
+      !!GOOGLE_CLIENT_SECRET;
+
+    if (needsRefresh) {
+      const refreshed = await refreshGoogleToken(refresh_token);
+      if (refreshed?.access_token) {
+        access_token = refreshed.access_token;
+        const newExpSecs = refreshed.expires_in
+          ? nowSecs + Number(refreshed.expires_in)
+          : null;
+
         await supabase
           .from('user_integrations')
           .update({
-            access_token: access_token,
-            expires_at: rjson.expires_in ? Math.floor(Date.now() / 1000) + rjson.expires_in : null
+            access_token,
+            expires_at: newExpSecs, // store epoch seconds going forward
           })
           .eq('provider', 'google-health');
       }
     }
 
-    // Time zone handling
     const tz = event.queryStringParameters?.tz || 'UTC';
-    const nowTz = DateTime.now().setZone(tz);
-    const startMs = nowTz.startOf('day').toMillis();
-    const endMs = nowTz.endOf('day').toMillis();
+    const { startMs, endMs } = dayBoundsInTZ(tz);
 
-    // Ask Google Fit for today's steps in that local day window
-    const aggRes = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${access_token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        aggregateBy: [{ dataTypeName: 'com.google.step_count.delta' }],
-        bucketByTime: { durationMillis: endMs - startMs },
-        startTimeMillis: startMs,
-        endTimeMillis: endMs
-      })
-    });
+    // First attempt
+    let { steps, resStatus } = await fetchSteps(access_token, startMs, endMs);
 
-    if (!aggRes.ok) {
-      const txt = await aggRes.text();
-      return json(502, { error: 'Google API error', details: txt });
-    }
+    // If unauthorized, try one last refresh-and-retry (covers legacy rows w/o good expiry)
+    if (
+      (resStatus === 401 || resStatus === 403) &&
+      refresh_token &&
+      GOOGLE_CLIENT_ID &&
+      GOOGLE_CLIENT_SECRET
+    ) {
+      const refreshed = await refreshGoogleToken(refresh_token);
+      if (refreshed?.access_token) {
+        access_token = refreshed.access_token;
+        const newExpSecs = refreshed.expires_in
+          ? Math.floor(Date.now() / 1000) + Number(refreshed.expires_in)
+          : null;
 
-    const aggJson = await aggRes.json();
-    let steps = 0;
-    for (const bucket of aggJson.bucket || []) {
-      for (const ds of bucket.dataset || []) {
-        for (const pt of ds.point || []) {
-          const val = pt.value?.[0];
-          if (val?.intVal != null) steps += val.intVal;
-          else if (val?.fpVal != null) steps += Math.round(val.fpVal);
-        }
+        await supabase
+          .from('user_integrations')
+          .update({
+            access_token,
+            expires_at: newExpSecs,
+          })
+          .eq('provider', 'google-health');
+
+        const retry = await fetchSteps(access_token, startMs, endMs);
+        steps = retry.steps;
+        resStatus = retry.resStatus;
       }
     }
 
-    return json(200, { steps });
+    if (steps != null) return json(200, { steps });
+    if (resStatus === 401 || resStatus === 403)
+      return json(401, { error: 'Google token expired' });
+    if (resStatus) return json(502, { error: 'Google API error' });
+
+    return json(500, { error: 'Unknown error' });
   } catch (err) {
     return json(500, { error: 'Server error', details: String(err) });
   }
 };
 
-// small helper
+// --- helpers ---
+
+function dayBoundsInTZ(tz) {
+  const now = DateTime.now().setZone(tz);
+  return {
+    startMs: now.startOf('day').toMillis(),
+    endMs: now.endOf('day').toMillis(),
+  };
+}
+
+async function fetchSteps(accessToken, startMs, endMs) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), 10000); // 10s timeout
+  try {
+    const res = await fetch(
+      'https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate',
+      {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          aggregateBy: [{ dataTypeName: 'com.google.step_count.delta' }],
+          bucketByTime: { durationMillis: endMs - startMs },
+          startTimeMillis: startMs,
+          endTimeMillis: endMs,
+        }),
+      }
+    );
+
+    clearTimeout(t);
+
+    if (!res.ok) {
+      return { steps: null, resStatus: res.status };
+    }
+
+    const agg = await res.json();
+    let steps = 0;
+    for (const bucket of agg.bucket || []) {
+      for (const ds of bucket.dataset || []) {
+        for (const pt of ds.point || []) {
+          const v = pt.value?.[0];
+          if (v?.intVal != null) steps += v.intVal;
+          else if (v?.fpVal != null) steps += Math.round(v.fpVal);
+        }
+      }
+    }
+    return { steps, resStatus: 200 };
+  } catch {
+    clearTimeout(t);
+    return { steps: null, resStatus: 0 };
+  }
+}
+
+async function refreshGoogleToken(refreshToken) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), 10000); // 10s timeout
+  try {
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    });
+    clearTimeout(t);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    clearTimeout(t);
+    return null;
+  }
+}
+
 function json(status, body) {
   return {
     statusCode: status,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+    },
+    body: JSON.stringify(body),
   };
 }
