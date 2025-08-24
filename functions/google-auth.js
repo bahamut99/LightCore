@@ -127,7 +127,7 @@ async function exchangeCodeForTokens(code) {
 }
 
 async function saveTokensToSupabase(supabaseAdmin, userId, tokenData) {
-  // Store expiry as a UNIX epoch seconds integer
+  // Store expiry as a UNIX epoch secnds integer
   const expires_at = Math.floor(Date.now() / 1000) + Number(tokenData.expires_in || 0);
 
   const integrationData = {
