@@ -2,67 +2,50 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 
 /**
- * Connected Services (Google Health)
- * - Works controlled (props) or uncontrolled (self-managing).
- * - Smart polling for near-live steps.
- * - Scoped styles via lc-gh-* classes to avoid collisions.
+ * Connected Services (extensible)
+ * - Row layout under a "Connected Services" header + divider.
+ * - Google Health provider row (more providers can be added later).
+ * - Near-live step count with smart polling and midnight rollover.
+ * - Toggle shows its animation before redirecting to Google.
+ * - Uses scoped CSS classes (lc-gh-*) defined in style.css.
  */
 
-export default function Integrations(props) {
-  const {
-    googleConnected: controlledConnected,
-    steps: controlledSteps,
-    isLoadingSteps: controlledLoading,
-    onToggleGoogle, // optional: (nextBool) => void
-  } = props;
-
-  // -------- state (uncontrolled mode) --------
+export default function Integrations() {
+  // connection + data
   const [connected, setConnected] = useState(false);
   const [steps, setSteps] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState("");
-  const [pendingAuth, setPendingAuth] = useState(false); // visual flip before redirect
 
-  const usingControlled =
-    typeof controlledConnected === "boolean" ||
-    typeof controlledSteps === "number" ||
-    typeof controlledLoading === "boolean" ||
-    typeof onToggleGoogle === "function";
+  // toggle UX
+  const [pendingAuth, setPendingAuth] = useState(false);
 
-  const viewConnected = usingControlled ? controlledConnected : connected;
-  const viewSteps =
-    usingControlled && typeof controlledSteps === "number"
-      ? controlledSteps
-      : steps;
-  const viewLoading = usingControlled ? !!controlledLoading : loading;
-
-  // Toggle visual should show "on" while we’re about to redirect
-  const toggleChecked = pendingAuth ? true : !!viewConnected;
-
-  // -------- helpers --------
-  const tz = useMemo(
-    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-    []
-  );
+  // session + timers
   const sessionRef = useRef(null);
-
-  // timers
+  const lastStepChangeAt = useRef(0);
   const activeTimer = useRef(null);
   const hourlyTimer = useRef(null);
   const midnightTimer = useRef(null);
   const dayTicker = useRef(null);
-  const lastStepChangeAt = useRef(0);
 
-  // -------- discover connection & kick polling (uncontrolled) --------
+  // user timezone (used by backend)
+  const tz = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    []
+  );
+
+  // -------- init: check connection, start polling --------
   useEffect(() => {
-    if (usingControlled) return;
-
     let cancelled = false;
+
     (async () => {
       const { data: sessionData } = await supabase.auth.getSession();
       sessionRef.current = sessionData?.session || null;
       if (!sessionRef.current) {
-        if (!cancelled) setConnected(false);
+        if (!cancelled) {
+          setConnected(false);
+          setSteps(null);
+        }
         return;
       }
 
@@ -72,11 +55,11 @@ export default function Integrations(props) {
         .eq("provider", "google-health")
         .maybeSingle();
 
+      const isConnected = !!data && !error;
       if (!cancelled) {
-        const isConnected = !!data && !error;
         setConnected(isConnected);
         if (isConnected) {
-          fetchStepsNow();
+          fetchStepsNow({ liveWindow: 10 });
           setupMidnightTick();
           setupVisibilityHandler();
         }
@@ -88,12 +71,10 @@ export default function Integrations(props) {
       clearAllTimers();
       removeVisibilityHandler();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [usingControlled]);
+  }, []);
 
-  // -------- fetching logic --------
+  // -------- fetching + scheduling --------
   async function fetchStepsNow(opts = {}) {
-    if (usingControlled) return;
     if (!sessionRef.current) return;
 
     const token = sessionRef.current.access_token;
@@ -117,6 +98,7 @@ export default function Integrations(props) {
           return json.steps;
         });
       } else if (!res.ok && (res.status === 404 || json?.error === "Google Health not connected")) {
+        // backend says not connected; reflect that in UI
         setConnected(false);
         clearAllTimers();
       } else {
@@ -131,8 +113,9 @@ export default function Integrations(props) {
   }
 
   function scheduleNextPoll() {
-    if (usingControlled || !viewConnected) return;
+    if (!connected) return;
 
+    // If steps changed within 5 minutes → poll in 45s, else 3m
     const now = Date.now();
     const active = now - (lastStepChangeAt.current || 0) < 5 * 60 * 1000;
     const nextMs = active ? 45 * 1000 : 3 * 60 * 1000;
@@ -140,6 +123,7 @@ export default function Integrations(props) {
     if (activeTimer.current) clearTimeout(activeTimer.current);
     activeTimer.current = setTimeout(() => fetchStepsNow({ liveWindow: 10 }), nextMs);
 
+    // hourly safety net
     if (hourlyTimer.current) clearInterval(hourlyTimer.current);
     hourlyTimer.current = setInterval(() => fetchStepsNow({ liveWindow: 15 }), 60 * 60 * 1000);
   }
@@ -148,7 +132,7 @@ export default function Integrations(props) {
     const localNow = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
     const next = new Date(localNow);
     next.setDate(localNow.getDate() + 1);
-    next.setHours(0, 0, 5, 0);
+    next.setHours(0, 0, 5, 0); // 5s after midnight local
     const msToNext = Math.max(1000, next - localNow);
 
     if (midnightTimer.current) clearTimeout(midnightTimer.current);
@@ -179,14 +163,7 @@ export default function Integrations(props) {
   }
 
   // -------- toggle handlers --------
-  const handleToggle = async (e) => {
-    const next = e.target.checked;
-
-    if (usingControlled && typeof onToggleGoogle === "function") {
-      onToggleGoogle(next);
-      return;
-    }
-
+  const handleToggle = async (checked) => {
     if (!sessionRef.current) {
       const { data: sessionData } = await supabase.auth.getSession();
       sessionRef.current = sessionData?.session || null;
@@ -194,8 +171,9 @@ export default function Integrations(props) {
     }
     const token = sessionRef.current.access_token;
 
-    if (next) {
-      setPendingAuth(true); // visually flip immediately
+    if (checked) {
+      // flip visually, then redirect (so animation shows)
+      setPendingAuth(true);
       setErrMsg("");
       try {
         const start = await fetch("/.netlify/functions/google-auth", {
@@ -203,10 +181,7 @@ export default function Integrations(props) {
         });
         const json = await start.json();
         if (start.ok && json?.authUrl) {
-          // let the CSS transition render before leaving the page
-          setTimeout(() => {
-            window.location.assign(json.authUrl);
-          }, 150);
+          setTimeout(() => window.location.assign(json.authUrl), 150);
         } else {
           setPendingAuth(false);
           setErrMsg(json?.error || "Could not start Google authorization.");
@@ -216,6 +191,7 @@ export default function Integrations(props) {
         setErrMsg("Network error starting Google authorization.");
       }
     } else {
+      // disconnect
       clearAllTimers();
       setLoading(true);
       setErrMsg("");
@@ -224,7 +200,8 @@ export default function Integrations(props) {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}` },
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify({ provider: "google-health" }),
         });
         if (res.ok) {
@@ -243,7 +220,19 @@ export default function Integrations(props) {
     }
   };
 
-  // -------- UI bits --------
+  // -------- UI pieces --------
+  const Toggle = ({ checked, onChange, disabled }) => (
+    <button
+      type="button"
+      className={`lc-gh-toggle ${checked ? "on" : ""}`}
+      aria-pressed={checked}
+      aria-disabled={disabled ? "true" : undefined}
+      onClick={() => !disabled && onChange(!checked)}
+    >
+      <span className="lc-gh-knob" />
+    </button>
+  );
+
   const GoogleGlyph = () => (
     <svg aria-hidden="true" viewBox="0 0 48 48" width="18" height="18" style={{ display: "block" }}>
       <path fill="#EA4335" d="M24 9.5c3.94 0 7.5 1.52 10.24 4l6.82-6.82C36.94 2.23 30.77 0 24 0 14.62 0 6.62 5.38 2.9 13.14l7.9 6.14C12.6 13.3 17.86 9.5 24 9.5z"/>
@@ -254,47 +243,43 @@ export default function Integrations(props) {
     </svg>
   );
 
-  const Toggle = ({ checked, onChange, disabled }) => (
-    <button
-      type="button"
-      className={`lc-gh-toggle ${checked ? "on" : ""}`}
-      aria-pressed={checked}
-      aria-disabled={disabled ? "true" : undefined}
-      onClick={() => !disabled && onChange({ target: { checked: !checked } })}
-      title={checked ? "Disconnect Google Health" : "Connect Google Health"}
-    >
-      <span className="lc-gh-knob" />
-    </button>
-  );
+  const checked = pendingAuth ? true : !!connected;
 
   return (
     <div className="card">
-      <div className="card-header lc-gh-header">
+      {/* Header + divider */}
+      <div className="lc-gh-header">
         <h3 className="lc-gh-title">Connected Services</h3>
-        <div className="lc-gh-right">
-          <GoogleGlyph />
-          <span className="lc-gh-label">Google Health</span>
-          <Toggle checked={toggleChecked} onChange={handleToggle} disabled={viewLoading} />
+      </div>
+      <hr />
+
+      {/* Provider row */}
+      <div className="lc-gh-right" style={{ marginTop: 10, marginBottom: 6 }}>
+        <GoogleGlyph />
+        <span className="lc-gh-label">Google Health</span>
+        <div style={{ marginLeft: "auto" }}>
+          <Toggle
+            checked={checked}
+            disabled={loading}
+            onChange={(next) => handleToggle(next)}
+          />
         </div>
       </div>
 
-      <div className="card-content lc-gh-body">
-        {!viewConnected ? (
-          <p className="lc-gh-muted">Connect to Google Health to show your daily steps.</p>
-        ) : (
+      {/* Steps block (no "live window" text) */}
+      {connected && (
+        <div className="lc-gh-body">
           <div className="lc-gh-rows">
             <div>
-              <div className="lc-gh-subtle">Steps Today</div>
+              <div className="lc-gh-subtle">STEPS TODAY</div>
               <div className="lc-gh-number">
-                {viewLoading && viewSteps == null ? "…" : (viewSteps ?? 0).toLocaleString()}
+                {loading && steps == null ? "…" : (steps ?? 0).toLocaleString()}
               </div>
             </div>
-            <div className="lc-gh-hint">
-              {viewLoading ? "Updating…" : errMsg ? <span className="lc-gh-warn">{errMsg}</span> : "Live (≈10 min window)"}
-            </div>
+            {errMsg ? <div className="lc-gh-hint lc-gh-warn">{errMsg}</div> : <div />}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
