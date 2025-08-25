@@ -1,12 +1,19 @@
 // netlify/functions/fetch-health-data.js
 // Near-live Google Fit steps for "today" in the user's timezone.
 //
-// Changes:
-// - Default mode is DATASET-ONLY: reads merged raw step deltas for the entire day
-//   (start-of-day -> now) to minimize Google aggregate caching lag.
-// - Keeps token auto-refresh with retry, 10s timeouts, strict no-store caching.
-// - Optional `mode=hybrid` query param brings back the old hybrid method if needed.
-// - Accepts `tz=America/Chicago` (defaults UTC).
+// Default behavior: DATASET-ONLY (reads the merged raw step deltas for the whole day).
+// This avoids extra caching on the aggregate API and usually reflects new steps as soon
+// as Google Fit syncs the phone data to the cloud.
+//
+// Optional: add `?mode=hybrid&liveWindow=10` to combine aggregate (earlier today)
+// with dataset (recent minutes). DATASET-ONLY is recommended for freshness.
+//
+// Query params:
+//   tz=<IANA timezone, e.g. America/Chicago> (default "UTC")
+//   mode=dataset|hybrid (default "dataset")
+//
+// Auth: expects `Authorization: Bearer <supabase_user_jwt>` header.
+// Tokens are refreshed automatically and persisted as epoch seconds.
 
 const { createClient } = require("@supabase/supabase-js");
 const { DateTime } = require("luxon");
@@ -18,23 +25,26 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
 exports.handler = async (event) => {
   try {
-    // ---- Auth header ----
+    // ----- Authorization -----
     const authHeader =
       event.headers?.authorization ||
       event.headers?.Authorization ||
       event.headers?.AUTHORIZATION;
-    if (!authHeader) return json(401, { error: "Missing Authorization header" });
 
-    const token = authHeader.startsWith("Bearer ")
+    if (!authHeader) {
+      return json(401, { error: "Missing Authorization header" });
+    }
+
+    const userToken = authHeader.startsWith("Bearer ")
       ? authHeader.split(" ")[1]
       : authHeader;
 
-    // ---- Supabase user client (RLS context) ----
+    // RLS-bound Supabase client (user context)
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
+      global: { headers: { Authorization: `Bearer ${userToken}` } },
     });
 
-    // ---- Integration row ----
+    // ----- Load Google integration row -----
     const { data: integration, error: integErr } = await supabase
       .from("user_integrations")
       .select("access_token, refresh_token, expires_at")
@@ -47,7 +57,7 @@ exports.handler = async (event) => {
 
     let { access_token, refresh_token, expires_at } = integration;
 
-    // ---- Normalize expiry (epoch seconds preferred; accept legacy ISO) ----
+    // Normalize expires_at to epoch seconds (allow legacy ISO string)
     let expSecs = Number(expires_at);
     if (!Number.isFinite(expSecs) && typeof expires_at === "string") {
       const parsed = Date.parse(expires_at);
@@ -55,7 +65,7 @@ exports.handler = async (event) => {
     }
 
     const nowSecs = Math.floor(Date.now() / 1000);
-    const skew = 60; // refresh one minute early
+    const skew = 60; // refresh 1 minute early
     const needsRefresh =
       !!expSecs &&
       nowSecs >= expSecs - skew &&
@@ -73,15 +83,12 @@ exports.handler = async (event) => {
 
         await supabase
           .from("user_integrations")
-          .update({
-            access_token,
-            expires_at: newExpSecs, // store epoch seconds
-          })
+          .update({ access_token, expires_at: newExpSecs })
           .eq("provider", "google-health");
       }
     }
 
-    // ---- Time window and mode ----
+    // ----- Time window + mode -----
     const tz = event.queryStringParameters?.tz || "UTC";
     const mode = (event.queryStringParameters?.mode || "dataset").toLowerCase();
 
@@ -89,25 +96,29 @@ exports.handler = async (event) => {
     const startMs = now.startOf("day").toMillis();
     const endMs = now.toMillis();
 
-    let result;
+    let totalSteps = 0;
 
     if (mode === "hybrid") {
-      // previous behavior (aggregate up to now - liveWindow, dataset for recent minutes)
+      // Hybrid: aggregate earlier + dataset recent minutes
       const liveWindowParam = event.queryStringParameters?.liveWindow;
-      let liveWindowMin = Number.isFinite(Number(liveWindowParam))
+      const liveWindowMin = Number.isFinite(Number(liveWindowParam))
         ? Math.max(5, Math.min(30, parseInt(liveWindowParam, 10)))
         : 10;
 
-      const windowStartMs = Math.max(startMs, endMs - liveWindowMin * 60 * 1000);
+      const recentStartMs = Math.max(startMs, endMs - liveWindowMin * 60 * 1000);
+
+      // First attempt
       const [agg, live] = await Promise.all([
-        windowStartMs > startMs
-          ? fetchAggregateSteps(access_token, startMs, windowStartMs)
+        recentStartMs > startMs
+          ? fetchAggregateSteps(access_token, startMs, recentStartMs)
           : Promise.resolve({ steps: 0, resStatus: 200 }),
-        fetchDatasetSteps(access_token, windowStartMs, endMs),
+        fetchDatasetSteps(access_token, recentStartMs, endMs),
       ]);
 
+      // If unauthorized anywhere, refresh once and retry both
       if (
-        (agg.resStatus === 401 || agg.resStatus === 403 || live.resStatus === 401 || live.resStatus === 403) &&
+        ((agg.resStatus === 401 || agg.resStatus === 403) ||
+          (live.resStatus === 401 || live.resStatus === 403)) &&
         refresh_token
       ) {
         const refreshed = await refreshGoogleToken(refresh_token);
@@ -122,24 +133,34 @@ exports.handler = async (event) => {
             .update({ access_token, expires_at: newExpSecs })
             .eq("provider", "google-health");
 
-          const retry = await Promise.all([
-            windowStartMs > startMs
-              ? fetchAggregateSteps(access_token, startMs, windowStartMs)
+          const [agg2, live2] = await Promise.all([
+            recentStartMs > startMs
+              ? fetchAggregateSteps(access_token, startMs, recentStartMs)
               : Promise.resolve({ steps: 0, resStatus: 200 }),
-            fetchDatasetSteps(access_token, windowStartMs, endMs),
+            fetchDatasetSteps(access_token, recentStartMs, endMs),
           ]);
-          result = { steps: (retry[0].steps || 0) + (retry[1].steps || 0) };
-        }
-      }
 
-      if (!result) {
-        if ((agg.resStatus && agg.resStatus !== 200) || (live.resStatus && live.resStatus !== 200)) {
+          if (
+            (agg2.resStatus && agg2.resStatus !== 200) ||
+            (live2.resStatus && live2.resStatus !== 200)
+          ) {
+            return json(502, { error: "Google API error (hybrid)" });
+          }
+          totalSteps = (agg2.steps || 0) + (live2.steps || 0);
+        } else {
+          return json(401, { error: "Google token expired" });
+        }
+      } else {
+        if (
+          (agg.resStatus && agg.resStatus !== 200) ||
+          (live.resStatus && live.resStatus !== 200)
+        ) {
           return json(502, { error: "Google API error (hybrid)" });
         }
-        result = { steps: (agg.steps || 0) + (live.steps || 0) };
+        totalSteps = (agg.steps || 0) + (live.steps || 0);
       }
     } else {
-      // DATASET-ONLY: read merged raw steps for the whole day
+      // Dataset-only: read merged raw steps for the whole day (start -> now)
       let ds = await fetchDatasetSteps(access_token, startMs, endMs);
 
       if ((ds.resStatus === 401 || ds.resStatus === 403) && refresh_token) {
@@ -156,24 +177,30 @@ exports.handler = async (event) => {
             .eq("provider", "google-health");
 
           ds = await fetchDatasetSteps(access_token, startMs, endMs);
+        } else {
+          return json(401, { error: "Google token expired" });
         }
       }
 
       if (ds.resStatus && ds.resStatus !== 200) {
         return json(502, { error: "Google dataset API error" });
       }
-      result = { steps: ds.steps || 0 };
+      totalSteps = ds.steps || 0;
     }
 
-    return json(200, { steps: result.steps, tz, mode: mode === "hybrid" ? "hybrid" : "dataset" });
+    return json(200, {
+      steps: totalSteps,
+      tz,
+      mode: mode === "hybrid" ? "hybrid" : "dataset",
+    });
   } catch (err) {
     return json(500, { error: "Server error", details: String(err) });
   }
 };
 
-// ---------- Helpers ----------
+// ----------------- Helpers -----------------
 
-// Aggregate steps between [startMs, endMs)
+// Aggregate steps in a single bucket [startMs, endMs)
 async function fetchAggregateSteps(accessToken, startMs, endMs) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), 10000);
@@ -207,7 +234,7 @@ async function fetchAggregateSteps(accessToken, startMs, endMs) {
         for (const pt of ds.point || []) {
           const v = pt.value?.[0];
           if (v?.intVal != null) steps += v.intVal;
-          else if (v?.fpVal != null) steps += Math.round(v.fpVal);
+          else if (v?.fpVal != null) steps += Math.floor(v.fpVal); // floor to avoid overcount
         }
       }
     }
@@ -220,7 +247,7 @@ async function fetchAggregateSteps(accessToken, startMs, endMs) {
 
 // Read merged raw step deltas between [startMs, endMs)
 async function fetchDatasetSteps(accessToken, startMs, endMs) {
-  // datasetId => nanoseconds
+  // datasetId needs nanoseconds
   const startNs = BigInt(startMs) * 1000000n;
   const endNs = BigInt(Math.max(endMs, startMs + 1)) * 1000000n;
   const datasetId = `${startNs}-${endNs}`;
@@ -248,7 +275,7 @@ async function fetchDatasetSteps(accessToken, startMs, endMs) {
     for (const pt of data.point || []) {
       const v = pt.value?.[0];
       if (v?.intVal != null) steps += v.intVal;
-      else if (v?.fpVal != null) steps += Math.round(v.fpVal);
+      else if (v?.fpVal != null) steps += Math.floor(v.fpVal); // floor to avoid overcount
     }
     return { steps, resStatus: 200 };
   } catch {
@@ -292,4 +319,5 @@ function json(status, body) {
     body: JSON.stringify(body),
   };
 }
+
 
