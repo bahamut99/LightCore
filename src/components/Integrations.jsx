@@ -3,11 +3,10 @@ import { supabase } from "../supabaseClient";
 
 /**
  * Connected Services (extensible)
- * - Row layout under a "Connected Services" header + divider.
- * - Google Health provider row (more providers can be added later).
- * - Near-live step count with smart polling and midnight rollover.
- * - Toggle shows its animation before redirecting to Google.
- * - Uses scoped CSS classes (lc-gh-*) defined in style.css.
+ * - Header + divider, then single provider row (Google Health + toggle).
+ * - Near-live steps with smart polling (20s active / 60s idle), midnight rollover, focus refresh.
+ * - Toggle animates before redirect to Google.
+ * - Uses scoped CSS classes (lc-gh-*) already in style.css.
  */
 
 export default function Integrations() {
@@ -17,7 +16,7 @@ export default function Integrations() {
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState("");
 
-  // toggle UX
+  // toggle UX (let animation show before redirect)
   const [pendingAuth, setPendingAuth] = useState(false);
 
   // session + timers
@@ -28,7 +27,7 @@ export default function Integrations() {
   const midnightTimer = useRef(null);
   const dayTicker = useRef(null);
 
-  // user timezone (used by backend)
+  // user timezone for backend
   const tz = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     []
@@ -87,8 +86,11 @@ export default function Integrations() {
       const res = await fetch(
         `/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(
           tz
-        )}&liveWindow=${liveWindow}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        )}&liveWindow=${liveWindow}&_=${Date.now()}`, // cache buster
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        }
       );
       const json = await res.json();
 
@@ -98,7 +100,6 @@ export default function Integrations() {
           return json.steps;
         });
       } else if (!res.ok && (res.status === 404 || json?.error === "Google Health not connected")) {
-        // backend says not connected; reflect that in UI
         setConnected(false);
         clearAllTimers();
       } else {
@@ -115,15 +116,15 @@ export default function Integrations() {
   function scheduleNextPoll() {
     if (!connected) return;
 
-    // If steps changed within 5 minutes → poll in 45s, else 3m
+    // Faster cadence: 20s when steps changed in last 5 min, else 60s
     const now = Date.now();
     const active = now - (lastStepChangeAt.current || 0) < 5 * 60 * 1000;
-    const nextMs = active ? 45 * 1000 : 3 * 60 * 1000;
+    const nextMs = active ? 20 * 1000 : 60 * 1000;
 
     if (activeTimer.current) clearTimeout(activeTimer.current);
     activeTimer.current = setTimeout(() => fetchStepsNow({ liveWindow: 10 }), nextMs);
 
-    // hourly safety net
+    // Hourly safety net
     if (hourlyTimer.current) clearInterval(hourlyTimer.current);
     hourlyTimer.current = setInterval(() => fetchStepsNow({ liveWindow: 15 }), 60 * 60 * 1000);
   }
@@ -132,7 +133,7 @@ export default function Integrations() {
     const localNow = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
     const next = new Date(localNow);
     next.setDate(localNow.getDate() + 1);
-    next.setHours(0, 0, 5, 0); // 5s after midnight local
+    next.setHours(0, 0, 5, 0); // ~5s after midnight local
     const msToNext = Math.max(1000, next - localNow);
 
     if (midnightTimer.current) clearTimeout(midnightTimer.current);
@@ -145,7 +146,7 @@ export default function Integrations() {
 
   function setupVisibilityHandler() {
     const onVis = () => {
-      if (!document.hidden) fetchStepsNow({ liveWindow: 10 });
+      if (!document.hidden) fetchStepsNow({ liveWindow: 10 }); // instant refresh on focus
     };
     document.addEventListener("visibilitychange", onVis);
     setupVisibilityHandler._remover = onVis;
@@ -172,12 +173,12 @@ export default function Integrations() {
     const token = sessionRef.current.access_token;
 
     if (checked) {
-      // flip visually, then redirect (so animation shows)
       setPendingAuth(true);
       setErrMsg("");
       try {
         const start = await fetch("/.netlify/functions/google-auth", {
           headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
         });
         const json = await start.json();
         if (start.ok && json?.authUrl) {
@@ -191,7 +192,6 @@ export default function Integrations() {
         setErrMsg("Network error starting Google authorization.");
       }
     } else {
-      // disconnect
       clearAllTimers();
       setLoading(true);
       setErrMsg("");
@@ -203,6 +203,7 @@ export default function Integrations() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ provider: "google-health" }),
+          cache: "no-store",
         });
         if (res.ok) {
           setConnected(false);
@@ -220,7 +221,7 @@ export default function Integrations() {
     }
   };
 
-  // -------- UI pieces --------
+  // -------- UI elements --------
   const Toggle = ({ checked, onChange, disabled }) => (
     <button
       type="button"
@@ -266,7 +267,7 @@ export default function Integrations() {
         </div>
       </div>
 
-      {/* Steps block (no "live window" text) */}
+      {/* Steps block (no extra text) */}
       {connected && (
         <div className="lc-gh-body">
           <div className="lc-gh-rows">
