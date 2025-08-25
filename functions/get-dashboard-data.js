@@ -1,192 +1,249 @@
+// netlify/functions/get-dashboard-data.js
+// Returns all dashboard data in one request.
+// CHANGE: logCount now counts UNIQUE DAYS with at least one log (timezone-aware).
+
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
-const createAdminClient = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-
-async function fetchLogCount(supabase, userId) {
-    try {
-        const { count, error } = await supabase
-            .from('daily_logs')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', userId);
-        if (error) throw error;
-        return count || 0;
-    } catch (error) {
-        console.error('Error fetching log count:', error.message);
-        return 0;
-    }
+// RLS-bound (user) client
+function createUserClient(jwt) {
+  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${jwt}` } },
+  });
 }
 
-async function fetchWeeklySummary(supabase, userId, userTimezone) {
-    try {
-        const { data: goalData, error: goalError } = await supabase.from('goals').select('goal_value').eq('user_id', userId).eq('is_active', true).maybeSingle();
-        if (goalError) {
-            console.error("Error fetching goal in weekly summary:", goalError.message);
-            return { goal: null, progress: 0 };
-        }
-        if (!goalData) {
-            return { goal: null, progress: 0 };
-        }
+// (Optional) Admin client if you later need trusted reads/writes
+const createAdminClient = () =>
+  createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        
-        const { data: logDays, error: logsError } = await supabase.from('daily_logs')
-            .select('created_at')
-            .eq('user_id', userId)
-            .gte('created_at', sevenDaysAgo.toISOString());
-            
-        if (logsError) throw logsError;
+/* ---------------- Time helpers (timezone-safe) ---------------- */
 
-        const now = new Date();
-        const userNow = new Date(now.toLocaleString('en-US', { timeZone: userTimezone }));
-        const startOfWeek = new Date(userNow);
-        startOfWeek.setDate(userNow.getDate() - userNow.getDay());
-        startOfWeek.setHours(0, 0, 0, 0);
-
-        const distinctDays = new Set();
-        (logDays || []).forEach(log => {
-            const logDate = new Date(log.created_at);
-            if (logDate >= startOfWeek) {
-                const localDateString = logDate.toLocaleDateString('en-CA', { timeZone: userTimezone });
-                distinctDays.add(localDateString);
-            }
-        });
-
-        return { goal: goalData, progress: distinctDays.size };
-    } catch (error) {
-        console.error('Error in fetchWeeklySummary:', error.message);
-        return { goal: null, progress: 0 };
-    }
+function getLocalNow(tz) {
+  // Date whose wall clock equals "now" in tz
+  return new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
 }
 
-async function fetchNudge(supabase, userId) {
-    try {
-        const { data } = await supabase.from('nudges').select('*').eq('user_id', userId).eq('is_acknowledged', false).order('created_at', { ascending: false }).limit(1).maybeSingle();
-        return data;
-    } catch (error) {
-        console.error('Error fetching nudge:', error.message);
-        return null;
-    }
+function startOfLocalWeek(tz) {
+  const now = getLocalNow(tz);
+  const start = new Date(now);
+  start.setDate(now.getDate() - now.getDay()); // Sunday start
+  start.setHours(0, 0, 0, 0);
+  return start;
 }
 
-async function fetchRecentEntries(supabase, userId) {
-    try {
-        const { data } = await supabase.from('daily_logs').select('id, created_at, log, clarity_label, clarity_color, clarity_score, immune_label, immune_color, immune_score, physical_readiness_label, physical_readiness_color, physical_readiness_score, ai_notes, sleep_hours, sleep_quality').eq('user_id', userId).order('created_at', { ascending: false }).limit(10);
-        return data || [];
-    } catch (error) {
-        console.error('Error fetching recent entries:', error.message);
-        return [];
-    }
+function endOfLocalWeek(tz) {
+  const start = startOfLocalWeek(tz);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 7);
+  return end;
 }
 
-async function fetchLightcoreGuide(supabase, supabaseAdmin, userId) {
-    try {
-        const { data: contextData, error: contextError } = await supabase.from('lightcore_brain_context').select('*').eq('user_id', userId).single();
-        if (contextError || !contextData || !contextData.recent_logs || !contextData.recent_logs.length) {
-            return { current_state: "Log your first entry to begin AI calibration." };
-        }
-        
-        let formattedContext = `User's Most Recent Logs:\n` + contextData.recent_logs.slice(0, 7).map(log => {
-            const date = new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            return `[${date}] Scores: Clarity=${log.clarity_score}, Immune=${log.immune_score}, Physical=${log.physical_readiness_score} | Log: "${log.log.substring(0, 75)}..."`;
-        }).join('\n');
-
-        const prompt = `You are Lightcore – a unified, personalized health AI guide. Review the user's recent data context. Your goal is to synthesize this information into a cohesive guidance message. Your entire response MUST be a single, valid JSON object with two top-level keys: "guidance_for_user" and "memory_update". 1. "guidance_for_user": An object with keys "current_state" (string), "positives" (array of strings), "concerns" (array of strings), "suggestions" (array of strings). 2. "memory_update": An object with keys "new_user_summary" (string) and "new_ai_persona_memo" (string). Analyze the following DATA CONTEXT:\n${formattedContext}`;
-
-        const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
-        const aiResponse = await fetch(geminiApiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" }
-            })
-        });
-        if (!aiResponse.ok) throw new Error(`Gemini API error`);
-
-        const aiData = await aiResponse.json();
-        const guidanceText = aiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        if (!guidanceText) throw new Error("No guidance was returned by the AI.");
-        
-        const fullResponse = JSON.parse(guidanceText);
-        
-        if(fullResponse.memory_update) {
-            await supabaseAdmin.from('lightcore_brain_context').update({
-                user_summary: fullResponse.memory_update.new_user_summary,
-                ai_persona_memo: fullResponse.memory_update.new_ai_persona_memo,
-                updated_at: new Date().toISOString()
-            }).eq('user_id', userId);
-        }
-
-        return fullResponse.guidance_for_user;
-
-    } catch (error) {
-        console.error('Error fetching Lightcore guide:', error.message);
-        return { error: "Could not load guidance at this time." };
-    }
+function toLocalDayKey(isoString, tz) {
+  // "YYYY-MM-DD" for the given timezone
+  return new Date(isoString).toLocaleDateString('en-CA', { timeZone: tz });
 }
 
-async function fetchChronoDeck(supabase, userId) {
-    try {
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        const { data } = await supabase.from('events').select('event_type, event_time').eq('user_id', userId).gte('event_time', sevenDaysAgo.toISOString()).order('event_time', { ascending: true });
-        return data || [];
-    } catch (error) {
-        console.error('Error fetching ChronoDeck data:', error.message);
-        return [];
-    }
+/* ---------------- Feature helpers ---------------- */
+
+// 1) Distinct days logged (NOT total logs)
+async function fetchDistinctDayCount(supabaseUser, userId, userTimezone) {
+  try {
+    const { data, error } = await supabaseUser
+      .from('daily_logs')
+      .select('created_at')
+      .eq('user_id', userId);
+
+    if (error) throw error;
+
+    const days = new Set();
+    (data || []).forEach((row) => days.add(toLocalDayKey(row.created_at, userTimezone)));
+    return days.size;
+  } catch (e) {
+    console.error('Error fetching distinct-day log count:', e.message);
+    return 0;
+  }
 }
 
-exports.handler = async (event, context) => {
-    const token = event.headers.authorization?.split(' ')[1];
-    if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Not authorized.' }) };
-    
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
-        global: { headers: { Authorization: `Bearer ${token}` } }
-    });
-    const supabaseAdmin = createAdminClient();
+// 2) Weekly summary: active goal + progress = unique days logged this week
+async function fetchWeeklySummary(supabaseUser, userId, userTimezone) {
+  try {
+    // Active goal
+    const { data: goal, error: goalErr } = await supabaseUser
+      .from('goals')
+      .select('id, goal_value, is_active')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .maybeSingle();
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
-    
-    const { tz: userTimezone } = event.queryStringParameters;
+    // Logs inside this local week
+    const startISO = startOfLocalWeek(userTimezone).toISOString();
+    const endISO = endOfLocalWeek(userTimezone).toISOString();
 
-    try {
-        const [
-            logCountData,
-            weeklySummaryData,
-            nudgeData,
-            recentEntriesData,
-            lightcoreGuideData,
-            chronoDeckData
-        ] = await Promise.all([
-            fetchLogCount(supabase, user.id),
-            fetchWeeklySummary(supabase, user.id, userTimezone || 'UTC'),
-            fetchNudge(supabase, user.id),
-            fetchRecentEntries(supabase, user.id),
-            fetchLightcoreGuide(supabase, supabaseAdmin, user.id),
-            fetchChronoDeck(supabase, user.id)
-        ]);
-        
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                logCount: logCountData,
-                weeklySummaryData,
-                nudgeData,
-                recentEntriesData,
-                lightcoreGuideData,
-                chronoDeckData
-            }),
-        };
+    const { data: logs, error: logsErr } = await supabaseUser
+      .from('daily_logs')
+      .select('created_at')
+      .eq('user_id', userId)
+      .gte('created_at', startISO)
+      .lt('created_at', endISO);
 
-    } catch (error) {
-        console.error("Error in get-dashboard-data function:", error.message);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ error: "Failed to load dashboard data." }),
-        };
+    if (goalErr) console.error('Goal fetch error (weekly summary):', goalErr.message);
+    if (logsErr) console.error('Logs fetch error (weekly summary):', logsErr.message);
+
+    const days = new Set();
+    (logs || []).forEach((row) => days.add(toLocalDayKey(row.created_at, userTimezone)));
+
+    return {
+      goal: goal || null,
+      progress: days.size,   // fill this many dots
+      daysLogged: days.size, // convenience
+    };
+  } catch (e) {
+    console.error('Error in fetchWeeklySummary:', e.message);
+    return { goal: null, progress: 0, daysLogged: 0 };
+  }
+}
+
+// 3) Active nudge (if any)
+async function fetchNudge(supabaseUser, userId) {
+  try {
+    const { data, error } = await supabaseUser
+      .from('nudges')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_acknowledged', false)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (error) throw error;
+    return (data && data[0]) || null;
+  } catch (e) {
+    console.error('Error fetching nudge:', e.message);
+    return null;
+  }
+}
+
+// 4) Recent entries (latest 10)
+async function fetchRecentEntries(supabaseUser, userId) {
+  try {
+    const { data, error } = await supabaseUser
+      .from('daily_logs')
+      .select(
+        'id, created_at, log, clarity_score, immune_score, physical_readiness_score, clarity_label, immune_label, physical_label, notes'
+      )
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.error('Error fetching recent entries:', e.message);
+    return [];
+  }
+}
+
+// 5) Lightcore guide (pull stored context if present; otherwise fallback)
+async function fetchLightcoreGuide(supabaseUser, userId) {
+  try {
+    const { data, error } = await supabaseUser
+      .from('lightcore_brain_context')
+      .select('current_state, positives, concerns, suggestions, recent_logs')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (data && (data.current_state || data.positives || data.concerns || data.suggestions)) {
+      return {
+        current_state: data.current_state || null,
+        positives: Array.isArray(data.positives) ? data.positives : undefined,
+        concerns: Array.isArray(data.concerns) ? data.concerns : undefined,
+        suggestions: Array.isArray(data.suggestions) ? data.suggestions : undefined,
+      };
     }
+
+    // Fallback if nothing is stored yet
+    return { current_state: 'Log your first entry to begin AI calibration.' };
+  } catch (e) {
+    console.error('Error fetching guide context:', e.message);
+    return { error: 'Unable to load guidance.' };
+  }
+}
+
+// 6) ChronoDeck: last 7 days of events
+async function fetchChronoDeck(supabaseUser, userId, userTimezone) {
+  try {
+    const end = getLocalNow(userTimezone);
+    const start = new Date(end);
+    start.setDate(end.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
+    const endOfEnd = new Date(end);
+    endOfEnd.setHours(23, 59, 59, 999);
+
+    const { data, error } = await supabaseUser
+      .from('events')
+      .select('event_type, event_time')
+      .eq('user_id', userId)
+      .gte('event_time', start.toISOString())
+      .lte('event_time', endOfEnd.toISOString())
+      .order('event_time', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.error('Error fetching ChronoDeck events:', e.message);
+    return [];
+  }
+}
+
+/* ---------------- Handler ---------------- */
+
+exports.handler = async (event) => {
+  try {
+    const token =
+      (event.headers && event.headers.authorization && event.headers.authorization.split(' ')[1]) ||
+      (event.headers && event.headers.Authorization && event.headers.Authorization.split(' ')[1]) ||
+      (event.headers && event.headers.AUTHORIZATION && event.headers.AUTHORIZATION.split(' ')[1]);
+
+    if (!token) {
+      return { statusCode: 401, body: JSON.stringify({ error: 'Not authorized.' }) };
+    }
+
+    const supabaseUser = createUserClient(token);
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabaseUser.auth.getUser();
+    if (userErr || !user) {
+      return { statusCode: 401, body: JSON.stringify({ error: 'User not found.' }) };
+    }
+
+    const userTimezone = event.queryStringParameters?.tz || 'UTC';
+
+    const [logCount, weeklySummaryData, nudgeData, recentEntriesData, lightcoreGuideData, chronoDeckData] =
+      await Promise.all([
+        fetchDistinctDayCount(supabaseUser, user.id, userTimezone),        // <-- UNIQUE DAYS
+        fetchWeeklySummary(supabaseUser, user.id, userTimezone),
+        fetchNudge(supabaseUser, user.id),
+        fetchRecentEntries(supabaseUser, user.id),
+        fetchLightcoreGuide(supabaseUser, user.id),
+        fetchChronoDeck(supabaseUser, user.id, userTimezone),
+      ]);
+
+    return {
+      statusCode: 200,
+      headers: { 'Cache-Control': 'no-store' },
+      body: JSON.stringify({
+        logCount,                // used by AICoreCalibration (1/7/14/30 unlocks)
+        weeklySummaryData,
+        nudgeData,
+        recentEntriesData,
+        lightcoreGuideData,
+        chronoDeckData,
+      }),
+    };
+  } catch (e) {
+    console.error('Error in get-dashboard-data:', e);
+    return { statusCode: 500, body: JSON.stringify({ error: 'Failed to load dashboard data.' }) };
+  }
 };

@@ -1,63 +1,41 @@
 import React from 'react';
 
 const STAGES = [
-  { id: 'signal', name: 'First Signal Acquired', logsRequired: 1, icon: '∼' },
-  { id: 'pattern', name: 'Pattern Engine', logsRequired: 7, icon: '⬡' },
-  { id: 'temporal', name: 'Temporal Drift Map', logsRequired: 14, icon: '🕒' },
-  { id: 'persona', name: 'Deep Persona Layer', logsRequired: 30, icon: '🧠' }
+  { id: 'signal',   name: 'First Signal Acquired', logsRequired: 1,  icon: '∼' },
+  { id: 'pattern',  name: 'Pattern Engine',        logsRequired: 7,  icon: '⬡' },
+  { id: 'temporal', name: 'Temporal Drift Map',    logsRequired: 14, icon: '🕒' },
+  { id: 'persona',  name: 'Deep Persona Layer',    logsRequired: 30, icon: '🧠' }
 ];
 
-const AICoreCalibration = ({ logCount }) => {
+const LAST_REQUIRED = STAGES[STAGES.length - 1].logsRequired;
 
-  const getProgressToNextStage = () => {
-    if (logCount >= STAGES[STAGES.length - 1].logsRequired) return 100;
+export default function AICoreCalibration({ logCount = 0 }) {
+  // Clamp to [0, 100] and fill 1/30 per day
+  const progressPct = Math.max(0, Math.min(100, (logCount / LAST_REQUIRED) * 100));
 
-    let currentStageIndex = -1;
-    for (let i = STAGES.length - 1; i >= 0; i--) {
-        if (logCount >= STAGES[i].logsRequired) {
-            currentStageIndex = i;
-            break;
-        }
-    }
-    
-    // If user has 0 logs, progress is 0
-    if (logCount === 0) return 0;
-
-    // If user has logs but hasn't unlocked the first stage yet
-    if (currentStageIndex === -1) return (logCount / STAGES[0].logsRequired) * 100;
-
-    const currentStage = STAGES[currentStageIndex];
-    const nextStage = STAGES[currentStageIndex + 1];
-    
-    const logsIntoCurrentStage = logCount - currentStage.logsRequired;
-    const logsNeededForNextStage = nextStage.logsRequired - currentStage.logsRequired;
-
-    return (logsIntoCurrentStage / logsNeededForNextStage) * 100;
-  };
-  
-  const progressPercent = getProgressToNextStage();
+  // First stage not yet unlocked (used to style the "active" node)
+  const firstLockedIndex = STAGES.findIndex(s => logCount < s.logsRequired);
 
   return (
     <div className="ai-core-calibration-container">
       <div className="calibration-pathway">
-        <div className="pathway-background"></div>
-        <div className="pathway-progress" style={{ width: `${progressPercent}%` }}></div>
-        
-        {STAGES.map((stage, index) => {
-          const isUnlocked = logCount >= stage.logsRequired;
-          const isActive = isUnlocked && (!STAGES[index + 1] || logCount < STAGES[index + 1].logsRequired);
-          
+        <div className="pathway-background" />
+        <div
+          className="pathway-progress"
+          style={{ width: `${progressPct}%` }}
+        />
+
+        {STAGES.map((stage, idx) => {
+          const position = (stage.logsRequired / LAST_REQUIRED) * 100;
+
           let statusClass = 'locked';
-          if (isActive) statusClass = 'active';
-          else if (isUnlocked) statusClass = 'unlocked';
-          
-          // Position nodes horizontally based on index
-          const position = (index / (STAGES.length - 1)) * 100;
+          if (logCount >= stage.logsRequired) statusClass = 'unlocked';
+          else if (idx === firstLockedIndex || firstLockedIndex === -1) statusClass = 'active';
 
           return (
-            <div 
-              key={stage.id} 
-              className={`pathway-node ${statusClass}`} 
+            <div
+              key={stage.id}
+              className={`pathway-node ${statusClass}`}
               style={{ left: `${position}%` }}
               title={`${stage.name} (Unlocks at ${stage.logsRequired} logs)`}
             >
@@ -68,6 +46,4 @@ const AICoreCalibration = ({ logCount }) => {
       </div>
     </div>
   );
-};
-
-export default AICoreCalibration;
+}
