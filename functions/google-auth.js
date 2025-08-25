@@ -1,8 +1,7 @@
 // netlify/functions/google-auth.js
 // Google Fit OAuth (start + callback) with safe token persistence.
-// - Preserves existing refresh_token if Google doesn't return one.
-// - Upserts user_integrations row (no delete-loss).
-// - Stores expires_at as epoch seconds (number).
+// Fix: store expires_at as ISO (timestamptz-compatible) instead of epoch seconds.
+// Also preserves existing refresh_token and uses UPSERT, with a fallback to delete+insert.
 
 const fetch = require('node-fetch');
 const { URLSearchParams } = require('url');
@@ -14,7 +13,7 @@ const REDIRECT_URI = 'https://lightcorehealth.netlify.app/.netlify/functions/goo
 const createAdminClient = () =>
   createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-// Entry point
+// Entry point: start OAuth or handle callback
 exports.handler = async (event) => {
   const qs = event.queryStringParameters || {};
   if (qs.code && qs.state) return handleCallback(qs);
@@ -32,6 +31,7 @@ async function startAuth(event) {
   const { data: { user } = {} } = await supabaseUser.auth.getUser();
   if (!user) return json(401, { error: 'User not found.' });
 
+  // One-time CSRF state
   const state = crypto.randomBytes(16).toString('hex');
   const supabaseAdmin = createAdminClient();
   const { error: stateErr } = await supabaseAdmin
@@ -59,16 +59,16 @@ async function startAuth(event) {
 // ----- Handle Callback -----
 async function handleCallback(qs) {
   const { code, state } = qs;
-  if (!code || !state) return redirect('/', 302);
+  if (!code || !state) return redirect('https://lightcorehealth.netlify.app', 302);
 
   const supabaseAdmin = createAdminClient();
 
+  // Validate + consume state
   const { data: stateRow, error: stateErr } = await supabaseAdmin
     .from('oauth_states')
     .select('user_id')
     .eq('state_value', state)
     .single();
-
   if (stateErr || !stateRow) {
     console.error('Invalid or expired OAuth state token.');
     return redirect('https://lightcorehealth.netlify.app', 302);
@@ -105,12 +105,12 @@ async function exchangeCodeForTokens(code) {
   if (!res.ok || data.error) {
     throw new Error(data.error_description || 'Google token exchange failed.');
   }
-  // data: { access_token, refresh_token?, expires_in, ... }
+  // data: { access_token, refresh_token?, expires_in, token_type, scope, ... }
   return data;
 }
 
 async function saveTokensToSupabase(supabaseAdmin, userId, tokenData) {
-  // 1) Look up any existing google-health row to preserve refresh_token if missing
+  // Preserve existing refresh_token if Google didn't return one this time
   const { data: existing } = await supabaseAdmin
     .from('user_integrations')
     .select('refresh_token')
@@ -118,25 +118,42 @@ async function saveTokensToSupabase(supabaseAdmin, userId, tokenData) {
     .eq('provider', 'google-health')
     .maybeSingle();
 
-  const refresh_token =
-    tokenData.refresh_token || existing?.refresh_token || null;
+  const refresh_token = tokenData.refresh_token || existing?.refresh_token || null;
 
-  // 2) Compute epoch-seconds expiry
-  const expires_at = Math.floor(Date.now() / 1000) + Number(tokenData.expires_in || 0);
+  // Convert expires_in (seconds) -> ISO string for timestamptz column
+  const expiresEpoch = Math.floor(Date.now() / 1000) + Number(tokenData.expires_in || 0);
+  const expires_at = new Date(expiresEpoch * 1000).toISOString(); // <-- ISO string
 
-  // 3) Upsert (requires a UNIQUE constraint on (user_id, provider))
-  const { error: upsertErr } = await supabaseAdmin.from('user_integrations').upsert(
-    {
-      user_id: userId,
-      provider: 'google-health',
-      access_token: tokenData.access_token,
-      refresh_token,
-      expires_at, // epoch seconds
-    },
-    { onConflict: 'user_id,provider' }
-  );
+  const row = {
+    user_id: userId,
+    provider: 'google-health',
+    access_token: tokenData.access_token,
+    refresh_token,
+    expires_at, // ISO string for timestamptz
+  };
 
-  if (upsertErr) throw new Error(`Supabase upsert error: ${upsertErr.message}`);
+  // Prefer UPSERT on (user_id, provider). If no unique constraint exists, fall back to delete+insert.
+  const { error: upsertErr } = await supabaseAdmin
+    .from('user_integrations')
+    .upsert(row, { onConflict: 'user_id,provider' });
+
+  if (upsertErr) {
+    // If there's no unique constraint, do delete+insert
+    const needsFallback =
+      /no unique|constraint|on conflict/i.test(upsertErr.message || '');
+    if (!needsFallback) {
+      throw new Error(`Supabase upsert error: ${upsertErr.message}`);
+    }
+    await supabaseAdmin
+      .from('user_integrations')
+      .delete()
+      .eq('user_id', userId)
+      .eq('provider', 'google-health');
+    const { error: insertErr } = await supabaseAdmin
+      .from('user_integrations')
+      .insert(row);
+    if (insertErr) throw new Error(`Supabase insert error: ${insertErr.message}`);
+  }
 }
 
 function json(statusCode, body) {
