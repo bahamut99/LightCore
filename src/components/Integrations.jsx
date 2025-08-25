@@ -1,146 +1,322 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../supabaseClient';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "../supabaseClient";
 
-function Integrations() {
-    const [isConnected, setIsConnected] = useState(false);
-    const [isChecked, setIsChecked] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isFetchingSteps, setIsFetchingSteps] = useState(false);
-    const [stepCount, setStepCount] = useState(null);
-    const [error, setError] = useState(null);
+/**
+ * Integrations.jsx — Connected Services card
+ *
+ * Backwards-compatible behavior:
+ * - If parent provides props (googleConnected, steps, isLoadingSteps, onToggleGoogle),
+ *   this component acts as a pure presentational view.
+ * - If props are omitted, this component manages its own state:
+ *   - discovers whether Google is connected,
+ *   - handles the toggle on/off flow,
+ *   - polls for steps using the fetch-health-data function with smart scheduling.
+ */
 
-    const fetchSteps = async (token) => {
-        setIsFetchingSteps(true);
-        try {
-            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone; // 👈 pass local timezone
-            const response = await fetch(`/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!response.ok) throw new Error('Failed to fetch step data.');
-            const data = await response.json();
-            setStepCount(data.steps);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setIsFetchingSteps(false);
-        }
+export default function Integrations(props) {
+  const {
+    googleConnected: controlledConnected,
+    steps: controlledSteps,
+    isLoadingSteps: controlledLoading,
+    onToggleGoogle, // (nextBool) => void
+  } = props;
+
+  // Internal state (used only when props are not provided)
+  const [connected, setConnected] = useState(false);
+  const [steps, setSteps] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState("");
+
+  const usingControlled =
+    typeof controlledConnected === "boolean" ||
+    typeof controlledSteps === "number" ||
+    typeof controlledLoading === "boolean" ||
+    typeof onToggleGoogle === "function";
+
+  // Derived view state
+  const viewConnected = usingControlled ? controlledConnected : connected;
+  const viewSteps =
+    usingControlled && typeof controlledSteps === "number"
+      ? controlledSteps
+      : steps;
+  const viewLoading = usingControlled ? !!controlledLoading : loading;
+
+  // --- Helpers for internal mode ---
+  const tz = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    []
+  );
+  const sessionRef = useRef(null);
+
+  // Smart polling timers (internal mode only)
+  const hourlyTimer = useRef(null);
+  const activeTimer = useRef(null);
+  const midnightTimer = useRef(null);
+  const dayTicker = useRef(null);
+  const lastStepChangeAt = useRef(0);
+
+  // --- Internal: discover connection on mount (if uncontrolled) ---
+  useEffect(() => {
+    if (usingControlled) return;
+
+    let cancelled = false;
+    (async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      sessionRef.current = sessionData?.session || null;
+
+      if (!sessionRef.current) {
+        if (!cancelled) setConnected(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("user_integrations")
+        .select("provider")
+        .eq("provider", "google-health")
+        .maybeSingle();
+
+      if (!cancelled) {
+        setConnected(!!data && !error);
+      }
+
+      if (!cancelled && !!data && !error) {
+        fetchStepsNow();
+        setupMidnightTick();
+        setupVisibilityHandler();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      clearAllTimers();
+      removeVisibilityHandler();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usingControlled]);
 
-    const checkIntegrationStatus = useCallback(async () => {
-        setIsLoading(true);
-        setError(null);
+  // --- Internal: fetch steps with smart scheduling ---
+  async function fetchStepsNow(opts = {}) {
+    if (usingControlled) return; // parent drives data
+    if (!sessionRef.current) return;
 
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-            setIsLoading(false);
-            return;
-        }
+    const token = sessionRef.current.access_token;
+    const liveWindow = typeof opts.liveWindow === "number" ? opts.liveWindow : 10;
 
-        const { data, error: checkError } = await supabase
-            .from('user_integrations')
-            .select('id')
-            .eq('user_id', session.user.id)
-            .eq('provider', 'google-health')
-            .maybeSingle();
+    setLoading(true);
+    setErrMsg("");
 
-        if (checkError) {
-            setError('Could not verify integration status.');
-            setIsConnected(false);
-            setIsChecked(false);
-        } else if (data) {
-            setIsConnected(true);
-            setIsChecked(true);
-            fetchSteps(session.access_token); // fetch with tz
-        } else {
-            setIsConnected(false);
-            setIsChecked(false);
-        }
-        setIsLoading(false);
-    }, []);
+    try {
+      const res = await fetch(
+        `/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(
+          tz
+        )}&liveWindow=${liveWindow}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const json = await res.json();
 
-    useEffect(() => {
-        checkIntegrationStatus();
-    }, [checkIntegrationStatus]);
+      if (res.ok && typeof json.steps === "number") {
+        setSteps((prev) => {
+          if (prev !== json.steps) {
+            lastStepChangeAt.current = Date.now();
+          }
+          return json.steps;
+        });
+      } else if (!res.ok && (res.status === 404 || json?.error === "Google Health not connected")) {
+        setConnected(false);
+        clearAllTimers();
+      } else {
+        setErrMsg(json?.error || "Failed to fetch steps.");
+      }
+    } catch (e) {
+      setErrMsg("Network error getting steps.");
+    } finally {
+      setLoading(false);
+      scheduleNextPoll();
+    }
+  }
 
-    const handleToggle = async (e) => {
-        const isNowChecked = e.target.checked;
-        setIsChecked(isNowChecked);
+  function scheduleNextPoll() {
+    if (usingControlled) return;
+    if (!connected) return;
 
-        if (isNowChecked) {
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (!session) throw new Error("User session not found.");
+    // If steps changed in the last 5 min => poll in 45s; otherwise 3 min
+    const now = Date.now();
+    const active = now - (lastStepChangeAt.current || 0) < 5 * 60 * 1000;
+    const nextMs = active ? 45 * 1000 : 3 * 60 * 1000;
 
-                const response = await fetch('/.netlify/functions/google-auth', {
-                    headers: { 'Authorization': `Bearer ${session.access_token}` }
-                });
+    if (activeTimer.current) clearTimeout(activeTimer.current);
+    activeTimer.current = setTimeout(() => fetchStepsNow({ liveWindow: 10 }), nextMs);
 
-                if (!response.ok) throw new Error('Could not get auth URL from server.');
+    if (hourlyTimer.current) clearInterval(hourlyTimer.current);
+    hourlyTimer.current = setInterval(() => fetchStepsNow({ liveWindow: 15 }), 60 * 60 * 1000);
+  }
 
-                const data = await response.json();
-                window.location.href = data.authUrl;
+  function setupMidnightTick() {
+    if (usingControlled) return;
+    const localNow = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+    const next = new Date(localNow);
+    next.setDate(localNow.getDate() + 1);
+    next.setHours(0, 0, 5, 0); // 5s after midnight
+    const msToNext = Math.max(1000, next - localNow);
 
-            } catch (err) {
-                setError("Failed to start connection process.");
-                setIsChecked(false);
-            }
-        } else {
-            setIsLoading(true);
-            const { data: { session } } = await supabase.auth.getSession();
-            try {
-                await fetch('/.netlify/functions/delete-integration', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`
-                    },
-                    body: JSON.stringify({ provider: 'google-health' })
-                });
-                setIsConnected(false);
-                setStepCount(null);
-            } catch (err) {
-                setError("Failed to disconnect.");
-                setIsChecked(true);
-            }
-            setIsLoading(false);
-        }
+    if (midnightTimer.current) clearTimeout(midnightTimer.current);
+    midnightTimer.current = setTimeout(() => {
+      fetchStepsNow({ liveWindow: 10 });
+      if (dayTicker.current) clearInterval(dayTicker.current);
+      dayTicker.current = setInterval(() => fetchStepsNow({ liveWindow: 10 }), 24 * 60 * 60 * 1000);
+    }, msToNext);
+  }
+
+  function setupVisibilityHandler() {
+    const onVis = () => {
+      if (!document.hidden) {
+        fetchStepsNow({ liveWindow: 10 });
+      }
     };
+    document.addEventListener("visibilitychange", onVis);
+    // store remover on the function object (no TS cast needed)
+    setupVisibilityHandler._remover = onVis;
+  }
 
-    return (
-        <div className="card">
-            <h2>Connected Services</h2>
-            {error && <p className="error-message small">{error}</p>}
-            <div className="integration-row">
-                <div className="integration-label">
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="google-logo">
-                        <title id="google-logo">Google G Logo</title>
-                        <path d="M17.64 9.20455C17.64 8.56682 17.5827 7.95273 17.4764 7.36364H9V10.845H13.8436C13.635 11.97 13.0009 12.9232 12.0477 13.5609V15.8195H14.9564C16.6582 14.2527 17.64 11.9455 17.64 9.20455Z" fill="#4285F4"/>
-                        <path d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5609C11.2418 14.1018 10.2109 14.4205 9 14.4205C6.96273 14.4205 5.22091 13.0177 4.63455 11.1805H1.61636V13.5091C3.10636 16.2491 5.82727 18 9 18Z" fill="#34A853"/>
-                        <path d="M4.63455 11.1805C4.42636 10.5664 4.30909 9.90409 4.30909 9.20455C4.30909 8.505 4.42636 7.84273 4.63455 7.22864V4.89909H1.61636C0.978182 6.13773 0.6 7.62591 0.6 9.20455C0.6 10.7832 0.978182 12.2714 1.61636 13.5091L4.63455 11.1805Z" fill="#FBBC05"/>
-                        <path d="M9 3.98864C10.3209 3.98864 11.5077 4.45591 12.4782 5.385L15.0218 2.84045C13.4673 1.37818 11.43 0.409091 9 0.409091C5.82727 0.409091 3.10636 2.15909 1.61636 4.90091L4.63455 7.22864C5.22091 5.39182 6.96273 3.98864 9 3.98864Z" fill="#EA4335"/>
-                    </svg>
-                    <span>Google Health</span>
-                </div>
-                <label className="toggle-switch">
-                    <input type="checkbox" checked={isChecked} onChange={handleToggle} disabled={isLoading} />
-                    <span className="slider"></span>
-                </label>
-            </div>
-            {isConnected && (
-                <div className="integration-data">
-                    <hr />
-                    {isFetchingSteps ? (
-                        <div className="loader" style={{margin: '1rem auto'}}></div>
-                    ) : (
-                        <div className="step-count-display">
-                            <span className="steps">{stepCount !== null ? stepCount.toLocaleString() : '...'}</span>
-                            <span className="label">Steps Today</span>
-                        </div>
-                    )}
-                </div>
-            )}
+  function removeVisibilityHandler() {
+    const onVis = setupVisibilityHandler._remover;
+    if (onVis) document.removeEventListener("visibilitychange", onVis);
+  }
+
+  function clearAllTimers() {
+    if (activeTimer.current) clearTimeout(activeTimer.current);
+    if (hourlyTimer.current) clearInterval(hourlyTimer.current);
+    if (midnightTimer.current) clearTimeout(midnightTimer.current);
+    if (dayTicker.current) clearInterval(dayTicker.current);
+    activeTimer.current = null;
+    hourlyTimer.current = null;
+    midnightTimer.current = null;
+    dayTicker.current = null;
+  }
+
+  // --- Toggle handlers ---
+  const handleToggle = async (e) => {
+    const next = e.target.checked;
+
+    if (usingControlled && typeof onToggleGoogle === "function") {
+      onToggleGoogle(next);
+      return;
+    }
+
+    // Uncontrolled internal flow:
+    if (!sessionRef.current) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      sessionRef.current = sessionData?.session || null;
+      if (!sessionRef.current) return;
+    }
+    const token = sessionRef.current.access_token;
+
+    if (next) {
+      setErrMsg("");
+      try {
+        const start = await fetch("/.netlify/functions/google-auth", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await start.json();
+        if (start.ok && json?.authUrl) {
+          window.location.href = json.authUrl;
+        } else {
+          setErrMsg(json?.error || "Could not start Google authorization.");
+        }
+      } catch {
+        setErrMsg("Network error starting Google authorization.");
+      }
+    } else {
+      clearAllTimers();
+      setLoading(true);
+      setErrMsg("");
+      try {
+        const res = await fetch("/.netlify/functions/delete-integration", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ provider: "google-health" }),
+        });
+        if (res.ok) {
+          setConnected(false);
+          setSteps(null);
+        } else {
+          const j = await res.json().catch(() => ({}));
+          setErrMsg(j?.error || "Failed to disconnect.");
+          setConnected(true);
+        }
+      } catch {
+        setErrMsg("Network error disconnecting.");
+        setConnected(true);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // --- Render ---
+  return (
+    <div className="card">
+      <div className="card-header flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-slate-100">Connected Services</h3>
+        <div className="flex items-center gap-3">
+          <img
+            src="https://www.gstatic.com/images/branding/product/2x/google_g_48dp.png"
+            alt="Google"
+            width="18"
+            height="18"
+            style={{ opacity: 0.9 }}
+          />
+          <label className="text-slate-200">Google Health</label>
+          <label className="switch">
+            <input
+              type="checkbox"
+              onChange={handleToggle}
+              checked={!!viewConnected}
+            />
+            <span className="slider round" />
+          </label>
         </div>
-    );
+      </div>
+
+      <div className="card-content mt-3">
+        {!viewConnected ? (
+          <p className="text-slate-400 text-sm">
+            Connect to Google Health to show your daily steps.
+          </p>
+        ) : (
+          <div className="flex items-baseline justify-between">
+            <div>
+              <div className="text-slate-400 text-xs uppercase tracking-wide">
+                Steps Today
+              </div>
+              <div className="text-slate-100 text-2xl font-bold">
+                {viewLoading && viewSteps == null ? "…" : (viewSteps ?? 0).toLocaleString()}
+              </div>
+            </div>
+            {viewLoading ? (
+              <div className="text-slate-500 text-xs">Updating…</div>
+            ) : (
+              <div className="text-slate-500 text-xs">
+                {errMsg ? <span className="text-amber-300">{errMsg}</span> : "Live (≈10 min window)"}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
-export default Integrations;
+/* Minimal styles for the toggle if not already present:
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #334155; transition: .2s; border-radius: 9999px; }
+.slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+  background-color: white; transition: .2s; border-radius: 9999px; }
+input:checked + .slider { background-color: #22c55e; }
+input:checked + .slider:before { transform: translateX(20px); }
+*/
