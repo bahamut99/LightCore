@@ -54,7 +54,9 @@ function Dashboard({ onSwitchView }) {
   return (
     <div id="app-container">
       <LightcoreMatrix logCount={dashboardData?.logCount || 0} />
-      <Header />
+      {/* Pass the switch callback so the header "Cortex Mode" button can use it */}
+      <Header onSwitchView={onSwitchView} />
+
       <main className="main-container">
         <div className="left-column">
           <WeeklySummary isLoading={isLoading} data={dashboardData?.weeklySummaryData} />
@@ -81,10 +83,8 @@ function Dashboard({ onSwitchView }) {
         </div>
       </main>
 
+      {/* Footer cleaned up — big Neural-Cortex CTA removed */}
       <div className="footer">
-        <button onClick={onSwitchView} className="header-btn" style={{ marginRight: '1rem' }}>
-          Switch to Neural-Cortex
-        </button>
         <a href="about.html" className="footer-link">What is LightCore?</a>
         <span className="footer-separator">|</span>
         <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer" className="footer-link">

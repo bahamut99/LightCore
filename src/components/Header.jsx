@@ -1,20 +1,21 @@
 import React from 'react';
 import { supabase } from '../supabaseClient.js';
 
-function Header() {
+function Header({ onSwitchView }) {
   const handleLogout = async (e) => {
     e.preventDefault();
     await supabase.auth.signOut();
+    // Optional: hard redirect to splash after sign-out
+    window.location.href = '/';
   };
 
-  const handleNavigateToChamber = async (e) => {
+  const handleCortexMode = (e) => {
     e.preventDefault();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      sessionStorage.setItem('supabase.auth.token', session.access_token);
-      window.location.href = '/resonance-chamber.html';
+    if (typeof onSwitchView === 'function') {
+      onSwitchView();
     } else {
-      alert('Could not find active session. Please log in again.');
+      // Fallback: if no callback provided, try a route (adjust if your route differs)
+      window.location.href = '/neural-cortex';
     }
   };
 
@@ -26,13 +27,20 @@ function Header() {
         style={{ height: '44px' }}
       />
       <h1>LightCore - Your Bio Digital Twin</h1>
+
       <div className="header-actions">
         <a href="/settings.html" className="header-btn">Settings</a>
-        <a href="#" className="header-btn" onClick={handleNavigateToChamber}>Resonance Core</a>
-        <a href="#" id="logout-link" className="header-btn" onClick={handleLogout}>Log Out</a>
+        {/* NEW: replaces "Resonance Core" and uses the compact header button style */}
+        <button className="header-btn" onClick={handleCortexMode}>
+          Cortex Mode
+        </button>
+        <a href="#" id="logout-link" className="header-btn" onClick={handleLogout}>
+          Log Out
+        </a>
       </div>
     </div>
   );
 }
 
 export default Header;
+
