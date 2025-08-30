@@ -183,6 +183,7 @@ button:disabled {
   font-family: 'Inter', sans-serif;
   cursor: pointer;
   line-height: 1.5;
+  white-space: nowrap;
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
