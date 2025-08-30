@@ -17,23 +17,21 @@ function Trends({ range, setRange }) {
     }
 
     try {
-      const response = await fetch(`/.netlify/functions/get-chart-data?range=${range}`, {
+      const res = await fetch(`/.netlify/functions/get-chart-data?range=${range}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      if (!response.ok) throw new Error('Failed to fetch chart data');
-      const data = await response.json();
+      if (!res.ok) throw new Error('Failed to fetch chart data');
+      const data = await res.json();
       setTrendsData(data);
-    } catch (error) {
-      console.error('Error fetching chart data:', error);
+    } catch (err) {
+      console.error('Error fetching chart data:', err);
       setTrendsData(null);
     } finally {
       setIsTrendsLoading(false);
     }
   }, [range]);
 
-  useEffect(() => {
-    fetchChartData();
-  }, [fetchChartData]);
+  useEffect(() => { fetchChartData(); }, [fetchChartData]);
 
   useEffect(() => {
     const canvases = {
@@ -42,75 +40,93 @@ function Trends({ range, setRange }) {
       physical: document.getElementById('physicalChart'),
     };
 
-    // Destroy previous charts
-    Object.values(chartInstances.current).forEach((c) => c?.destroy());
+    // Destroy any previous charts
+    Object.values(chartInstances.current).forEach(c => c?.destroy());
 
-    if (trendsData && canvases.clarity && canvases.immune && canvases.physical) {
-      const timeUnit = range === 1 ? 'hour' : 'day';
+    if (!trendsData || !canvases.clarity || !canvases.immune || !canvases.physical) return;
 
-      const commonOptions = {
-        maintainAspectRatio: false,
-        scales: {
-          y: {
-            beginAtZero: true,
-            max: 10,
-            ticks: { color: '#9CA3AF', stepSize: 2 },
-            grid: { color: 'rgba(148,163,184,0.08)' },
-          },
-          x: {
-            type: 'time',
-            time: { unit: timeUnit },
-            ticks: { color: '#9CA3AF' },
-            grid: { display: false },
-          },
-        },
-        elements: {
-          point: { radius: 3, hoverRadius: 5 },
-        },
-        plugins: {
-          legend: { display: false },
-          // Title is set per chart in renderChart
-          tooltip: { enabled: true },
-          // If chartjs-plugin-datalabels is globally registered anywhere,
-          // this ensures it stays off (prevents those tiny numbers).
-          datalabels: { display: false },
-        },
-      };
+    // Build proper {x,y} points so the time scale positions them by timestamp
+    const toPoints = (labels, values) =>
+      labels.map((ts, i) => ({ x: new Date(ts), y: values[i] }));
 
-      chartInstances.current.clarity = renderChart(
-        canvases.clarity,
-        'Mental Clarity',
-        trendsData.labels,
-        trendsData.clarityData,
-        '#38bdf8',
-        commonOptions
-      );
-      chartInstances.current.immune = renderChart(
-        canvases.immune,
-        'Immune Defense',
-        trendsData.labels,
-        trendsData.immuneData,
-        '#facc15',
-        commonOptions
-      );
-      chartInstances.current.physical = renderChart(
-        canvases.physical,
-        'Physical Readiness',
-        trendsData.labels,
-        trendsData.physicalData,
-        '#4ade80',
-        commonOptions
-      );
+    const timeUnit = range === 1 ? 'hour' : 'day';
+
+    // For 1D, lock the axis to 00:00..24:00 of today so 12:01 AM sits at the very start.
+    let xMin, xMax;
+    if (range === 1) {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      xMin = start;
+      xMax = end;
     }
 
-    return () => Object.values(chartInstances.current).forEach((c) => c?.destroy());
+    const clarityPts   = toPoints(trendsData.labels, trendsData.clarityData);
+    const immunePts    = toPoints(trendsData.labels, trendsData.immuneData);
+    const physicalPts  = toPoints(trendsData.labels, trendsData.physicalData);
+
+    const fmtDate = (ts) =>
+      new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const fmtTime = (ts) =>
+      new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+    const commonOptions = {
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 10,
+          ticks: { color: '#9CA3AF', stepSize: 2 },
+          grid: { color: 'rgba(148,163,184,0.08)' },
+        },
+        x: {
+          type: 'time',
+          time: { unit: timeUnit },
+          distribution: 'linear', // space points by actual time
+          ticks: { color: '#9CA3AF' },
+          grid: { display: false },
+          ...(range === 1 ? { min: xMin, max: xMax } : {}),
+        },
+      },
+      elements: { point: { radius: 3, hoverRadius: 5 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: true,
+          callbacks: {
+            // Title: time for 1D, date for multi-day
+            title: (items) => {
+              const ts = items?.[0]?.parsed?.x;
+              if (!ts && ts !== 0) return '';
+              return range === 1 ? fmtTime(ts) : fmtDate(ts);
+            },
+            // Label: metric + value only
+            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}`,
+          },
+        },
+        // Ensure data labels plugin never shows tiny numbers (if globally registered elsewhere)
+        datalabels: { display: false },
+      },
+    };
+
+    chartInstances.current.clarity = renderChart(
+      canvases.clarity, 'Mental Clarity', clarityPts, '#38bdf8', commonOptions
+    );
+    chartInstances.current.immune = renderChart(
+      canvases.immune, 'Immune Defense', immunePts, '#facc15', commonOptions
+    );
+    chartInstances.current.physical = renderChart(
+      canvases.physical, 'Physical Readiness', physicalPts, '#4ade80', commonOptions
+    );
+
+    return () => Object.values(chartInstances.current).forEach(c => c?.destroy());
   }, [trendsData, range]);
 
-  function renderChart(canvas, label, labels, data, hexColor, options) {
-    if (!canvas) return null;
+  function renderChart(canvas, label, points, hexColor, options) {
     const ctx = canvas.getContext('2d');
 
-    // nice gradient fill
+    // Gradient fill
     const gradient = ctx.createLinearGradient(0, 0, 0, 180);
     const r = parseInt(hexColor.slice(1, 3), 16);
     const g = parseInt(hexColor.slice(3, 5), 16);
@@ -121,23 +137,21 @@ function Trends({ range, setRange }) {
     return new Chart(ctx, {
       type: 'line',
       data: {
-        labels,
-        datasets: [
-          {
-            label,
-            data,
-            backgroundColor: gradient,
-            borderColor: hexColor,
-            borderWidth: 2,
-            pointRadius: 3,
-            pointBackgroundColor: hexColor,
-            fill: true,
-            tension: 0.35,
-            spanGaps: true,
-            // kill any accidental data labels at the dataset level too
-            datalabels: { display: false },
-          },
-        ],
+        // no separate labels—points carry their own x value
+        datasets: [{
+          label,
+          data: points, // [{x: Date, y: number}, ...]
+          backgroundColor: gradient,
+          borderColor: hexColor,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointBackgroundColor: hexColor,
+          fill: true,
+          tension: 0.35,
+          spanGaps: true,
+          datalabels: { display: false },
+          parsing: true, // Chart.js will read {x,y}
+        }],
       },
       options: {
         ...options,
@@ -169,15 +183,9 @@ function Trends({ range, setRange }) {
         <div className="loader" style={{ margin: '8rem auto' }} />
       ) : (
         <>
-          <div className="chart-container">
-            <canvas id="clarityChart" />
-          </div>
-          <div className="chart-container">
-            <canvas id="immuneChart" />
-          </div>
-          <div className="chart-container">
-            <canvas id="physicalChart" />
-          </div>
+          <div className="chart-container"><canvas id="clarityChart" /></div>
+          <div className="chart-container"><canvas id="immuneChart" /></div>
+          <div className="chart-container"><canvas id="physicalChart" /></div>
         </>
       )}
     </div>
@@ -185,3 +193,4 @@ function Trends({ range, setRange }) {
 }
 
 export default Trends;
+
