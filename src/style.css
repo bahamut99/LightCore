@@ -361,3 +361,57 @@ input:checked + .slider:before{ transform:translateX(20px); }
 .card-close-btn:hover{ color:#F9FAFB; background:#1F2937; box-shadow:0 0 0 2px rgba(59,130,246,.35) inset; }
 .card-close-btn:active{ transform:scale(.96); }
 .card-close-btn:focus{ outline:none; box-shadow:0 0 0 2px #3B82F6; }
+
+/* ---- Header fixes: keep buttons visible, same size, same baseline ---- */
+.header-container{
+  /* keep header within the same visual width as the app */
+  max-width: 1400px;            /* adjust if you prefer 1500/1600 */
+  margin: 0 auto 1.5rem;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-container h1{
+  /* allow the title to give space back to the buttons */
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* make the buttons sit perfectly level and size uniformly */
+.header-actions{
+  margin-left: 0;               /* we already use flex space with the title */
+  display: flex;
+  align-items: center;          /* keeps baselines aligned */
+  gap: 8px;
+  flex: 0 0 auto;
+  white-space: nowrap;          /* no wrapping of buttons */
+}
+
+.header-actions .header-btn{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;                  /* shrink to fit text */
+  padding: 0.4rem 0.8rem;       /* tighter so ‘Cortex Mode’ isn’t extra wide */
+  min-height: 36px;
+  line-height: 1;               /* eliminates vertical wobble */
+  border-radius: 10px;          /* same shape for all */
+}
+
+/* keep the whole app comfortably within the viewport */
+.main-container{
+  max-width: 1400px;            /* match header for a tidy frame */
+  margin: 0 auto;
+  padding: 0 12px;
+}
+
+/* optional: on narrower screens, slightly shrink the title so buttons stay visible */
+@media (max-width: 1280px){
+  .header-container h1{ font-size: 1.3rem; }
+  .header-actions .header-btn{ padding: 0.35rem 0.7rem; }
+}
