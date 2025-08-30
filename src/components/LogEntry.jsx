@@ -71,24 +71,18 @@ function LogEntry({ stepCount, onLogSubmitted }) {
       const body = await res.json();
       const newLog = body?.data ?? body; // supports either shape
 
-      // paint the analysis card
-      setResults(newLog);
-
-      // clear the form
-      setLog('');
+      setResults(newLog);        // paint the analysis card
+      setLog('');               // clear the form
       setSleepHours('');
       setSleepQuality('');
 
       // notify parent/dashboard after a tick so the card can render first
       setTimeout(() => {
-        if (onLogSubmitted) {
-          onLogSubmitted();
-        } else {
-          window.dispatchEvent(new CustomEvent('newLogSubmitted'));
-        }
+        if (onLogSubmitted) onLogSubmitted();
+        else window.dispatchEvent(new CustomEvent('newLogSubmitted'));
       }, 100);
 
-      // fire-and-forget event parsing (no await)
+      // fire-and-forget event parsing
       fetch('/.netlify/functions/parse-events', {
         method: 'POST',
         headers: {
@@ -163,9 +157,19 @@ function LogEntry({ stepCount, onLogSubmitted }) {
         </form>
       </div>
 
-      {/* LightCore Analysis card (appears after successful submit) */}
+      {/* LightCore Analysis card (temporary; closable) */}
       {results && (
         <div className="card" id="results">
+          {/* Close button */}
+          <button
+            type="button"
+            aria-label="Close analysis"
+            className="card-close-btn"
+            onClick={() => setResults(null)}
+          >
+            ×
+          </button>
+
           <h2>LightCore Analysis</h2>
           <div className="score">
             <span className="label">Mental Clarity:</span>
