@@ -184,6 +184,7 @@ button:disabled {
   cursor: pointer;
   line-height: 1.5;
   white-space: nowrap;
+  vertical-align: middle;
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
