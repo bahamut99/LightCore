@@ -76,7 +76,7 @@
 
       function setHomeHref(view){
         // Classic = "/", Neural = "/resonance-chamber.html"
-        const href = view === 'neural' ? '/resonance-chamber.html' : '/';
+        const href = view === 'neural' ? 'src/components/NeuralCortex.jsx' : '/';
         const link = $('#homeLink');
         if (link) link.setAttribute('href', href);
       }
