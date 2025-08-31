@@ -4,6 +4,7 @@
 // - Guidance fetch (throttled)
 // - Realtime logs + nudge glyphs
 // - Local-timezone Google Steps fetch: on-load + every 120s
+// - Settings drawer opens on the LEFT; selected UI preference stays “lit”
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -96,15 +97,20 @@ const neoBtnStyle = {
   transition: 'transform .12s ease, box-shadow .12s ease, border-color .12s ease',
 };
 
-function NeoButton({ as = 'button', href, children, onClick, title, style = {} }) {
+// UPDATED: supports `active` state so a selection stays “lit”
+function NeoButton({ as = 'button', href, children, onClick, title, style = {}, active = false }) {
   const [hover, setHover] = useState(false);
+  const baseBorder = active ? '#38e8ff' : 'rgba(0,240,255,0.35)';
+  const hoverBorder = active ? '#38e8ff' : 'rgba(0,240,255,0.6)';
+
   const s = {
     ...neoBtnStyle,
     ...style,
-    boxShadow: hover ? '0 0 12px rgba(0,240,255,0.35)' : '0 0 6px rgba(0,240,255,0.15)',
-    borderColor: hover ? 'rgba(0,240,255,0.6)' : 'rgba(0,240,255,0.35)',
+    boxShadow: (hover || active) ? '0 0 12px rgba(0,240,255,0.35)' : '0 0 6px rgba(0,240,255,0.15)',
+    borderColor: hover ? hoverBorder : baseBorder,
     transform: hover ? 'translateY(-1px)' : 'translateY(0)',
   };
+
   if (as === 'a') {
     return (
       <a
@@ -157,8 +163,9 @@ function LeftStack({ onSwitchView, onOpenSettings }) {
   );
 }
 
-/* ------------------------- Settings Drawer ------------------------- */
+/* ------------------------- Settings Drawer (LEFT) ------------------------- */
 
+// UPDATED: drawer opens on the LEFT and uses `active` to keep the selection lit
 function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, currentUIPref }) {
   if (!open) return null;
   return (
@@ -177,11 +184,11 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
         style={{
           position: 'absolute',
           top: 0,
-          right: 0,
+          left: 0, // drawer on the left
           width: '420px',
           height: '100vh',
           background: 'rgba(10, 25, 47, 0.92)',
-          borderLeft: '1px solid rgba(0,240,255,0.25)',
+          borderRight: '1px solid rgba(0,240,255,0.25)',
           boxShadow: '0 0 24px rgba(0,240,255,0.15)',
           backdropFilter: 'blur(10px)',
           padding: '1rem 1rem 1.5rem',
@@ -229,28 +236,25 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
           >
             UI PREFERENCE
           </h3>
+
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <NeoButton
               onClick={() => onSetUIPref('neural')}
-              style={{
-                flex: 1,
-                borderColor:
-                  currentUIPref === 'neural' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
-              }}
+              style={{ flex: 1 }}
+              active={currentUIPref === 'neural'}
             >
               NEURAL-CORTEX
             </NeoButton>
+
             <NeoButton
               onClick={() => onSetUIPref('classic')}
-              style={{
-                flex: 1,
-                borderColor:
-                  currentUIPref === 'classic' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
-              }}
+              style={{ flex: 1 }}
+              active={currentUIPref === 'classic'}
             >
               CLASSIC
             </NeoButton>
           </div>
+
           <p style={{ color: '#98a9c1', fontSize: 12, marginTop: 8 }}>
             Your choice loads automatically on next sign-in.
           </p>
@@ -778,6 +782,24 @@ function NeuralCortex({ onSwitchView }) {
     return () => document.head.removeChild(style);
   }, []);
 
+  // NEW: load saved UI preference so the correct button is lit on open
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase
+          .from('profiles')
+          .select('preferred_view')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (data?.preferred_view) setUiPref(data.preferred_view);
+      } catch {
+        /* noop */
+      }
+    })();
+  }, []);
+
   const getAuthHeader = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     return session ? { Authorization: `Bearer ${session.access_token}` } : {};
@@ -1006,7 +1028,7 @@ function NeuralCortex({ onSwitchView }) {
   };
 
   const onSetUIPref = async (view) => {
-    setUiPref(view);
+    setUiPref(view); // keep the button "lit" immediately
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -1095,3 +1117,4 @@ function NeuralCortex({ onSwitchView }) {
 }
 
 export default NeuralCortex;
+
