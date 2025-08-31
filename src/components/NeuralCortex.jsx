@@ -1,11 +1,8 @@
 // src/components/NeuralCortex.jsx
-// LightCore — Neural-Cortex view
-// - UI preference write-through to profiles.preferred_view
-// - Guidance fetch (throttled)
-// - Realtime logs + nudge glyphs
-// - Local-timezone Google Steps fetch: on-load + every 120s
-// - Settings drawer opens on the LEFT; selected UI preference stays visibly active
-// - Centered “×” close button
+// LightCore — Neural-Cortex view (enhanced center globe)
+// - Custom shader "LightCore" with intro pulse, atmosphere halo, rotating ring
+// - Left-anchored Settings drawer (close "×" centered)
+// - UI preference highlight sticks; guidance/steps/nudges unchanged
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -104,7 +101,7 @@ function NeoButton({ as = 'button', href, children, onClick, title, style = {} }
     ...neoBtnStyle,
     ...style,
     boxShadow: hover ? '0 0 12px rgba(0,240,255,0.35)' : '0 0 6px rgba(0,240,255,0.15)',
-    borderColor: hover ? 'rgba(0,240,255,0.6)' : style.borderColor || 'rgba(0,240,255,0.35)',
+    borderColor: hover ? 'rgba(0,240,255,0.6)' : 'rgba(0,240,255,0.35)',
     transform: hover ? 'translateY(-1px)' : 'translateY(0)',
   };
   if (as === 'a') {
@@ -163,13 +160,8 @@ function LeftStack({ onSwitchView, onOpenSettings }) {
 
 function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, currentUIPref }) {
   if (!open) return null;
-
-  const activeBorder = '#38e8ff';
-  const selectedGlow = '0 0 12px rgba(56,232,255,0.4)';
-
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 20, pointerEvents: 'none' }}>
-      {/* overlay */}
       <div
         onClick={onClose}
         style={{
@@ -180,12 +172,11 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
           pointerEvents: 'auto',
         }}
       />
-      {/* drawer (LEFT side) */}
       <div
         style={{
           position: 'absolute',
           top: 0,
-          left: 0,
+          left: 0,              // ⬅ anchored left
           width: '420px',
           height: '100vh',
           background: 'rgba(10, 25, 47, 0.92)',
@@ -212,21 +203,20 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
           <button
             onClick={onClose}
             title="Close"
+            aria-label="Close settings"
             style={{
               width: 32,
               height: 32,
-              padding: 0,
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              lineHeight: 1,
-              fontSize: 18,
+              justifyContent: 'center', // ⬅ centers the glyph perfectly
               color: '#00f0ff',
               background: 'transparent',
               border: '1px solid rgba(0,240,255,0.35)',
               borderRadius: 8,
               cursor: 'pointer',
-              boxShadow: '0 0 6px rgba(0,240,255,0.15)',
+              lineHeight: 1,
+              fontSize: 18,
             }}
           >
             ×
@@ -249,8 +239,11 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
               onClick={() => onSetUIPref('neural')}
               style={{
                 flex: 1,
-                borderColor: currentUIPref === 'neural' ? activeBorder : 'rgba(0,240,255,0.35)',
-                boxShadow: currentUIPref === 'neural' ? selectedGlow : '0 0 6px rgba(0,240,255,0.15)',
+                borderColor: currentUIPref === 'neural' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
+                boxShadow:
+                  currentUIPref === 'neural'
+                    ? '0 0 12px rgba(0,240,255,0.35)'
+                    : '0 0 6px rgba(0,240,255,0.15)',
               }}
             >
               NEURAL-CORTEX
@@ -259,9 +252,11 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
               onClick={() => onSetUIPref('classic')}
               style={{
                 flex: 1,
-                borderColor: currentUIPref === 'classic' ? activeBorder : 'rgba(0,240,255,0.35)',
+                borderColor: currentUIPref === 'classic' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
                 boxShadow:
-                  currentUIPref === 'classic' ? selectedGlow : '0 0 6px rgba(0,240,255,0.15)',
+                  currentUIPref === 'classic'
+                    ? '0 0 12px rgba(0,240,255,0.35)'
+                    : '0 0 6px rgba(0,240,255,0.15)',
               }}
             >
               CLASSIC
@@ -501,11 +496,52 @@ function Hud({ item, onClose }) {
   );
 }
 
-/* ---------------------- Shaders ---------------------- */
+/* ---------------------- LightCore Shaders ---------------------- */
 
-const fresnelVertex = `
+// Displaced/pulsing sphere with Fresnel rim
+const coreVertex = `
+  uniform float uTime;
+  uniform float uPulse;
+  uniform float uDisplace;
   varying vec3 vNormal;
   varying vec3 vWorldPosition;
+
+  void main() {
+    vNormal = normalize(normalMatrix * normal);
+
+    // Gentle "breathing" displacement along the normal (kept cheap & stable)
+    float w = sin(uTime * 1.5 + position.y * 2.0) * 0.5 + 0.5;
+    vec3 displaced = position + normal * (uDisplace * (0.6 + 0.4 * w) * uPulse);
+
+    vec4 wPos = modelMatrix * vec4(displaced, 1.0);
+    vWorldPosition = wPos.xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+  }
+`;
+
+const coreFragment = `
+  uniform vec3 uCoreColor;
+  uniform vec3 uRimColor;
+  uniform float uPulse;
+  varying vec3 vNormal;
+  varying vec3 vWorldPosition;
+
+  void main() {
+    vec3 N = normalize(vNormal);
+    vec3 V = normalize(cameraPosition - vWorldPosition);
+    float ndotv = max(dot(N, V), 0.0);
+    float fres = pow(1.0 - ndotv, 3.0);
+
+    vec3 base = uCoreColor * (0.6 + 0.5 * uPulse);
+    vec3 color = base + uRimColor * fres * (1.0 + 1.2 * uPulse);
+    gl_FragColor = vec4(color, 0.98);
+  }
+`;
+
+// Thin, additive atmosphere shell
+const atmoVertex = `
+  varying vec3 vWorldPosition;
+  varying vec3 vNormal;
   void main() {
     vNormal = normalize(normalMatrix * normal);
     vec4 wPos = modelMatrix * vec4(position, 1.0);
@@ -513,71 +549,117 @@ const fresnelVertex = `
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
-const fresnelFragment = `
-  uniform float uHover;
+
+const atmoFragment = `
   uniform vec3 uColor;
-  varying vec3 vNormal;
   varying vec3 vWorldPosition;
+  varying vec3 vNormal;
   void main() {
-    vec3 viewDir = normalize(cameraPosition - vWorldPosition);
-    float ndotv = max(dot(normalize(vNormal), viewDir), 0.0);
-    float fresnel = pow(1.0 - ndotv, 2.0);
-    float rim = smoothstep(0.15, 1.0, fresnel);
-    float alpha = rim * 0.35 * mix(1.0, 2.1, clamp(uHover, 0.0, 1.0));
+    vec3 V = normalize(cameraPosition - vWorldPosition);
+    float fres = pow(1.0 - max(dot(normalize(vNormal), V), 0.0), 2.5);
+    float alpha = fres * 0.45;
     gl_FragColor = vec4(uColor, alpha);
   }
 `;
 
 /* -------------------- 3D Elements -------------------- */
 
-function Locus({ onLocusClick }) {
-  const groupRef = useRef();
-  const [hovered, setHovered] = useState(false);
-  useHoverCursor(hovered);
+// Next-level center globe
+function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, energy = 1 }) {
+  const group = useRef();
+  const coreRef = useRef();
+  const atmoRef = useRef();
+  const pulseRef = useRef(0);
 
   const uniforms = useMemo(
     () => ({
-      uHover: { value: 0.0 },
-      uColor: { value: new THREE.Color('#00f0ff') },
+      uTime: { value: 0 },
+      uPulse: { value: 0 },
+      uDisplace: { value: 0.28 }, // displacement amplitude
+      uCoreColor: { value: new THREE.Color(color) },
+      uRimColor: { value: new THREE.Color(rim) },
     }),
-    []
+    [color, rim]
   );
 
-  useFrame(() => {
-    if (!groupRef.current) return;
-    groupRef.current.rotation.y += 0.001;
-    uniforms.uHover.value = THREE.MathUtils.lerp(
-      uniforms.uHover.value,
-      hovered ? 1.0 : 0.0,
-      0.18
-    );
+  const atmoUniforms = useMemo(
+    () => ({ uColor: { value: new THREE.Color(rim) } }),
+    [rim]
+  );
+
+  // Intro "wake up" animation
+  useEffect(() => {
+    pulseRef.current = 0;
+  }, []);
+
+  useFrame((state, delta) => {
+    if (!group.current) return;
+
+    // Rotate slowly (slightly faster during wake)
+    group.current.rotation.y += 0.12 * delta * (0.8 + 0.4 * uniforms.uPulse.value);
+
+    // Animate shader time
+    uniforms.uTime.value += delta;
+
+    // Ease pulse to 1 on mount
+    uniforms.uPulse.value += (1 - uniforms.uPulse.value) * 0.05;
+
+    // Subtle breathing of atmosphere scale
+    if (atmoRef.current) {
+      const s = 1.055 + Math.sin(state.clock.elapsedTime * 0.9) * 0.005;
+      atmoRef.current.scale.setScalar(s);
+    }
+
+    // Slight scale “life” modulation influenced by energy (latest scores)
+    const base = 1 + Math.sin(state.clock.elapsedTime * 1.2) * 0.012 * energy;
+    group.current.scale.setScalar(base);
   });
 
+  // Equatorial luminous ring
+  const ring = useMemo(() => {
+    const g = new THREE.TorusGeometry(radius * 1.05, 0.06, 12, 120);
+    const m = new THREE.MeshBasicMaterial({
+      color: rim,
+      transparent: true,
+      opacity: 0.7,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.rotation.x = Math.PI / 2;
+    return mesh;
+  }, [radius, rim]);
+
   return (
-    <group ref={groupRef}>
-      <mesh
-        onClick={onLocusClick}
-        onPointerOver={() => setHovered(true)}
-        onPointerOut={() => setHovered(false)}
-      >
-        <icosahedronGeometry args={[3, 5]} />
-        <meshStandardMaterial color="#f0f0f0" metalness={0.9} roughness={0.05} />
-      </mesh>
-      <mesh
-        onClick={onLocusClick}
-        onPointerOver={() => setHovered(true)}
-        onPointerOut={() => setHovered(false)}
-      >
-        <icosahedronGeometry args={[3.03, 5]} />
+    <group ref={group} onClick={onClick}>
+      {/* Core */}
+      <mesh>
+        <sphereGeometry args={[radius, 96, 96]} />
         <shaderMaterial
-          vertexShader={fresnelVertex}
-          fragmentShader={fresnelFragment}
+          ref={coreRef}
+          vertexShader={coreVertex}
+          fragmentShader={coreFragment}
           uniforms={uniforms}
           transparent
           depthWrite={false}
-          blending={THREE.AdditiveBlending}
         />
       </mesh>
+
+      {/* Atmosphere halo */}
+      <mesh ref={atmoRef} scale={1.055}>
+        <sphereGeometry args={[radius * 1.02, 64, 64]} />
+        <shaderMaterial
+          vertexShader={atmoVertex}
+          fragmentShader={atmoFragment}
+          uniforms={atmoUniforms}
+          blending={THREE.AdditiveBlending}
+          transparent
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* Equatorial ring */}
+      <primitive object={ring} />
     </group>
   );
 }
@@ -669,7 +751,8 @@ function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, is
     const avg =
       ((log.clarity_score || 0) +
         (log.immune_score || 0) +
-        (log.physical_readiness_score || 0)) / 30;
+        (log.physical_readiness_score || 0)) /
+      30;
     return new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avg);
   }, [log]);
   useFrame(() => {
@@ -791,25 +874,6 @@ function NeuralCortex({ onSwitchView }) {
     style.innerHTML = hideScrollbarCSS;
     document.head.appendChild(style);
     return () => document.head.removeChild(style);
-  }, []);
-
-  // Load initial UI preference so the selection appears active immediately
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data } = await supabase
-            .from('profiles')
-            .select('preferred_view')
-            .eq('id', user.id)
-            .maybeSingle();
-          setUiPref(data?.preferred_view || 'neural');
-        }
-      } catch {
-        // ignore
-      }
-    })();
   }, []);
 
   const getAuthHeader = async () => {
@@ -974,12 +1038,17 @@ function NeuralCortex({ onSwitchView }) {
   }, [selectedItem]);
 
   const lightIntensities = useMemo(() => {
-    if (!latestScores) return { clarity: 0, immune: 0, physical: 0 };
+    if (!latestScores) return { clarity: 0, immune: 0, physical: 0, energy: 1 };
     const clamp10 = (v) => Math.min(10, v || 0);
+    const c = clamp10(latestScores.clarity_score);
+    const i = clamp10(latestScores.immune_score);
+    const p = clamp10(latestScores.physical_readiness_score);
+    const energy = (c + i + p) / 30; // 0..1 scale to modulate the core
     return {
-      clarity: clamp10(latestScores.clarity_score) * 30,
-      immune: clamp10(latestScores.immune_score) * 30,
-      physical: clamp10(latestScores.physical_readiness_score) * 30,
+      clarity: c * 30,
+      immune: i * 30,
+      physical: p * 30,
+      energy: 0.75 + energy * 0.5, // keep a nice baseline
     };
   }, [latestScores]);
 
@@ -1040,7 +1109,7 @@ function NeuralCortex({ onSwitchView }) {
   };
 
   const onSetUIPref = async (view) => {
-    setUiPref(view); // reflect instantly & keep the selected button lit
+    setUiPref(view);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -1084,7 +1153,16 @@ function NeuralCortex({ onSwitchView }) {
 
         {!isLoading && (
           <>
-            <Locus onLocusClick={handleLocusClick} />
+            {/* Upgraded center globe */}
+            <LightCore
+              radius={3}
+              color="#00e7ff"
+              rim="#9cf3ff"
+              energy={lightIntensities.energy}
+              onClick={handleLocusClick}
+            />
+
+            {/* Existing constellation ring & interactions */}
             <Constellation
               logs={logHistory}
               setSelectedItem={setSelectedItem}
@@ -1129,4 +1207,3 @@ function NeuralCortex({ onSwitchView }) {
 }
 
 export default NeuralCortex;
-
