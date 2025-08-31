@@ -1,7 +1,10 @@
 // src/components/NeuralCortex.jsx
-// LightCore — Neural-Cortex view (fixed 7-slot ring + drag-to-rotate + snap)
-// Center globe reduced ~20%; beams animate from core to each day.
-// All other UI (buttons, drawers, HUD, nudges) unchanged.
+// LightCore — Neural-Cortex view (enhanced center globe + 7-day ring)
+// - Center globe radius reduced ~20%
+// - Exactly 7 day-nodes around the core (last 7 calendar days)
+// - Each day has its own neon shell color + three inner dots (clarity/immune/physical brightness)
+// - Animated beams from the LightCore to each day-node
+// - All other UI (buttons, drawers, guide, HUD, nudges) unchanged
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -85,7 +88,7 @@ function lastNDays(n) {
   return out;
 }
 
-// Local YYYY-MM-DD
+// Local YYYY-MM-DD (avoid TZ surprises)
 function localKey(date) {
   const d = new Date(date);
   const y = d.getFullYear();
@@ -525,6 +528,7 @@ function Hud({ item, onClose }) {
 
 /* ---------------------- LightCore Shaders ---------------------- */
 
+// Displaced/pulsing sphere with Fresnel rim
 const coreVertex = `
   uniform float uTime;
   uniform float uPulse;
@@ -534,8 +538,11 @@ const coreVertex = `
 
   void main() {
     vNormal = normalize(normalMatrix * normal);
+
+    // Gentle "breathing" displacement along the normal (kept cheap & stable)
     float w = sin(uTime * 1.5 + position.y * 2.0) * 0.5 + 0.5;
     vec3 displaced = position + normal * (uDisplace * (0.6 + 0.4 * w) * uPulse);
+
     vec4 wPos = modelMatrix * vec4(displaced, 1.0);
     vWorldPosition = wPos.xyz;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
@@ -561,6 +568,7 @@ const coreFragment = `
   }
 `;
 
+// Thin, additive atmosphere shell
 const atmoVertex = `
   varying vec3 vWorldPosition;
   varying vec3 vNormal;
@@ -586,15 +594,17 @@ const atmoFragment = `
 
 /* -------------------- 3D Elements -------------------- */
 
+// Next-level center globe
 function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, energy = 1 }) {
   const group = useRef();
+  const coreRef = useRef();
   const atmoRef = useRef();
 
   const uniforms = useMemo(
     () => ({
       uTime: { value: 0 },
       uPulse: { value: 0 },
-      uDisplace: { value: 0.28 },
+      uDisplace: { value: 0.28 }, // displacement amplitude
       uCoreColor: { value: new THREE.Color(color) },
       uRimColor: { value: new THREE.Color(rim) },
     }),
@@ -603,23 +613,35 @@ function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, en
 
   const atmoUniforms = useMemo(() => ({ uColor: { value: new THREE.Color(rim) } }), [rim]);
 
+  // Intro "wake up" animation
   useEffect(() => {
     uniforms.uPulse.value = 0;
   }, []); // eslint-disable-line
 
   useFrame((state, delta) => {
     if (!group.current) return;
+
+    // Rotate slowly (slightly faster during wake)
     group.current.rotation.y += 0.12 * delta * (0.8 + 0.4 * uniforms.uPulse.value);
+
+    // Animate shader time
     uniforms.uTime.value += delta;
+
+    // Ease pulse to 1 on mount
     uniforms.uPulse.value += (1 - uniforms.uPulse.value) * 0.05;
+
+    // Subtle breathing of atmosphere scale
     if (atmoRef.current) {
       const s = 1.055 + Math.sin(state.clock.elapsedTime * 0.9) * 0.005;
       atmoRef.current.scale.setScalar(s);
     }
+
+    // Slight scale “life” modulation influenced by energy (latest scores)
     const base = 1 + Math.sin(state.clock.elapsedTime * 1.2) * 0.012 * energy;
     group.current.scale.setScalar(base);
   });
 
+  // Equatorial luminous ring
   const ring = useMemo(() => {
     const g = new THREE.TorusGeometry(radius * 1.05, 0.06, 12, 120);
     const m = new THREE.MeshBasicMaterial({
@@ -636,9 +658,11 @@ function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, en
 
   return (
     <group ref={group} onClick={onClick}>
+      {/* Core */}
       <mesh>
         <sphereGeometry args={[radius, 96, 96]} />
         <shaderMaterial
+          ref={coreRef}
           vertexShader={coreVertex}
           fragmentShader={coreFragment}
           uniforms={uniforms}
@@ -647,6 +671,7 @@ function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, en
         />
       </mesh>
 
+      {/* Atmosphere halo */}
       <mesh ref={atmoRef} scale={1.055}>
         <sphereGeometry args={[radius * 1.02, 64, 64]} />
         <shaderMaterial
@@ -659,6 +684,7 @@ function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, en
         />
       </mesh>
 
+      {/* Equatorial ring */}
       <primitive object={ring} />
     </group>
   );
@@ -744,7 +770,7 @@ function SynapticLinks({ selectedLog, events }) {
   );
 }
 
-/* ----- New: Day node + beams ----- */
+/* ----- New: Week ring nodes (7 days, each with inner tri-dots) ----- */
 
 const DAY_SHELL_COLORS = [
   '#00e7ff', // neon cyan
@@ -773,10 +799,16 @@ function DayNode({
   const ref = useRef();
   useHoverCursor(isHovered);
 
+  const baseEmissive = useMemo(() => {
+    const c = new THREE.Color(node.color);
+    const base = node.avg != null ? (node.avg / 10) * 0.8 + 0.2 : 0.15;
+    return c.multiplyScalar(1);
+  }, [node]);
+
+  // gentle pulse and hover/selected scale
   useFrame((state) => {
     if (!ref.current) return;
-    const pulse =
-      1 + Math.sin(state.clock.elapsedTime * 2.0) * 0.035 * (node.avg ? node.avg / 10 : 0.3);
+    const pulse = 1 + Math.sin(state.clock.elapsedTime * 2.0) * 0.035 * (node.avg ? node.avg / 10 : 0.3);
     const target = (isSelected ? 1.6 : isHovered ? 1.25 : 1.0) * pulse;
     const s = THREE.MathUtils.lerp(ref.current.scale.x, target, 0.15);
     ref.current.scale.setScalar(s);
@@ -790,7 +822,7 @@ function DayNode({
       ref={ref}
       onClick={(e) => {
         e.stopPropagation();
-        onSelect({ ...node, position });
+        onSelect(node);
       }}
       onPointerOver={(e) => {
         e.stopPropagation();
@@ -812,7 +844,7 @@ function DayNode({
         />
       </mesh>
 
-      {/* Tri-dots inside the node */}
+      {/* Tri-dots inside the node (clarity / immune / physical) */}
       <mesh position={[-0.08, 0.05, 0.06]}>
         <sphereGeometry args={[0.055, 16, 16]} />
         <meshStandardMaterial
@@ -847,7 +879,7 @@ function DayNode({
   );
 }
 
-// Glowing orb that travels along a quadratic curve (beam)
+// Little glow that travels along a quadratic bezier
 function BeamTraveler({ start, mid, end, offset = 0 }) {
   const dot = useRef();
   const s = useMemo(() => new THREE.Vector3(...start), [start]);
@@ -857,7 +889,8 @@ function BeamTraveler({ start, mid, end, offset = 0 }) {
   const tmp = new THREE.Vector3();
   useFrame(({ clock }) => {
     if (!dot.current) return;
-    const t = (Math.sin(clock.getElapsedTime() * 1.2 + offset) + 1) * 0.5;
+    const t = (Math.sin(clock.getElapsedTime() * 1.2 + offset) + 1) * 0.5; // 0..1 loop
+    // Quadratic Bezier: B(t) = (1-t)^2 s + 2(1-t)t m + t^2 e
     const it = 1 - t;
     tmp
       .copy(s)
@@ -881,13 +914,18 @@ function BeamTraveler({ start, mid, end, offset = 0 }) {
   );
 }
 
-// Beams from the core to each node (follow ring rotation)
+// Beams from the core to each node
 function LightBeams({ nodes, energy = 1 }) {
+  // nodes: [{position:[x,y,z]}]
   const beams = useMemo(() => {
     return nodes.map((n, i) => {
       const start = [0, 0, 0];
       const end = n.position;
-      const mid = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2 + 0.7, 0];
+      const mid = [
+        (start[0] + end[0]) / 2,
+        (start[1] + end[1]) / 2 + 0.7, // slight arc
+        0,
+      ];
       return { start, mid, end, key: `${n.key}-${i}` };
     });
   }, [nodes]);
@@ -912,94 +950,7 @@ function LightBeams({ nodes, energy = 1 }) {
   );
 }
 
-/* New: WeekRing with 7 fixed slots and **native** drag-to-rotate snapping */
-function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragStateChange }) {
-  const radius = 6;
-  const SLOTS = 7;
-  const slotAngle = (Math.PI * 2) / SLOTS;
-
-  // start so a node sits at 12 o'clock
-  const [ringAngle, setRingAngle] = useState(-Math.PI / 2);
-
-  // global drag state
-  const drag = useRef({ active: false, startX: 0, startAngle: 0 });
-
-  // compute fixed slot positions
-  const items = useMemo(() => {
-    const baseAngles = Array.from({ length: SLOTS }, (_, i) => i * slotAngle);
-    return weekNodes.map((n, i) => {
-      const angle = baseAngles[i] + ringAngle - Math.PI / 2;
-      const pos = [radius * Math.cos(angle), radius * Math.sin(angle), 0];
-      return { ...n, position: pos };
-    });
-  }, [weekNodes, ringAngle]);
-
-  // native window listeners avoid R3F's pointer-capture path
-  useEffect(() => {
-    const handleMove = (e) => {
-      if (!drag.current.active) return;
-      e.preventDefault();
-      const dx = (e.clientX ?? 0) - drag.current.startX;
-      const factor = 0.0032;
-      setRingAngle(drag.current.startAngle + dx * factor);
-    };
-
-    const endDrag = () => {
-      if (!drag.current.active) return;
-      drag.current.active = false;
-      setRingAngle((a) => Math.round(a / slotAngle) * slotAngle);
-      onDragStateChange?.(false);
-      document.body.style.userSelect = '';
-    };
-
-    window.addEventListener('pointermove', handleMove, { passive: false });
-    window.addEventListener('pointerup', endDrag, { passive: true });
-    window.addEventListener('pointercancel', endDrag, { passive: true });
-
-    return () => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', endDrag);
-      window.removeEventListener('pointercancel', endDrag);
-    };
-  }, [onDragStateChange]);
-
-  const startDrag = (e) => {
-    e.stopPropagation();
-    drag.current.active = true;
-    drag.current.startX = e.clientX ?? 0;
-    drag.current.startAngle = ringAngle;
-    onDragStateChange?.(true);
-    document.body.style.userSelect = 'none'; // prevent text selection while dragging
-  };
-
-  return (
-    <group onPointerDown={startDrag}>
-      {items.map((n) => (
-        <DayNode
-          key={n.key}
-          node={n}
-          position={n.position}
-          onSelect={onSelect}
-          isSelected={selected?.dayKey === n.key}
-          isHovered={hovered?.dayKey === n.key}
-          setHovered={setHovered}
-        />
-      ))}
-
-      {/* Light beams follow the nodes */}
-      <LightBeams nodes={items} energy={1} />
-
-      {/* invisible torus makes grabbing the ring easy */}
-      <mesh position={[0, 0, -0.01]}>
-        <torusGeometry args={[radius, 0.25, 8, 64]} />
-        <meshBasicMaterial transparent opacity={0} />
-      </mesh>
-    </group>
-  );
-}
-
-/* (Legacy) Constellation + LogNode (kept for rollback, not currently used) */
-
+// Keep original Constellation (unused now) in case you want to swap back quickly.
 function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, isHovered }) {
   const ref = useRef();
   useHoverCursor(isHovered);
@@ -1064,7 +1015,38 @@ function Constellation({ logs, setSelectedItem, selectedItem, setHoveredLog, hov
   }, [logs, setSelectedItem, selectedItem, setHoveredLog, hoveredLog]);
 }
 
-/* Reuse: +LOG button */
+/* New: WeekRing renders exactly 7 DayNode items */
+function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected }) {
+  const radius = 6;
+  const total = weekNodes.length;
+
+  const items = useMemo(() => {
+    return weekNodes.map((n, i) => {
+      const angle = ((i / total) * Math.PI * 2) - Math.PI / 2; // start at top
+      const pos = [radius * Math.cos(angle), radius * Math.sin(angle), 0];
+      return { ...n, position: pos };
+    });
+  }, [weekNodes, total]);
+
+  return (
+    <group>
+      {items.map((n) => (
+        <DayNode
+          key={n.key}
+          node={n}
+          position={n.position}
+          onSelect={onSelect}
+          isSelected={selected?.dayKey === n.key}
+          isHovered={hovered?.dayKey === n.key}
+          setHovered={setHovered}
+        />
+      ))}
+      {/* Light beams from core to each node */}
+      <LightBeams nodes={items} energy={1} />
+    </group>
+  );
+}
+
 function LogEntryButton({ onClick }) {
   const [hovered, setHovered] = useState(false);
   useHoverCursor(hovered);
@@ -1111,9 +1093,9 @@ function NeuralCortex({ onSwitchView }) {
   const [guideData, setGuideData] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [uiPref, setUiPref] = useState('neural');
-  const [ringDragging, setRingDragging] = useState(false); // NEW
 
   const lastGuideRequestRef = useRef(0);
+  const idleRef = useRef(null);
 
   useEffect(() => {
     document.body.style.margin = '0';
@@ -1223,6 +1205,7 @@ function NeuralCortex({ onSwitchView }) {
     }
   };
 
+  // Realtime + initial fetch
   useEffect(() => {
     fetchAllData();
 
@@ -1267,19 +1250,21 @@ function NeuralCortex({ onSwitchView }) {
         if (!cancelled && typeof data?.steps === 'number') {
           setStepCount(data.steps);
         }
-      } catch {}
+      } catch {
+        // ignore transient network errors
+      }
     };
 
-    tick();
+    tick(); // run immediately on mount
     timer = setInterval(tick, STEPS_POLL_MS);
 
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, []);
+  }, []); // steady polling
 
-  // Load day events when a (day) log is selected
+  // Load day events when a log is selected
   useEffect(() => {
     if (selectedItem && selectedItem.log) {
       (async () => {
@@ -1295,17 +1280,18 @@ function NeuralCortex({ onSwitchView }) {
   }, [selectedItem]);
 
   const lightIntensities = useMemo(() => {
-    if (!latestScores) return { clarity: 0, immune: 0, physical: 0, energy: 1 };
+    if (!latestScores)
+      return { clarity: 0, immune: 0, physical: 0, energy: 1 };
     const clamp10 = (v) => Math.min(10, v || 0);
     const c = clamp10(latestScores.clarity_score);
     const i = clamp10(latestScores.immune_score);
     const p = clamp10(latestScores.physical_readiness_score);
-    const energy = (c + i + p) / 30;
+    const energy = (c + i + p) / 30; // 0..1 scale to modulate the core
     return {
       clarity: c * 30,
       immune: i * 30,
       physical: p * 30,
-      energy: 0.75 + energy * 0.5,
+      energy: 0.75 + energy * 0.5, // keep a nice baseline
     };
   }, [latestScores]);
 
@@ -1379,6 +1365,7 @@ function NeuralCortex({ onSwitchView }) {
 
   /* ---------- Build the 7-day ring from logHistory ---------- */
   const weekNodes = useMemo(() => {
+    // Group latest log by local date
     const byDay = new Map();
     for (const log of logHistory) {
       const k = localKey(log.created_at);
@@ -1408,15 +1395,16 @@ function NeuralCortex({ onSwitchView }) {
     });
   }, [logHistory]);
 
-  // Selecting a day uses its latest log (if any)
+  // When a day is selected, use its latest log (if any) for the HUD/events
   const selectDay = (node) => {
     setSelectedItem({
       dayKey: node.key,
       log: node.log || null,
-      position: node.position || [0, 0, 0],
+      position: node.position || [0, 0, 0], // gets filled by WeekRing when rendered
     });
   };
 
+  // hoveredLog is reused to store {dayKey}
   const setHoveredDay = (nodeOrNull) => {
     setHoveredLog(nodeOrNull ? { dayKey: nodeOrNull.key } : null);
   };
@@ -1456,7 +1444,7 @@ function NeuralCortex({ onSwitchView }) {
 
         {!isLoading && (
           <>
-            {/* ~20% smaller center globe */}
+            {/* Shrunk center globe (~20% smaller) */}
             <LightCore
               radius={2.4}
               color="#00e7ff"
@@ -1465,17 +1453,16 @@ function NeuralCortex({ onSwitchView }) {
               onClick={handleLocusClick}
             />
 
-            {/* New fixed 7-slot ring with native drag + snap */}
+            {/* New 7-day ring with inner dots + beams */}
             <WeekRing
               weekNodes={weekNodes}
               onSelect={selectDay}
               hovered={hoveredLog}
               setHovered={setHoveredDay}
               selected={selectedItem}
-              onDragStateChange={setRingDragging}
             />
 
-            {/* Events for selected day */}
+            {/* (Old constellation still available but not rendered) */}
             <SynapticLinks selectedLog={selectedItem} events={dayEvents} />
 
             {activeNudges.map((nudge, idx) => (
@@ -1491,11 +1478,17 @@ function NeuralCortex({ onSwitchView }) {
         )}
 
         <OrbitControls
-          enabled={!ringDragging}
           enablePan={false}
           enableZoom={true}
           autoRotate={true}
           autoRotateSpeed={0.3}
+          onStart={() => {
+            clearTimeout(idleRef.current);
+          }}
+          onEnd={() => {
+            clearTimeout(idleRef.current);
+            idleRef.current = setTimeout(() => {}, 4000);
+          }}
         />
 
         <EffectComposer multisampling={0}>
