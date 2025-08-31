@@ -1,9 +1,8 @@
 // src/components/NeuralCortex.jsx
-// LightCore — Neural-Cortex view (7-day ring)
-// - Shows exactly 7 day-nodes (last 7 local days) around a smaller LightCore
-// - Each day node has 3 inner dots (clarity/immune/physical) with intensity by score
-// - Neon beams from core to each day node
-// - Left-side Settings drawer, accessible “X”, UI pref write-through
+// LightCore — Neural-Cortex view (enhanced center globe)
+// - Custom shader "LightCore" with intro pulse, atmosphere halo, rotating ring
+// - Left-anchored Settings drawer (close "×" centered)
+// - UI preference highlight sticks; guidance/steps/nudges unchanged
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -13,83 +12,51 @@ import * as THREE from 'three';
 import { supabase } from '../supabaseClient';
 import LogEntryModal from './LogEntryModal.jsx';
 
-/* ---------------------- Palette / Config ---------------------- */
+/* ---------------------- Config ---------------------- */
 
-const DOT_COLORS = {
-  clarity: '#00f0ff',   // cyan
-  immune:  '#ffd700',   // gold
-  physical:'#00ff88',   // green
+const EVENT_CONFIG = {
+  Workout: { color: '#4ade80' },
+  Meal: { color: '#facc15' },
+  Caffeine: { color: '#f97316' },
+  Default: { color: '#a78bfa' },
 };
-
-// 7 distinct “2077” base colors for day nodes
-const DAY_BASE_COLORS = [
-  '#00E5FF', // electric cyan
-  '#7B61FF', // neon violet
-  '#39FF14', // laser green
-  '#FF3D81', // neon magenta
-  '#00FFA3', // aqua lime
-  '#FF8A00', // neon orange
-  '#1EA7FF', // azure
-];
-
-// Steps polling every 120s (unchanged)
-const STEPS_POLL_MS = 120000;
 
 const hideScrollbarCSS = `
   * { scrollbar-width: none; -ms-overflow-style: none; }
   *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
 `;
 
+// Steps polling every 120s
+const STEPS_POLL_MS = 120000;
+
 /* ------------------------- Utils ------------------------- */
+
+function normalizeGuidance(raw) {
+  if (!raw) return null;
+  const g =
+    raw.guidance_for_user ||
+    raw.guidance ||
+    raw.lightcoreGuide ||
+    raw.guide ||
+    (raw.current_state ? raw : null);
+  if (!g) return null;
+  const clip = (a, n) => (Array.isArray(a) ? a.slice(0, n) : []);
+  return {
+    current_state: g.current_state || g.currentState || g.summary || g.message || '',
+    positives: clip(g.positives || g.strengths, 5),
+    concerns: clip(g.concerns || g.risks || g.issues, 5),
+    suggestions: clip(g.suggestions || g.actions || g.recommendations, 8),
+  };
+}
 
 function useHoverCursor(isHovered) {
   useEffect(() => {
     const prev = document.body.style.cursor;
     document.body.style.cursor = isHovered ? 'pointer' : 'auto';
-    return () => (document.body.style.cursor = prev);
+    return () => {
+      document.body.style.cursor = prev;
+    };
   }, [isHovered]);
-}
-
-function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
-
-function toYMDLocal(dateLike) {
-  const d = new Date(dateLike);
-  const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const y = local.getFullYear();
-  const m = String(local.getMonth() + 1).padStart(2, '0');
-  const dd = String(local.getDate()).padStart(2, '0');
-  return `${y}-${m}-${dd}`;
-}
-
-function last7LocalDays() {
-  const out = [];
-  const base = new Date();
-  base.setHours(0, 0, 0, 0);
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(base);
-    d.setDate(d.getDate() - i);
-    out.push({ key: toYMDLocal(d), date: d });
-  }
-  return out; // oldest -> newest
-}
-
-function averageScores(rows) {
-  if (!rows || rows.length === 0) return null;
-  const tot = rows.reduce(
-    (a, r) => {
-      a.clarity += r.clarity_score || 0;
-      a.immune += r.immune_score || 0;
-      a.physical += r.physical_readiness_score || 0;
-      return a;
-    },
-    { clarity: 0, immune: 0, physical: 0 }
-  );
-  const n = rows.length;
-  return {
-    clarity: tot.clarity / n,
-    immune:  tot.immune  / n,
-    physical:tot.physical / n,
-  };
 }
 
 async function fetchWithTimeout(promise, ms) {
@@ -164,6 +131,8 @@ function NeoButton({ as = 'button', href, children, onClick, title, style = {} }
   );
 }
 
+/* ------------------------- Left Stack ------------------------- */
+
 function LeftStack({ onSwitchView, onOpenSettings }) {
   return (
     <div
@@ -207,7 +176,7 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
         style={{
           position: 'absolute',
           top: 0,
-          left: 0, // <-- LEFT side
+          left: 0,              // ⬅ anchored left
           width: '420px',
           height: '100vh',
           background: 'rgba(10, 25, 47, 0.92)',
@@ -231,24 +200,26 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
             SETTINGS
           </h2>
           <div style={{ flex: 1 }} />
-          {/* perfectly centered X */}
           <button
             onClick={onClose}
             title="Close"
+            aria-label="Close settings"
             style={{
               width: 32,
               height: 32,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center', // ⬅ centers the glyph perfectly
               color: '#00f0ff',
               background: 'transparent',
               border: '1px solid rgba(0,240,255,0.35)',
               borderRadius: 8,
               cursor: 'pointer',
-              display: 'grid',
-              placeItems: 'center',
-              lineHeight: 0,
+              lineHeight: 1,
+              fontSize: 18,
             }}
           >
-            <span style={{ display: 'inline-block', transform: 'translateY(-1px)' }}>×</span>
+            ×
           </button>
         </div>
 
@@ -269,6 +240,10 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
               style={{
                 flex: 1,
                 borderColor: currentUIPref === 'neural' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
+                boxShadow:
+                  currentUIPref === 'neural'
+                    ? '0 0 12px rgba(0,240,255,0.35)'
+                    : '0 0 6px rgba(0,240,255,0.15)',
               }}
             >
               NEURAL-CORTEX
@@ -278,6 +253,10 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
               style={{
                 flex: 1,
                 borderColor: currentUIPref === 'classic' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
+                boxShadow:
+                  currentUIPref === 'classic'
+                    ? '0 0 12px rgba(0,240,255,0.35)'
+                    : '0 0 6px rgba(0,240,255,0.15)',
               }}
             >
               CLASSIC
@@ -316,7 +295,7 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
   );
 }
 
-/* ------------------------- Guide Panel (unchanged) ------------------------- */
+/* ------------------------- Guide Panel ------------------------- */
 
 function GuidePanel({ guide }) {
   const g =
@@ -437,131 +416,397 @@ function GuidePanel({ guide }) {
   );
 }
 
-/* ---------------------- Center LightCore ---------------------- */
-/* 20% smaller than before: radius ~ 2.4 instead of 3 */
+/* ------------------------- HUD (logs/nudges) ------------------------- */
 
-function LightCore({ onClick }) {
-  const groupRef = useRef();
-  const [hovered, setHovered] = useState(false);
-  useHoverCursor(hovered);
-
-  useFrame(() => {
-    if (!groupRef.current) return;
-    groupRef.current.rotation.y += 0.001;
-  });
+function Hud({ item, onClose }) {
+  const logObj = item?.ai_notes ? item : item?.log;
+  const isLog = !!logObj?.created_at || !!logObj?.ai_notes;
+  const isNudge = !!item?.headline || !!item?.body_text;
+  if (!isLog && !isNudge) return null;
 
   return (
-    <group ref={groupRef}>
-      <mesh
-        onClick={onClick}
-        onPointerOver={() => setHovered(true)}
-        onPointerOut={() => setHovered(false)}
+    <div
+      style={{
+        position: 'absolute',
+        top: '2rem',
+        left: '2rem',
+        width: '480px',
+        color: '#00f0ff',
+        background: 'rgba(10, 25, 47, 0.72)',
+        border: '1px solid rgba(0, 240, 255, 0.25)',
+        boxShadow: '0 0 24px rgba(0,240,255,0.15)',
+        backdropFilter: 'blur(10px)',
+        borderRadius: '12px',
+        padding: '1rem',
+        fontFamily: "'Roboto Mono', monospace",
+        fontSize: '14px',
+        zIndex: 11,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          marginBottom: '0.75rem',
+        }}
       >
-        <icosahedronGeometry args={[2.4, 5]} />
-        <meshStandardMaterial color="#bfefff" metalness={0.9} roughness={0.05} />
+        <h2
+          style={{
+            fontFamily: "'Orbitron', sans-serif",
+            fontSize: '1.1rem',
+            textShadow: '0 0 5px #00f0ff',
+            margin: 0,
+            letterSpacing: '0.04em',
+            color: '#cfefff',
+          }}
+        >
+          {isLog
+            ? `LOG ENTRY: ${fmtDate(logObj.created_at)}`
+            : `ANOMALY: ${item.headline?.toUpperCase?.() ?? ''}`}
+        </h2>
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={onClose}
+          title="Close"
+          style={{
+            width: 32,
+            height: 32,
+            color: '#00f0ff',
+            background: 'transparent',
+            border: '1px solid rgba(0,240,255,0.35)',
+            borderRadius: 8,
+            cursor: 'pointer',
+          }}
+        >
+          ×
+        </button>
+      </div>
+      {isLog && (
+        <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+          {logObj.ai_notes}
+        </p>
+      )}
+      {isNudge && (
+        <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+          {item.body_text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------- LightCore Shaders ---------------------- */
+
+// Displaced/pulsing sphere with Fresnel rim
+const coreVertex = `
+  uniform float uTime;
+  uniform float uPulse;
+  uniform float uDisplace;
+  varying vec3 vNormal;
+  varying vec3 vWorldPosition;
+
+  void main() {
+    vNormal = normalize(normalMatrix * normal);
+
+    // Gentle "breathing" displacement along the normal (kept cheap & stable)
+    float w = sin(uTime * 1.5 + position.y * 2.0) * 0.5 + 0.5;
+    vec3 displaced = position + normal * (uDisplace * (0.6 + 0.4 * w) * uPulse);
+
+    vec4 wPos = modelMatrix * vec4(displaced, 1.0);
+    vWorldPosition = wPos.xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+  }
+`;
+
+const coreFragment = `
+  uniform vec3 uCoreColor;
+  uniform vec3 uRimColor;
+  uniform float uPulse;
+  varying vec3 vNormal;
+  varying vec3 vWorldPosition;
+
+  void main() {
+    vec3 N = normalize(vNormal);
+    vec3 V = normalize(cameraPosition - vWorldPosition);
+    float ndotv = max(dot(N, V), 0.0);
+    float fres = pow(1.0 - ndotv, 3.0);
+
+    vec3 base = uCoreColor * (0.6 + 0.5 * uPulse);
+    vec3 color = base + uRimColor * fres * (1.0 + 1.2 * uPulse);
+    gl_FragColor = vec4(color, 0.98);
+  }
+`;
+
+// Thin, additive atmosphere shell
+const atmoVertex = `
+  varying vec3 vWorldPosition;
+  varying vec3 vNormal;
+  void main() {
+    vNormal = normalize(normalMatrix * normal);
+    vec4 wPos = modelMatrix * vec4(position, 1.0);
+    vWorldPosition = wPos.xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const atmoFragment = `
+  uniform vec3 uColor;
+  varying vec3 vWorldPosition;
+  varying vec3 vNormal;
+  void main() {
+    vec3 V = normalize(cameraPosition - vWorldPosition);
+    float fres = pow(1.0 - max(dot(normalize(vNormal), V), 0.0), 2.5);
+    float alpha = fres * 0.45;
+    gl_FragColor = vec4(uColor, alpha);
+  }
+`;
+
+/* -------------------- 3D Elements -------------------- */
+
+// Next-level center globe
+function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, energy = 1 }) {
+  const group = useRef();
+  const coreRef = useRef();
+  const atmoRef = useRef();
+  const pulseRef = useRef(0);
+
+  const uniforms = useMemo(
+    () => ({
+      uTime: { value: 0 },
+      uPulse: { value: 0 },
+      uDisplace: { value: 0.28 }, // displacement amplitude
+      uCoreColor: { value: new THREE.Color(color) },
+      uRimColor: { value: new THREE.Color(rim) },
+    }),
+    [color, rim]
+  );
+
+  const atmoUniforms = useMemo(
+    () => ({ uColor: { value: new THREE.Color(rim) } }),
+    [rim]
+  );
+
+  // Intro "wake up" animation
+  useEffect(() => {
+    pulseRef.current = 0;
+  }, []);
+
+  useFrame((state, delta) => {
+    if (!group.current) return;
+
+    // Rotate slowly (slightly faster during wake)
+    group.current.rotation.y += 0.12 * delta * (0.8 + 0.4 * uniforms.uPulse.value);
+
+    // Animate shader time
+    uniforms.uTime.value += delta;
+
+    // Ease pulse to 1 on mount
+    uniforms.uPulse.value += (1 - uniforms.uPulse.value) * 0.05;
+
+    // Subtle breathing of atmosphere scale
+    if (atmoRef.current) {
+      const s = 1.055 + Math.sin(state.clock.elapsedTime * 0.9) * 0.005;
+      atmoRef.current.scale.setScalar(s);
+    }
+
+    // Slight scale “life” modulation influenced by energy (latest scores)
+    const base = 1 + Math.sin(state.clock.elapsedTime * 1.2) * 0.012 * energy;
+    group.current.scale.setScalar(base);
+  });
+
+  // Equatorial luminous ring
+  const ring = useMemo(() => {
+    const g = new THREE.TorusGeometry(radius * 1.05, 0.06, 12, 120);
+    const m = new THREE.MeshBasicMaterial({
+      color: rim,
+      transparent: true,
+      opacity: 0.7,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.rotation.x = Math.PI / 2;
+    return mesh;
+  }, [radius, rim]);
+
+  return (
+    <group ref={group} onClick={onClick}>
+      {/* Core */}
+      <mesh>
+        <sphereGeometry args={[radius, 96, 96]} />
+        <shaderMaterial
+          ref={coreRef}
+          vertexShader={coreVertex}
+          fragmentShader={coreFragment}
+          uniforms={uniforms}
+          transparent
+          depthWrite={false}
+        />
       </mesh>
-      {/* Glow shell */}
-      <mesh
-        onClick={onClick}
-        onPointerOver={() => setHovered(true)}
-        onPointerOut={() => setHovered(false)}
-      >
-        <icosahedronGeometry args={[2.44, 5]} />
-        <meshBasicMaterial color="#00f0ff" transparent opacity={0.35} blending={THREE.AdditiveBlending} />
+
+      {/* Atmosphere halo */}
+      <mesh ref={atmoRef} scale={1.055}>
+        <sphereGeometry args={[radius * 1.02, 64, 64]} />
+        <shaderMaterial
+          vertexShader={atmoVertex}
+          fragmentShader={atmoFragment}
+          uniforms={atmoUniforms}
+          blending={THREE.AdditiveBlending}
+          transparent
+          depthWrite={false}
+        />
       </mesh>
+
+      {/* Equatorial ring */}
+      <primitive object={ring} />
     </group>
   );
 }
 
-/* ---------------------- Day Nodes (7 ring) ---------------------- */
-
-function ScoreDot({ color, pos, score }) {
-  // Map 0..10 -> emissive intensity 0.25 .. 2.2
-  const intensity = 0.25 + (clamp(score ?? 0, 0, 10) / 10) * 1.95;
+function AnomalyGlyph({ nudge, position, onGlyphClick }) {
+  const ref = useRef();
+  const [hovered, setHovered] = useState(false);
+  useHoverCursor(hovered);
+  useFrame((state) => {
+    if (ref.current) {
+      ref.current.rotation.y += 0.01;
+      ref.current.position.y = position[1] + Math.sin(state.clock.getElapsedTime()) * 0.2;
+    }
+  });
   return (
-    <mesh position={pos}>
-      <sphereGeometry args={[0.12, 16, 16]} />
-      <meshStandardMaterial
-        color={color}
-        emissive={color}
-        emissiveIntensity={intensity}
-        metalness={0.7}
-        roughness={0.2}
-      />
+    <group
+      ref={ref}
+      position={position}
+      onClick={() => onGlyphClick(nudge)}
+      onPointerOver={() => setHovered(true)}
+      onPointerOut={() => setHovered(false)}
+    >
+      <mesh>
+        <octahedronGeometry args={[0.5]} />
+        <meshStandardMaterial
+          color="#ff4d4d"
+          emissive="#ff4d4d"
+          emissiveIntensity={hovered ? 2 : 1}
+          roughness={0.2}
+          metalness={0.8}
+        />
+      </mesh>
+      <Text color="white" fontSize={0.8} position={[0, 0, 0.6]}>
+        !
+      </Text>
+    </group>
+  );
+}
+
+function EventNode({ event, position }) {
+  const cfg = EVENT_CONFIG[event.event_type] || EVENT_CONFIG.Default;
+  return (
+    <mesh position={position}>
+      <sphereGeometry args={[0.15, 16, 16]} />
+      <meshStandardMaterial color={cfg.color} emissive={cfg.color} emissiveIntensity={1.5} />
     </mesh>
   );
 }
 
-function DayNode({ position, baseColor, day, onClick }) {
-  const [hovered, setHovered] = useState(false);
-  useHoverCursor(hovered);
-
-  // Inner dot layout (triangle)
-  const r = 0.32;
-  const dots = [
-    { key: 'clarity',  color: DOT_COLORS.clarity,  pos: [ r, 0, 0],     score: day?.scores?.clarity  ?? 0 },
-    { key: 'immune',   color: DOT_COLORS.immune,   pos: [-r * 0.6,  r, 0], score: day?.scores?.immune   ?? 0 },
-    { key: 'physical', color: DOT_COLORS.physical, pos: [-r * 0.6, -r, 0], score: day?.scores?.physical ?? 0 },
-  ];
-
+function SynapticLinks({ selectedLog, events }) {
+  if (!selectedLog || !selectedLog.position || !selectedLog.log || events.length === 0) return null;
+  const links = useMemo(() => {
+    const start = new THREE.Vector3(...selectedLog.position);
+    return events.map((event, i) => {
+      const angle = Math.PI / 2 + (i - (events.length - 1) / 2) * 0.5;
+      const end = new THREE.Vector3(
+        start.x + Math.cos(angle) * 3,
+        start.y + Math.sin(angle) * 3,
+        start.z
+      );
+      const mid = new THREE.Vector3((start.x + end.x) / 2, (start.y + end.y) / 2 + 0.8, start.z);
+      return { event, start, mid, end, key: `${event.event_time}-${i}` };
+    });
+  }, [selectedLog, events]);
   return (
-    <group
-      position={position}
-      onClick={() => onClick?.(day)}
-      onPointerOver={() => setHovered(true)}
-      onPointerOut={() => setHovered(false)}
-    >
-      {/* Outer neon ring */}
-      <mesh>
-        <torusGeometry args={[0.7, 0.07, 16, 48]} />
-        <meshStandardMaterial
-          color={baseColor}
-          emissive={baseColor}
-          emissiveIntensity={hovered ? 2.2 : 1.5}
-          metalness={0.9}
-          roughness={0.15}
-        />
-      </mesh>
-
-      {/* Inner 3 score dots */}
-      {dots.map((d) => (
-        <ScoreDot key={d.key} color={d.color} pos={d.pos} score={d.score} />
+    <group>
+      {links.map(({ event, start, mid, end, key }) => (
+        <group key={key}>
+          <EventNode event={event} position={end} />
+          <QuadraticBezierLine
+            start={start}
+            end={end}
+            mid={mid}
+            color="#00f0ff"
+            lineWidth={1}
+            transparent
+            opacity={0.55}
+          />
+        </group>
       ))}
     </group>
   );
 }
 
-function DayRing({ days, radius = 7, onSelect }) {
-  const total = days.length;
-  // oldest -> newest clockwise, start at roughly top (-90° offset)
+function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, isHovered }) {
+  const ref = useRef();
+  useHoverCursor(isHovered);
+  const dynamic = useMemo(() => {
+    const avg =
+      ((log.clarity_score || 0) +
+        (log.immune_score || 0) +
+        (log.physical_readiness_score || 0)) /
+      30;
+    return new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avg);
+  }, [log]);
+  useFrame(() => {
+    if (!ref.current) return;
+    const target = isSelected ? 1.8 : isHovered ? 1.3 : 1;
+    const s = THREE.MathUtils.lerp(ref.current.scale.x, target, 0.1);
+    ref.current.scale.setScalar(s);
+  });
   return (
-    <group>
-      {days.map((day, i) => {
-        const angle = (i / total) * Math.PI * 2 - Math.PI / 2;
-        const pos = [radius * Math.cos(angle), radius * Math.sin(angle), 0];
-        const baseColor = DAY_BASE_COLORS[i % DAY_BASE_COLORS.length];
-
-        return (
-          <group key={day.key}>
-            {/* Beam from core to node */}
-            <QuadraticBezierLine
-              start={[0, 0, 0]}
-              end={pos}
-              mid={[pos[0] * 0.5, pos[1] * 0.5 + 0.8, 0]}
-              color="#00f0ff"
-              lineWidth={1}
-              transparent
-              opacity={0.45}
-            />
-            <DayNode position={pos} baseColor={baseColor} day={day} onClick={onSelect} />
-          </group>
-        );
-      })}
-    </group>
+    <mesh
+      ref={ref}
+      position={position}
+      onClick={(e) => {
+        e.stopPropagation();
+        setSelectedItem({ log, position });
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHoveredLog(log);
+      }}
+      onPointerOut={() => setHoveredLog(null)}
+    >
+      <sphereGeometry args={[0.2, 32, 32]} />
+      <meshStandardMaterial
+        color={dynamic}
+        metalness={0.95}
+        roughness={0.1}
+        emissive={dynamic}
+        emissiveIntensity={isSelected || isHovered ? 0.5 : 0}
+      />
+    </mesh>
   );
 }
 
-/* ---------------------- + LOG button ---------------------- */
+function Constellation({ logs, setSelectedItem, selectedItem, setHoveredLog, hoveredLog }) {
+  return useMemo(() => {
+    const radius = 6;
+    return logs.map((log, i) => {
+      const angle = (i / logs.length) * Math.PI * 2;
+      const pos = [radius * Math.cos(angle), radius * Math.sin(angle), 0];
+      return (
+        <LogNode
+          key={log.id || log.created_at || i}
+          log={log}
+          position={pos}
+          setSelectedItem={setSelectedItem}
+          isSelected={selectedItem?.log?.created_at === log.created_at}
+          setHoveredLog={setHoveredLog}
+          isHovered={hoveredLog?.created_at === log.created_at}
+        />
+      );
+    });
+  }, [logs, setSelectedItem, selectedItem, setHoveredLog, hoveredLog]);
+}
 
 function LogEntryButton({ onClick }) {
   const [hovered, setHovered] = useState(false);
@@ -600,7 +845,11 @@ function NeuralCortex({ onSwitchView }) {
   const [logHistory, setLogHistory] = useState([]);
   const [latestScores, setLatestScores] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedDay, setSelectedDay] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [hoveredLog, setHoveredLog] = useState(null);
+  const [dayEvents, setDayEvents] = useState([]);
+  const [activeNudges, setActiveNudges] = useState([]);
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [stepCount, setStepCount] = useState(null);
   const [guideData, setGuideData] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -647,8 +896,9 @@ function NeuralCortex({ onSwitchView }) {
         }).then((r) => (r.ok ? r.json() : null)),
         10000
       );
-      if (json) setGuideData(json);
-      return json;
+      const g = normalizeGuidance(json);
+      if (g) setGuideData(g);
+      return g;
     } catch {
       return null;
     }
@@ -665,26 +915,31 @@ function NeuralCortex({ onSwitchView }) {
 
       if (!guideData) requestGuidance().catch(() => {});
 
-      // Pull enough logs to cover at least 7 local days
-      const { data: logs } = await supabase
-        .from('daily_logs')
-        .select('id, created_at, clarity_score, immune_score, physical_readiness_score, ai_notes')
-        .order('created_at', { ascending: false })
-        .limit(60);
+      const [logRes, nudgeRes] = await Promise.all([
+        supabase
+          .from('daily_logs')
+          .select(
+            'id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes'
+          )
+          .order('created_at', { ascending: false })
+          .limit(30),
+        supabase.from('nudges').select('*').eq('is_acknowledged', false),
+      ]);
 
+      const { data: logs } = logRes;
       if (logs && logs.length > 0) {
         setLogHistory(logs);
-
-        // "latest" = latest row
-        setLatestScores({
-          clarity_score: logs[0]?.clarity_score ?? 8,
-          immune_score: logs[0]?.immune_score ?? 8,
-          physical_readiness_score: logs[0]?.physical_readiness_score ?? 8,
-        });
+        setLatestScores({ ...logs[0] });
       } else {
-        setLatestScores({ clarity_score: 8, immune_score: 8, physical_readiness_score: 8 });
+        setLatestScores({
+          clarity_score: 8,
+          immune_score: 8,
+          physical_readiness_score: 8,
+        });
       }
 
+      const { data: nudges } = nudgeRes;
+      setActiveNudges(nudges || []);
       setIsLoading(false);
 
       // One-off steps fetch (local timezone)
@@ -718,7 +973,7 @@ function NeuralCortex({ onSwitchView }) {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'daily_logs' },
         (payload) => {
-          setLogHistory((prev) => [payload.new, ...prev].slice(0, 60));
+          setLogHistory((prev) => [payload.new, ...prev].slice(0, 30));
           setLatestScores({ ...payload.new });
           requestGuidance().catch(() => {});
         }
@@ -735,7 +990,7 @@ function NeuralCortex({ onSwitchView }) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Steps polling every 120s
+  // Steps polling every 120s (local timezone)
   useEffect(() => {
     let timer;
     let cancelled = false;
@@ -753,47 +1008,70 @@ function NeuralCortex({ onSwitchView }) {
         if (!cancelled && typeof data?.steps === 'number') {
           setStepCount(data.steps);
         }
-      } catch {}
+      } catch {
+        // ignore transient network errors
+      }
     };
 
-    tick();
+    tick(); // run immediately on mount
     timer = setInterval(tick, STEPS_POLL_MS);
+
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, []);
+  }, []); // steady polling
 
-  // Build 7-day aggregation (local)
-  const sevenDays = useMemo(() => {
-    const days = last7LocalDays(); // oldest -> newest
-    const grouped = new Map(); // key -> rows
-    for (const log of logHistory) {
-      const key = toYMDLocal(log.created_at);
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key).push(log);
+  // Load day events when a log is selected
+  useEffect(() => {
+    if (selectedItem && selectedItem.log) {
+      (async () => {
+        const { data, error } = await supabase
+          .from('events')
+          .select('event_type, event_time')
+          .eq('log_id', selectedItem.log.id);
+        if (!error) setDayEvents(data || []);
+      })();
+    } else {
+      setDayEvents([]);
     }
-    return days.map((d, idx) => {
-      const rows = grouped.get(d.key) || [];
-      const scores = averageScores(rows); // null if none
-      return {
-        key: d.key,
-        date: d.date,
-        scores, // {clarity, immune, physical} or null
-        color: DAY_BASE_COLORS[idx % DAY_BASE_COLORS.length],
-      };
-    });
-  }, [logHistory]);
+  }, [selectedItem]);
 
   const lightIntensities = useMemo(() => {
-    if (!latestScores) return { clarity: 0, immune: 0, physical: 0 };
+    if (!latestScores) return { clarity: 0, immune: 0, physical: 0, energy: 1 };
     const clamp10 = (v) => Math.min(10, v || 0);
+    const c = clamp10(latestScores.clarity_score);
+    const i = clamp10(latestScores.immune_score);
+    const p = clamp10(latestScores.physical_readiness_score);
+    const energy = (c + i + p) / 30; // 0..1 scale to modulate the core
     return {
-      clarity: clamp10(latestScores.clarity_score) * 30,
-      immune: clamp10(latestScores.immune_score) * 30,
-      physical: clamp10(latestScores.physical_readiness_score) * 30,
+      clarity: c * 30,
+      immune: i * 30,
+      physical: p * 30,
+      energy: 0.75 + energy * 0.5, // keep a nice baseline
     };
   }, [latestScores]);
+
+  const handleCloseHud = async () => {
+    const item = selectedItem;
+    setSelectedItem(null);
+    if (item?.id && (item?.headline || item?.body_text)) {
+      try {
+        await supabase
+          .from('nudges')
+          .update({
+            is_acknowledged: true,
+            acknowledged_at: new Date().toISOString(),
+          })
+          .eq('id', item.id);
+        setActiveNudges((prev) => prev.filter((n) => n.id !== item.id));
+      } catch {}
+    }
+  };
+
+  const handleLocusClick = async () => {
+    await requestGuidance();
+  };
 
   const handleOpenSettings = () => setDrawerOpen(true);
   const handleCloseSettings = () => setDrawerOpen(false);
@@ -844,6 +1122,7 @@ function NeuralCortex({ onSwitchView }) {
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
       <LeftStack onSwitchView={onSwitchView} onOpenSettings={handleOpenSettings} />
       <GuidePanel guide={guideData} />
+      <Hud item={selectedItem} onClose={handleCloseHud} />
 
       <SettingsDrawer
         open={drawerOpen}
@@ -855,9 +1134,9 @@ function NeuralCortex({ onSwitchView }) {
       />
 
       <LogEntryModal
-        isOpen={false}
-        onClose={() => {}}
-        onLogSubmitted={() => {}}
+        isOpen={isLogModalOpen}
+        onClose={() => setIsLogModalOpen(false)}
+        onLogSubmitted={() => setIsLogModalOpen(false)}
         stepCount={stepCount}
       />
 
@@ -874,14 +1153,33 @@ function NeuralCortex({ onSwitchView }) {
 
         {!isLoading && (
           <>
-            {/* Smaller central core */}
-            <LightCore onClick={() => {}} />
+            {/* Upgraded center globe */}
+            <LightCore
+              radius={3}
+              color="#00e7ff"
+              rim="#9cf3ff"
+              energy={lightIntensities.energy}
+              onClick={handleLocusClick}
+            />
 
-            {/* 7-day ring + beams */}
-            <DayRing days={sevenDays} radius={7} onSelect={(d) => setSelectedDay(d)} />
-
-            {/* +LOG button */}
-            <LogEntryButton onClick={() => window.dispatchEvent(new CustomEvent('openLogModal'))} />
+            {/* Existing constellation ring & interactions */}
+            <Constellation
+              logs={logHistory}
+              setSelectedItem={setSelectedItem}
+              selectedItem={selectedItem}
+              setHoveredLog={setHoveredLog}
+              hoveredLog={hoveredLog}
+            />
+            <SynapticLinks selectedLog={selectedItem} events={dayEvents} />
+            {activeNudges.map((nudge, idx) => (
+              <AnomalyGlyph
+                key={nudge.id}
+                nudge={nudge}
+                position={[-8, 4 - idx * 2, -5]}
+                onGlyphClick={setSelectedItem}
+              />
+            ))}
+            <LogEntryButton onClick={() => setIsLogModalOpen(true)} />
           </>
         )}
 
@@ -890,7 +1188,9 @@ function NeuralCortex({ onSwitchView }) {
           enableZoom={true}
           autoRotate={true}
           autoRotateSpeed={0.3}
-          onStart={() => clearTimeout(idleRef.current)}
+          onStart={() => {
+            clearTimeout(idleRef.current);
+          }}
           onEnd={() => {
             clearTimeout(idleRef.current);
             idleRef.current = setTimeout(() => {}, 4000);
