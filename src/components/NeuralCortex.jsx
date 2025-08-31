@@ -236,7 +236,7 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
               height: 32,
               display: 'inline-flex',
               alignItems: 'center',
-              justifyContent: 'center', // ⬅ centers the glyph perfectly
+              justifyContent: 'center',
               color: '#00f0ff',
               background: 'transparent',
               border: '1px solid rgba(0,240,255,0.35)',
@@ -465,7 +465,7 @@ function Hud({ item, onClose }) {
         backdropFilter: 'blur(10px)',
         borderRadius: '12px',
         padding: '1rem',
-        fontFamily: "'Roboto Mono', monospace",
+        fontFamily: "'Roboto Mono', monospace',
         fontSize: '14px',
         zIndex: 11,
       }}
@@ -887,11 +887,7 @@ function LightBeams({ nodes, energy = 1 }) {
     return nodes.map((n, i) => {
       const start = [0, 0, 0];
       const end = n.position;
-      const mid = [
-        (start[0] + end[0]) / 2,
-        (start[1] + end[1]) / 2 + 0.7,
-        0,
-      ];
+      const mid = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2 + 0.7, 0];
       return { start, mid, end, key: `${n.key}-${i}` };
     });
   }, [nodes]);
@@ -916,7 +912,7 @@ function LightBeams({ nodes, energy = 1 }) {
   );
 }
 
-/* New: WeekRing with 7 fixed slots and drag-to-rotate snapping (no pointer-capture) */
+/* New: WeekRing with 7 fixed slots and **native** drag-to-rotate snapping */
 function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragStateChange }) {
   const radius = 6;
   const SLOTS = 7;
@@ -924,9 +920,11 @@ function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragSt
 
   // start so a node sits at 12 o'clock
   const [ringAngle, setRingAngle] = useState(-Math.PI / 2);
+
+  // global drag state
   const drag = useRef({ active: false, startX: 0, startAngle: 0 });
 
-  // fixed slot angles + ring offset => positions
+  // compute fixed slot positions
   const items = useMemo(() => {
     const baseAngles = Array.from({ length: SLOTS }, (_, i) => i * slotAngle);
     return weekNodes.map((n, i) => {
@@ -936,40 +934,47 @@ function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragSt
     });
   }, [weekNodes, ringAngle]);
 
-  // drag handlers (no setPointerCapture)
+  // native window listeners avoid R3F's pointer-capture path
+  useEffect(() => {
+    const handleMove = (e) => {
+      if (!drag.current.active) return;
+      e.preventDefault();
+      const dx = (e.clientX ?? 0) - drag.current.startX;
+      const factor = 0.0032;
+      setRingAngle(drag.current.startAngle + dx * factor);
+    };
+
+    const endDrag = () => {
+      if (!drag.current.active) return;
+      drag.current.active = false;
+      setRingAngle((a) => Math.round(a / slotAngle) * slotAngle);
+      onDragStateChange?.(false);
+      document.body.style.userSelect = '';
+    };
+
+    window.addEventListener('pointermove', handleMove, { passive: false });
+    window.addEventListener('pointerup', endDrag, { passive: true });
+    window.addEventListener('pointercancel', endDrag, { passive: true });
+
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', endDrag);
+      window.removeEventListener('pointercancel', endDrag);
+    };
+  }, [onDragStateChange]);
+
   const startDrag = (e) => {
     e.stopPropagation();
     drag.current.active = true;
     drag.current.startX = e.clientX ?? 0;
     drag.current.startAngle = ringAngle;
     onDragStateChange?.(true);
-  };
-
-  const moveDrag = (e) => {
-    if (!drag.current.active) return;
-    e.stopPropagation();
-    const dx = (e.clientX ?? 0) - drag.current.startX;
-    const factor = 0.0032; // px -> radians
-    setRingAngle(drag.current.startAngle + dx * factor);
-  };
-
-  const endDrag = (e) => {
-    if (!drag.current.active) return;
-    e.stopPropagation();
-    drag.current.active = false;
-    // snap to nearest slot
-    setRingAngle((a) => Math.round(a / slotAngle) * slotAngle);
-    onDragStateChange?.(false);
+    // prevent text selection while dragging
+    document.body.style.userSelect = 'none';
   };
 
   return (
-    <group
-      onPointerDown={startDrag}
-      onPointerMove={moveDrag}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      onPointerOut={endDrag}
-    >
+    <group onPointerDown={startDrag}>
       {items.map((n) => (
         <DayNode
           key={n.key}
@@ -985,7 +990,7 @@ function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragSt
       {/* Light beams follow the nodes */}
       <LightBeams nodes={items} energy={1} />
 
-      {/* invisible torus makes dragging easy */}
+      {/* invisible torus makes grabbing the ring easy */}
       <mesh position={[0, 0, -0.01]}>
         <torusGeometry args={[radius, 0.25, 8, 64]} />
         <meshBasicMaterial transparent opacity={0} />
@@ -1187,7 +1192,6 @@ function NeuralCortex({ onSwitchView }) {
     }
   };
 
-  // Realtime + initial fetch
   useEffect(() => {
     fetchAllData();
 
@@ -1232,9 +1236,7 @@ function NeuralCortex({ onSwitchView }) {
         if (!cancelled && typeof data?.steps === 'number') {
           setStepCount(data.steps);
         }
-      } catch {
-        // ignore transient network errors
-      }
+      } catch {}
     };
 
     tick();
@@ -1262,8 +1264,7 @@ function NeuralCortex({ onSwitchView }) {
   }, [selectedItem]);
 
   const lightIntensities = useMemo(() => {
-    if (!latestScores)
-      return { clarity: 0, immune: 0, physical: 0, energy: 1 };
+    if (!latestScores) return { clarity: 0, immune: 0, physical: 0, energy: 1 };
     const clamp10 = (v) => Math.min(10, v || 0);
     const c = clamp10(latestScores.clarity_score);
     const i = clamp10(latestScores.immune_score);
@@ -1433,7 +1434,7 @@ function NeuralCortex({ onSwitchView }) {
               onClick={handleLocusClick}
             />
 
-            {/* New fixed 7-slot ring with drag rotate + snap */}
+            {/* New fixed 7-slot ring with native drag + snap */}
             <WeekRing
               weekNodes={weekNodes}
               onSelect={selectDay}
@@ -1464,13 +1465,8 @@ function NeuralCortex({ onSwitchView }) {
           enableZoom={true}
           autoRotate={true}
           autoRotateSpeed={0.3}
-          onStart={() => {
-            clearTimeout(idleRef.current);
-          }}
-          onEnd={() => {
-            clearTimeout(idleRef.current);
-            idleRef.current = setTimeout(() => {}, 4000);
-          }}
+          onStart={() => { /* keep autoplay idle timer behaviour */ }}
+          onEnd={() => { /* keep autoplay idle timer behaviour */ }}
         />
 
         <EffectComposer multisampling={0}>
@@ -1483,4 +1479,3 @@ function NeuralCortex({ onSwitchView }) {
 }
 
 export default NeuralCortex;
-
