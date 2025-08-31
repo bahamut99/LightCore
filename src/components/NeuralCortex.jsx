@@ -236,7 +236,7 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
               height: 32,
               display: 'inline-flex',
               alignItems: 'center',
-              justifyContent: 'center',
+              justifyContent: 'center', // ⬅ centers the glyph perfectly
               color: '#00f0ff',
               background: 'transparent',
               border: '1px solid rgba(0,240,255,0.35)',
@@ -465,7 +465,7 @@ function Hud({ item, onClose }) {
         backdropFilter: 'blur(10px)',
         borderRadius: '12px',
         padding: '1rem',
-        fontFamily: "'Roboto Mono', monospace',
+        fontFamily: "'Roboto Mono', monospace",
         fontSize: '14px',
         zIndex: 11,
       }}
@@ -744,7 +744,7 @@ function SynapticLinks({ selectedLog, events }) {
   );
 }
 
-/* ----- New: Week ring nodes (7 slots, draggable rotate + snap) ----- */
+/* ----- New: Day node + beams ----- */
 
 const DAY_SHELL_COLORS = [
   '#00e7ff', // neon cyan
@@ -969,8 +969,7 @@ function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragSt
     drag.current.startX = e.clientX ?? 0;
     drag.current.startAngle = ringAngle;
     onDragStateChange?.(true);
-    // prevent text selection while dragging
-    document.body.style.userSelect = 'none';
+    document.body.style.userSelect = 'none'; // prevent text selection while dragging
   };
 
   return (
@@ -999,7 +998,8 @@ function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragSt
   );
 }
 
-// (Kept for quick rollback; not rendered now)
+/* (Legacy) Constellation + LogNode (kept for rollback, not currently used) */
+
 function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, isHovered }) {
   const ref = useRef();
   useHoverCursor(isHovered);
@@ -1064,6 +1064,38 @@ function Constellation({ logs, setSelectedItem, selectedItem, setHoveredLog, hov
   }, [logs, setSelectedItem, selectedItem, setHoveredLog, hoveredLog]);
 }
 
+/* Reuse: +LOG button */
+function LogEntryButton({ onClick }) {
+  const [hovered, setHovered] = useState(false);
+  useHoverCursor(hovered);
+  return (
+    <Float speed={4} floatIntensity={1.5}>
+      <group
+        position={[0, -5, 0]}
+        onClick={onClick}
+        onPointerOver={() => setHovered(true)}
+        onPointerOut={() => setHovered(false)}
+      >
+        <mesh>
+          <torusGeometry args={[0.6, 0.1, 16, 100]} />
+        </mesh>
+        <mesh>
+          <meshStandardMaterial
+            color="#00f0ff"
+            emissive="#00f0ff"
+            emissiveIntensity={hovered ? 2 : 1}
+            roughness={0.2}
+            metalness={0.8}
+          />
+        </mesh>
+        <Text color="white" fontSize={0.2} position={[0, 0, 0]}>
+          + LOG
+        </Text>
+      </group>
+    </Float>
+  );
+}
+
 /* ------------------------ Main ------------------------ */
 
 function NeuralCortex({ onSwitchView }) {
@@ -1082,7 +1114,6 @@ function NeuralCortex({ onSwitchView }) {
   const [ringDragging, setRingDragging] = useState(false); // NEW
 
   const lastGuideRequestRef = useRef(0);
-  const idleRef = useRef(null);
 
   useEffect(() => {
     document.body.style.margin = '0';
@@ -1465,8 +1496,6 @@ function NeuralCortex({ onSwitchView }) {
           enableZoom={true}
           autoRotate={true}
           autoRotateSpeed={0.3}
-          onStart={() => { /* keep autoplay idle timer behaviour */ }}
-          onEnd={() => { /* keep autoplay idle timer behaviour */ }}
         />
 
         <EffectComposer multisampling={0}>
