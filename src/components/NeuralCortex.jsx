@@ -916,65 +916,59 @@ function LightBeams({ nodes, energy = 1 }) {
   );
 }
 
-/* New: WeekRing with 7 fixed slots and drag-to-rotate snapping */
-function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected }) {
-  const ringRef = useRef();
-  const [hoverRing, setHoverRing] = useState(false);
-  useHoverCursor(hoverRing);
-
+/* New: WeekRing with 7 fixed slots and drag-to-rotate snapping (no pointer-capture) */
+function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragStateChange }) {
   const radius = 6;
   const SLOTS = 7;
   const slotAngle = (Math.PI * 2) / SLOTS;
 
-  // start with a node at the top (12 o'clock)
+  // start so a node sits at 12 o'clock
   const [ringAngle, setRingAngle] = useState(-Math.PI / 2);
   const drag = useRef({ active: false, startX: 0, startAngle: 0 });
 
-  // Compute slot angles (fixed) then apply ringAngle
+  // fixed slot angles + ring offset => positions
   const items = useMemo(() => {
     const baseAngles = Array.from({ length: SLOTS }, (_, i) => i * slotAngle);
     return weekNodes.map((n, i) => {
-      const angle = baseAngles[i] + ringAngle - Math.PI / 2; // top at 12
+      const angle = baseAngles[i] + ringAngle - Math.PI / 2;
       const pos = [radius * Math.cos(angle), radius * Math.sin(angle), 0];
       return { ...n, position: pos };
     });
   }, [weekNodes, ringAngle]);
 
-  // Drag-to-rotate with snap on release
-  const onPointerDown = (e) => {
+  // drag handlers (no setPointerCapture)
+  const startDrag = (e) => {
     e.stopPropagation();
     drag.current.active = true;
-    drag.current.startX = e.clientX;
+    drag.current.startX = e.clientX ?? 0;
     drag.current.startAngle = ringAngle;
-    e.target.setPointerCapture?.(e.pointerId);
+    onDragStateChange?.(true);
   };
 
-  const onPointerMove = (e) => {
+  const moveDrag = (e) => {
     if (!drag.current.active) return;
     e.stopPropagation();
-    const dx = e.clientX - drag.current.startX;
-    // pixels → radians (tweak factor for feel)
-    const factor = 0.0032;
+    const dx = (e.clientX ?? 0) - drag.current.startX;
+    const factor = 0.0032; // px -> radians
     setRingAngle(drag.current.startAngle + dx * factor);
   };
 
-  const onPointerUp = (e) => {
+  const endDrag = (e) => {
     if (!drag.current.active) return;
     e.stopPropagation();
     drag.current.active = false;
-    // Snap to nearest slot multiple
+    // snap to nearest slot
     setRingAngle((a) => Math.round(a / slotAngle) * slotAngle);
-    e.target.releasePointerCapture?.(e.pointerId);
+    onDragStateChange?.(false);
   };
 
   return (
     <group
-      ref={ringRef}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerOver={() => setHoverRing(true)}
-      onPointerOut={() => setHoverRing(false)}
+      onPointerDown={startDrag}
+      onPointerMove={moveDrag}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onPointerOut={endDrag}
     >
       {items.map((n) => (
         <DayNode
@@ -991,7 +985,7 @@ function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected }) {
       {/* Light beams follow the nodes */}
       <LightBeams nodes={items} energy={1} />
 
-      {/* (Optional) invisible torus to make dragging easier */}
+      {/* invisible torus makes dragging easy */}
       <mesh position={[0, 0, -0.01]}>
         <torusGeometry args={[radius, 0.25, 8, 64]} />
         <meshBasicMaterial transparent opacity={0} />
@@ -1080,6 +1074,7 @@ function NeuralCortex({ onSwitchView }) {
   const [guideData, setGuideData] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [uiPref, setUiPref] = useState('neural');
+  const [ringDragging, setRingDragging] = useState(false); // NEW
 
   const lastGuideRequestRef = useRef(0);
   const idleRef = useRef(null);
@@ -1445,6 +1440,7 @@ function NeuralCortex({ onSwitchView }) {
               hovered={hoveredLog}
               setHovered={setHoveredDay}
               selected={selectedItem}
+              onDragStateChange={setRingDragging}
             />
 
             {/* Events for selected day */}
@@ -1463,6 +1459,7 @@ function NeuralCortex({ onSwitchView }) {
         )}
 
         <OrbitControls
+          enabled={!ringDragging}
           enablePan={false}
           enableZoom={true}
           autoRotate={true}
