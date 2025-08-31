@@ -84,6 +84,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: nowrap;
 }
 
 h2 {
@@ -169,28 +170,51 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.header-btn {
+/* === HEADER BUTTON REFACTOR (replaces .header-btn) === */
+
+/* 1. Create a shared, robust base for both <a> and <button> elements */
+a.header-btn,
+button.header-btn {
+  /* Layout & Sizing */
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-height: 34px;
   padding: 0.5rem 1rem;
   margin: 0;
+
+  /* Typography */
+  font-family: 'Inter', sans-serif;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  line-height: 1.2;
+  text-decoration: none;
+  
+  /* Shared Appearance */
   background-color: #374151;
   color: #D1D5DB;
   border: 1px solid #4B5563;
-  text-decoration: none;
   border-radius: 0.5rem;
-  font-size: 0.9rem;
-  font-family: 'Inter', sans-serif;
   cursor: pointer;
-  line-height: 1.5;
-  white-space: nowrap;
-  vertical-align: middle;
+  transition: background-color 0.2s;
+}
+
+/* 2. Neutralize browser defaults for <button> specifically */
+button.header-btn {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
 }
-.header-btn:hover { background-color: #4B5563; }
+
+/* 3. Define shared hover and keyboard-focus states */
+.header-btn:hover {
+  background-color: #4B5563;
+}
+
+.header-btn:focus-visible {
+  outline: 2px solid #3B82F6;
+  outline-offset: 2px;
+}
 
 .auth-toggle { text-align: center; margin-top: 1.5rem; }
 .auth-toggle a { color: #3B82F6; text-decoration: none; font-weight: 500; }
