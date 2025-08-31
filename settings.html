@@ -1,4 +1,4 @@
-<!doctype html>
+<!doctype html> 
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -35,10 +35,9 @@
     </style>
   </head>
   <body>
+    <!-- Top-left nav: only a single HOME chip, href is set dynamically -->
     <div class="nav">
-      <a class="btn" href="/index.html" title="Home">HOME</a>
-      <a class="btn" href="/classic.html" title="Classic Dashboard">CLASSIC</a>
-      <a class="btn" href="/neural.html" title="Neural-Cortex">NEURAL</a>
+      <a id="homeLink" class="btn" title="Home">HOME</a>
     </div>
 
     <div class="wrap">
@@ -75,6 +74,21 @@
 
       const state = { user:null, saving:false };
 
+      function setHomeHref(view){
+        // Classic = "/", Neural = "/resonance-chamber.html"
+        const href = view === 'neural' ? '/resonance-chamber.html' : '/';
+        const link = $('#homeLink');
+        if (link) link.setAttribute('href', href);
+      }
+
+      // Set HOME link immediately from localStorage, then we'll confirm from DB.
+      (function primeHomeLinkFromLocal(){
+        try {
+          const pref = localStorage.getItem('lc_view');
+          if (pref === 'neural' || pref === 'classic') setHomeHref(pref);
+        } catch {}
+      })();
+
       async function requireSession(){
         const { data:{ session } } = await supabase.auth.getSession();
         if(!session){ window.location.replace('/index.html'); return null; }
@@ -105,9 +119,12 @@
           if(error){ console.error('profiles select error:', error); }
           const pref = data?.preferred_view || 'neural';
           setActivePref(pref);
+          setHomeHref(pref);               // keep HOME pointing correctly
+          try { localStorage.setItem('lc_view', pref); } catch {}
         }catch(e){
           console.error('profiles select threw:', e);
           setActivePref('neural');
+          setHomeHref('neural');
         }
       }
 
@@ -119,7 +136,12 @@
             .from('profiles')
             .upsert({ id: state.user.id, preferred_view: view, updated_at: new Date().toISOString() }, { onConflict:'id' });
           if(error){ console.error('profiles upsert error:', error); toast('Could not save preference'); }
-          else { setActivePref(view); toast('UI preference saved'); }
+          else {
+            setActivePref(view);
+            setHomeHref(view);             // update HOME immediately
+            try { localStorage.setItem('lc_view', view); } catch {}
+            toast('UI preference saved');
+          }
         }catch(e){
           console.error('profiles upsert threw:', e);
           toast('Could not save preference');
@@ -177,3 +199,4 @@
     </script>
   </body>
 </html>
+
