@@ -17,9 +17,11 @@ function Trends({ range, setRange }) {
     }
 
     try {
-      const res = await fetch(`/.netlify/functions/get-chart-data?range=${range}`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      const res = await fetch(
+        `/.netlify/functions/get-chart-data?range=${range}&tz=${encodeURIComponent(tz)}`,
+        { headers: { Authorization: `Bearer ${session.access_token}` } }
+      );
       if (!res.ok) throw new Error('Failed to fetch chart data');
       const data = await res.json();
       setTrendsData(data);
@@ -45,13 +47,13 @@ function Trends({ range, setRange }) {
 
     if (!trendsData || !canvases.clarity || !canvases.immune || !canvases.physical) return;
 
-    // Build proper {x,y} points so the time scale positions them by timestamp
+    // Convert raw arrays to [{x: Date, y: number}] so the time scale positions them by timestamp
     const toPoints = (labels, values) =>
       labels.map((ts, i) => ({ x: new Date(ts), y: values[i] }));
 
     const timeUnit = range === 1 ? 'hour' : 'day';
 
-    // For 1D, lock the axis to 00:00..24:00 of today so 12:01 AM sits at the very start.
+    // For 1D, fix the domain to local midnight..midnight so 12:01am is at the very start
     let xMin, xMax;
     if (range === 1) {
       const start = new Date();
@@ -62,10 +64,11 @@ function Trends({ range, setRange }) {
       xMax = end;
     }
 
-    const clarityPts   = toPoints(trendsData.labels, trendsData.clarityData);
-    const immunePts    = toPoints(trendsData.labels, trendsData.immuneData);
-    const physicalPts  = toPoints(trendsData.labels, trendsData.physicalData);
+    const clarityPts  = toPoints(trendsData.labels, trendsData.clarityData);
+    const immunePts   = toPoints(trendsData.labels, trendsData.immuneData);
+    const physicalPts = toPoints(trendsData.labels, trendsData.physicalData);
 
+    // Local-friendly formatting
     const fmtDate = (ts) =>
       new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     const fmtTime = (ts) =>
@@ -82,9 +85,19 @@ function Trends({ range, setRange }) {
         },
         x: {
           type: 'time',
-          time: { unit: timeUnit },
-          distribution: 'linear', // space points by actual time
-          ticks: { color: '#9CA3AF' },
+          time: {
+            unit: timeUnit,
+            // Visual polish: hour labels for 1D, date labels for multi-day
+            displayFormats: range === 1 ? { hour: 'ha' } : { day: 'MMM d' },
+          },
+          distribution: 'linear',
+          ticks: {
+            color: '#9CA3AF',
+            // Tighten tick density a bit on 1D
+            source: 'auto',
+            maxRotation: 0,
+            autoSkipPadding: 8,
+          },
           grid: { display: false },
           ...(range === 1 ? { min: xMin, max: xMax } : {}),
         },
@@ -98,14 +111,14 @@ function Trends({ range, setRange }) {
             // Title: time for 1D, date for multi-day
             title: (items) => {
               const ts = items?.[0]?.parsed?.x;
-              if (!ts && ts !== 0) return '';
+              if (ts === undefined || ts === null) return '';
               return range === 1 ? fmtTime(ts) : fmtDate(ts);
             },
             // Label: metric + value only
             label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}`,
           },
         },
-        // Ensure data labels plugin never shows tiny numbers (if globally registered elsewhere)
+        // If chartjs-plugin-datalabels is globally registered anywhere, force it off here
         datalabels: { display: false },
       },
     };
@@ -137,7 +150,6 @@ function Trends({ range, setRange }) {
     return new Chart(ctx, {
       type: 'line',
       data: {
-        // no separate labels—points carry their own x value
         datasets: [{
           label,
           data: points, // [{x: Date, y: number}, ...]
@@ -150,7 +162,7 @@ function Trends({ range, setRange }) {
           tension: 0.35,
           spanGaps: true,
           datalabels: { display: false },
-          parsing: true, // Chart.js will read {x,y}
+          parsing: true,
         }],
       },
       options: {
@@ -193,4 +205,3 @@ function Trends({ range, setRange }) {
 }
 
 export default Trends;
-
