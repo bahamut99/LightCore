@@ -1,12 +1,11 @@
 // src/components/NeuralCortex.jsx
-// LightCore — Neural-Cortex view (enhanced center globe + 7-day ring)
-// - Center globe sits in the water plane
-// - Exactly 7 day-nodes around the core (last 7 calendar days)
-// - Each day has its own neon shell color + three inner dots (clarity/immune/physical brightness)
-// - Animated beams from the LightCore to each day-node (level with the water)
-// - Ripples under the core and each node (now properly depth-tested)
+// LightCore — Neural-Cortex view (center globe + 7-day ring)
+// - Core + day nodes share a water plane with animated ripples (no slicing artifacts)
+// - Exactly 7 day nodes (last 7 calendar days)
+// - Each day has neon shell + three inner dots (clarity/immune/physical brightness)
+// - Beams skim the plane with a traveling energy dot
 // - Non-breaking overlays (buttons, drawers, guide, HUD, nudges)
-// - Top-center +LOG UI floater (CSS bob; no rotation; no depth issues)
+// - Top-center +LOG neon floater (screen-space), floating but not rotating
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -28,23 +27,6 @@ const EVENT_CONFIG = {
 const hideScrollbarCSS = `
   * { scrollbar-width: none; -ms-overflow-style: none; }
   *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
-`;
-
-// +LOG UI floater CSS
-const floaterCSS = `
-  @keyframes lc-float {
-    0%   { transform: translate(-50%, 0px) }
-    50%  { transform: translate(-50%, -6px) }
-    100% { transform: translate(-50%, 0px) }
-  }
-  .lc-log-floater {
-    position: absolute;
-    top: 14px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 25;
-    animation: lc-float 3.5s ease-in-out infinite;
-  }
 `;
 
 // Steps polling every 120s
@@ -74,9 +56,7 @@ function useHoverCursor(isHovered) {
   useEffect(() => {
     const prev = document.body.style.cursor;
     document.body.style.cursor = isHovered ? 'pointer' : 'auto';
-    return () => {
-      document.body.style.cursor = prev;
-    };
+    return () => { document.body.style.cursor = prev; };
   }, [isHovered]);
 }
 
@@ -667,7 +647,7 @@ const atmoFragment = `
   }
 `;
 
-/* ----- High-Quality Water Surface Shader ----- */
+/* ----- Water Surface Shader ----- */
 const waterVertex = `
   uniform float uTime;
   varying vec2 vUv;
@@ -747,12 +727,13 @@ function WaterPlane({ yPosition }) {
         uniforms={uniforms}
         transparent
         depthWrite={false}
+        depthTest // keep depth test on so spheres can occlude
       />
     </mesh>
   );
 }
 
-/* ----- Ripple shader for core + nodes (depth-tested) ----- */
+/* ----- Ripple shader for core + nodes ----- */
 const rippleVertex = `
   varying vec2 vUv;
   void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
@@ -802,7 +783,7 @@ function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', inten
         blending={THREE.AdditiveBlending}
         transparent
         depthWrite={false}
-        depthTest
+        depthTest // important: let depth test hide it behind spheres
         polygonOffset
         polygonOffsetFactor={-2}
       />
@@ -862,11 +843,12 @@ function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, en
 
   return (
     <group ref={group} onClick={onClick} position={[0, y, 0]}>
-      {/* Invisible occluder to hide lines behind the core */}
+      {/* Invisible occluder to hide lines/ripples behind the core */}
       <mesh renderOrder={0}>
         <sphereGeometry args={[radius * 0.99, 32, 32]} />
         <meshBasicMaterial depthWrite colorWrite={false} />
       </mesh>
+
       <mesh renderOrder={1}>
         <sphereGeometry args={[radius, 96, 96]} />
         <shaderMaterial
@@ -919,7 +901,6 @@ function AnomalyGlyph({ nudge, position, onGlyphClick }) {
           emissiveIntensity={hovered ? 2 : 1}
           roughness={0.2}
           metalness={0.8}
-          toneMapped={false}
         />
       </mesh>
       <Text color="white" fontSize={0.8} position={[0, 0, 0.6]}>
@@ -993,7 +974,6 @@ function SynapticLinks({ selectedNode, events }) {
                 color={color}
                 emissive={color}
                 emissiveIntensity={1.5}
-                toneMapped={false}
               />
             </mesh>
             <QuadraticBezierLine
@@ -1020,7 +1000,7 @@ function SynapticLinks({ selectedNode, events }) {
   );
 }
 
-// Restored icy palette
+// Restore icy palette
 const DAY_SHELL_COLORS = [
   '#8EE7FF', // aqua
   '#7CA8FF', // indigo-blue
@@ -1061,7 +1041,13 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
       }}
       onPointerOut={() => setHovered(null)}
     >
-      <mesh>
+      {/* depth occluder so ripples/water never slice through the shell */}
+      <mesh renderOrder={0}>
+        <sphereGeometry args={[0.705, 24, 24]} />
+        <meshBasicMaterial depthWrite colorWrite={false} />
+      </mesh>
+
+      <mesh renderOrder={1}>
         <sphereGeometry args={[0.7, 32, 32]} />
         <meshStandardMaterial
           color={node.color}
@@ -1071,9 +1057,13 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
           emissiveIntensity={node.avg != null ? 0.5 + node.avg / 20 : 0.15}
           transparent
           opacity={0.95}
+          depthWrite={false}
+          depthTest
           toneMapped={false}
         />
       </mesh>
+
+      {/* Inner dots */}
       <mesh position={[-0.1, 0.06, 0.08]}>
         <sphereGeometry args={[0.08, 16, 16]} />
         <meshStandardMaterial
@@ -1296,7 +1286,7 @@ function WeekRing({
             setHovered={setHovered}
           />
           <RippleRing
-            position={[n.position[0], ringY - 0.01, n.position[2]]}
+            position={[n.position[0], ringY, n.position[2]]}
             size={2.2}
             color="#78E7FF"
             intensity={0.8}
@@ -1312,23 +1302,67 @@ function WeekRing({
   );
 }
 
-/* ------------------------ UI +LOG floater (top center) ------------------------ */
+/* ---------------- Top-center +LOG neon floater (screen-space) ------------- */
 
-function UILogFloater({ onClick }) {
+function TopLogFloater({ onClick }) {
+  // Inject a small keyframes CSS once
+  useEffect(() => {
+    const id = 'top-log-floater-css';
+    if (document.getElementById(id)) return;
+    const style = document.createElement('style');
+    style.id = id;
+    style.innerHTML = `
+      @keyframes lcFloat {
+        0% { transform: translate(-50%, 0px); }
+        50% { transform: translate(-50%, 8px); }
+        100% { transform: translate(-50%, 0px); }
+      }
+      @keyframes lcGlow {
+        0% { box-shadow: 0 0 12px #00eaff, 0 0 28px rgba(0,234,255,.35), inset 0 0 16px rgba(0,234,255,.35); }
+        50% { box-shadow: 0 0 18px #00eaff, 0 0 44px rgba(0,234,255,.45), inset 0 0 22px rgba(0,234,255,.45); }
+        100% { box-shadow: 0 0 12px #00eaff, 0 0 28px rgba(0,234,255,.35), inset 0 0 16px rgba(0,234,255,.35); }
+      }
+    `;
+    document.head.appendChild(style);
+  }, []);
+
   return (
-    <div className="lc-log-floater">
+    <div
+      style={{
+        position: 'absolute',
+        top: '14px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 14,
+        pointerEvents: 'none',
+      }}
+    >
       <button
         onClick={onClick}
-        title="Add a log"
+        title="New Log"
         style={{
-          ...neoBtnStyle,
-          height: 40,
-          padding: '0 1.1rem',
-          borderRadius: 999,
-          fontWeight: 700,
+          pointerEvents: 'auto',
+          width: 88,
+          height: 88,
+          borderRadius: '999px',
+          border: '1px solid rgba(0,240,255,0.5)',
+          background:
+            'radial-gradient(ellipse at center, rgba(0,240,255,.18) 0%, rgba(0,240,255,.08) 55%, rgba(0,240,255,.02) 70%, transparent 71%)',
+          color: '#eaffff',
+          fontFamily: "'Orbitron', sans-serif",
+          letterSpacing: '0.05em',
+          fontSize: 12,
+          textShadow: '0 0 6px rgba(0,240,255,.8)',
+          animation: 'lcFloat 3s ease-in-out infinite, lcGlow 2.6s ease-in-out infinite',
+          boxShadow: '0 0 16px rgba(0,240,255,.35), inset 0 0 16px rgba(0,240,255,.35)',
+          backdropFilter: 'blur(6px)',
+          position: 'relative',
         }}
       >
-        + LOG
+        <span style={{ position: 'absolute', top: 12, left: 0, right: 0, textAlign: 'center', fontSize: 10, opacity: .85 }}>
+          NEW
+        </span>
+        <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '0.08em' }}>+ LOG</span>
       </button>
     </div>
   );
@@ -1359,15 +1393,18 @@ function NeuralCortex({ onSwitchView }) {
     document.body.style.margin = '0';
     document.body.style.padding = '0';
     document.body.style.overflow = 'hidden';
-    const style = document.createElement('style');
-    style.innerHTML = hideScrollbarCSS + floaterCSS;
-    document.head.appendChild(style);
     return () => {
       document.body.style.margin = '';
       document.body.style.padding = '';
       document.body.style.overflow = '';
-      document.head.removeChild(style);
     };
+  }, []);
+
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = hideScrollbarCSS;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
   }, []);
 
   const getAuthHeader = async () => {
@@ -1632,28 +1669,27 @@ function NeuralCortex({ onSwitchView }) {
 
   const [isPoweredUp, setIsPoweredUp] = useState(false);
   useEffect(() => {
-    const timer = setTimeout(() => setIsPoweredUp(true), 1200); // quicker power-up
+    const timer = setTimeout(() => setIsPoweredUp(true), 1400); // quicker reveal
     return () => clearTimeout(timer);
   }, []);
 
-  // Raise the whole scene slightly (was -4.5 → -3.8)
-  const ringYPosition = -3.8;
+  // Lift scene a bit higher than before
+  const ringYPosition = -3.6; // was -4.5
   const coreRadius = 3.4;
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
-      {/* UI overlays */}
+      <TopLogFloater onClick={() => setIsLogModalOpen(true)} />
       {isPoweredUp && (
-        <>
-          <LeftStack onSwitchView={onSwitchView} onOpenSettings={() => setDrawerOpen(true)} />
-          <UILogFloater onClick={() => setIsLogModalOpen(true)} />
-          <GuidePanel guide={guideData} />
-          <Hud
-            item={selectedItem?.log || selectedItem}
-            onClose={handleCloseHud}
-            onCreate={() => setIsLogModalOpen(true)}
-          />
-        </>
+        <LeftStack onSwitchView={onSwitchView} onOpenSettings={() => setDrawerOpen(true)} />
+      )}
+      {isPoweredUp && <GuidePanel guide={guideData} />}
+      {isPoweredUp && (
+        <Hud
+          item={selectedItem?.log || selectedItem}
+          onClose={handleCloseHud}
+          onCreate={() => setIsLogModalOpen(true)}
+        />
       )}
 
       <SettingsDrawer
@@ -1682,7 +1718,7 @@ function NeuralCortex({ onSwitchView }) {
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1
         }}
-        camera={{ position: [0, 3.5, 22], fov: 50 }}
+        camera={{ position: [0, 1.2, 22], fov: 50 }}
       >
         <color attach="background" args={['#0a0a1a']} />
         <ambientLight intensity={0.18} />
@@ -1698,10 +1734,10 @@ function NeuralCortex({ onSwitchView }) {
           y={ringYPosition}
         />
 
-        {/* Water + core ripple (depth-tested) */}
+        {/* Water + core ripple */}
         <WaterPlane yPosition={ringYPosition} />
         <RippleRing
-          position={[0, ringYPosition - 0.01, 0]}
+          position={[0, ringYPosition + 0.001, 0]}
           size={coreRadius * 2.1}
           color="#6FEFFF"
           intensity={1.0}
@@ -1749,11 +1785,12 @@ function NeuralCortex({ onSwitchView }) {
           enableZoom
           enabled={!isDragging}
           autoRotate={false}
-          minAzimuthAngle={-Infinity}
-          maxAzimuthAngle={Infinity}
+          minDistance={18}
+          maxDistance={35}
           minPolarAngle={Math.PI / 2.8}
           maxPolarAngle={Math.PI / 2.1}
-          target={[0, ringYPosition + 0.6, 0]}
+          minAzimuthAngle={-Math.PI}  // full 360° horizontal
+          maxAzimuthAngle={Math.PI}
           enableDamping
           dampingFactor={0.05}
         />
@@ -1763,7 +1800,7 @@ function NeuralCortex({ onSwitchView }) {
           {!perfMode && (
             <>
               <Bloom intensity={1.35} luminanceThreshold={0.42} luminanceSmoothing={0.85} />
-              <DepthOfField focusDistance={0} focalLength={0.2} bokehScale={1.5} />
+              <DepthOfField focusDistance={0.015} focalLength={0.022} bokehScale={2.4} />
             </>
           )}
         </EffectComposer>
