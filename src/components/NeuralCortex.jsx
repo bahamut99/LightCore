@@ -787,7 +787,7 @@ function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', inten
         blending={THREE.AdditiveBlending}
         transparent
         depthWrite={false}
-        depthTest={false}
+        /* depthTest defaults to true; do not disable it to avoid the "flat plane through spheres" artifact */
         polygonOffset
         polygonOffsetFactor={-2}
       />
@@ -1344,6 +1344,19 @@ function NeuralCortex({ onSwitchView }) {
 
   const lastGuideRequestRef = useRef(0);
 
+  // Intro ease-in for ring/overlays
+  const [intro, setIntro] = useState(0);
+  useEffect(() => {
+    let t = 0, raf;
+    const tick = () => {
+      t = Math.min(1, t + 0.025);
+      setIntro(t);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   useEffect(() => {
     document.body.style.margin = '0';
     document.body.style.padding = '0';
@@ -1696,8 +1709,8 @@ function NeuralCortex({ onSwitchView }) {
           intensity={1.0}
         />
 
-        {isPoweredUp && !isLoading && (
-          <>
+        {isPoweredUp && (
+          <group scale={0.9 + 0.1 * intro}>
             <WeekRing
               weekNodes={weekNodes}
               onSelect={selectDay}
@@ -1731,7 +1744,7 @@ function NeuralCortex({ onSwitchView }) {
               />
             ))}
             <LogEntryButton onClick={() => setIsLogModalOpen(true)} />
-          </>
+          </group>
         )}
 
         <OrbitControls
@@ -1743,8 +1756,7 @@ function NeuralCortex({ onSwitchView }) {
           maxDistance={35}
           minPolarAngle={Math.PI / 2.8}
           maxPolarAngle={Math.PI / 2.1}
-          minAzimuthAngle={-Math.PI / 6}
-          maxAzimuthAngle={Math.PI / 6}
+          /* Removed azimuth clamps to allow full 360° horizontal rotation */
           enableDamping
           dampingFactor={0.05}
         />
