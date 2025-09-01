@@ -189,7 +189,7 @@ function LeftStack({ onSwitchView, onOpenSettings }) {
 
 /* ------------------------- Settings Drawer ------------------------- */
 
-function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, currentUIPref }) {
+function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, currentUIPref, perfMode, onSetPerfMode }) {
   if (!open) return null;
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 20, pointerEvents: 'none' }}>
@@ -216,6 +216,7 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
           backdropFilter: 'blur(10px)',
           padding: '1rem 1rem 1.5rem',
           pointerEvents: 'auto',
+          overflowY: 'auto',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '0.75rem' }}>
@@ -295,6 +296,30 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
           </div>
           <p style={{ color: '#98a9c1', fontSize: 12, marginTop: 8 }}>
             Your choice loads automatically on next sign-in.
+          </p>
+        </section>
+
+        <section style={{ marginBottom: '1rem' }}>
+          <h3
+            style={{
+              fontFamily: "'Orbitron', sans-serif",
+              fontSize: '0.9rem',
+              color: '#9bd9ff',
+              margin: '0 0 0.5rem',
+            }}
+          >
+            PERFORMANCE
+          </h3>
+           <div style={{ display: 'flex', gap: '0.5rem' }}>
+             <NeoButton
+              onClick={() => onSetPerfMode(!perfMode)}
+              style={{ flex: 1 }}
+            >
+              {perfMode ? 'ENABLE' : 'DISABLE'} VISUAL EFFECTS
+            </NeoButton>
+           </div>
+          <p style={{ color: '#98a9c1', fontSize: 12, marginTop: 8 }}>
+            Disable Bloom and Depth of Field to improve framerate on lower-end devices.
           </p>
         </section>
 
@@ -449,7 +474,7 @@ function GuidePanel({ guide }) {
 
 /* ---------------------- HUD (selected day / nudge) ---------------------- */
 
-function Hud({ item, onClose }) {
+function Hud({ item, onClose, onCreate }) {
   if (!item) return null;
 
   // Accept either a daily log object or a nudge object
@@ -522,8 +547,17 @@ function Hud({ item, onClose }) {
         </div>
       )}
 
-      {notes && (
+      {notes ? (
         <p style={{ margin: '6px 0 10px', whiteSpace: 'pre-wrap', color: 'white' }}>{notes}</p>
+      ) : !isNudge && (
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8, marginBottom: 8 }}>
+          <span style={{ opacity:.85 }}>No entry for this day yet.</span>
+          {onCreate && (
+            <button onClick={onCreate} style={{ ...neoBtnStyle, height:28, padding:'0 .75rem', fontSize: '0.7rem' }}>
+              + LOG THIS DAY
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -753,6 +787,7 @@ function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', inten
         blending={THREE.AdditiveBlending}
         transparent
         depthWrite={false}
+        depthTest={false}
         polygonOffset
         polygonOffsetFactor={-2}
       />
@@ -969,14 +1004,15 @@ function SynapticLinks({ selectedNode, events }) {
 }
 
 const DAY_SHELL_COLORS = [
-  '#8EE7FF', // aqua
-  '#7CA8FF', // indigo-blue
-  '#9B7CFF', // violet
-  '#6FFFD9', // mint
-  '#64C7FF', // cyan-blue
-  '#A7F3FF', // ice
-  '#B29CFF', // lilac
+  '#B29CFF', // Lilac
+  '#FFD700', // Gold
+  '#4D7DFF', // Electric Blue
+  '#FF6B6B', // Red-Orange
+  '#40C057', // Green
+  '#64C7FF', // Cyan
+  '#E040FB', // Magenta
 ];
+
 const DOT_COLORS = { clarity: '#00f0ff', immune: '#ffd700', physical: '#00ff88' };
 
 function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }) {
@@ -1028,6 +1064,7 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
           emissiveIntensity={brightness('clarity')}
           metalness={0.6}
           roughness={0.25}
+          toneMapped={false}
         />
       </mesh>
       <mesh position={[0.1, 0.06, 0.08]}>
@@ -1038,6 +1075,7 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
           emissiveIntensity={brightness('immune')}
           metalness={0.6}
           roughness={0.25}
+          toneMapped={false}
         />
       </mesh>
       <mesh position={[0, -0.09, 0.08]}>
@@ -1048,6 +1086,7 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
           emissiveIntensity={brightness('physical')}
           metalness={0.6}
           roughness={0.25}
+          toneMapped={false}
         />
       </mesh>
     </group>
@@ -1092,7 +1131,7 @@ function LightBeams({ nodes, energy = 1, coreRadius = 1, ringY = 0 }) {
     return nodes.map((n) => {
       const end = new THREE.Vector3(...n.position);
       const dirXZ = new THREE.Vector2(end.x, end.z).normalize();
-      const start = new THREE.Vector3(dirXZ.x * coreRadius, ringY, dirXZ.y * coreRadius);
+      const start = new THREE.Vector3(dirXZ.x * (coreRadius * 0.985), ringY, dirXZ.y * (coreRadius * 0.985));
 
       const mid = new THREE.Vector3((start.x + end.x) * 0.5, ringY + 0.6, (start.z + end.z) * 0.5);
 
@@ -1301,6 +1340,7 @@ function NeuralCortex({ onSwitchView }) {
   const [uiPref, setUiPref] = useState('neural');
   const [isDragging, setIsDragging] = useState(false);
   const [nodePositions, setNodePositions] = useState(new Map());
+  const [perfMode, setPerfMode] = useState(false);
 
   const lastGuideRequestRef = useRef(0);
 
@@ -1597,7 +1637,13 @@ function NeuralCortex({ onSwitchView }) {
         <LeftStack onSwitchView={onSwitchView} onOpenSettings={() => setDrawerOpen(true)} />
       )}
       {isPoweredUp && <GuidePanel guide={guideData} />}
-      {isPoweredUp && <Hud item={selectedItem?.log || selectedItem} onClose={handleCloseHud} />}
+      {isPoweredUp && (
+        <Hud
+          item={selectedItem?.log || selectedItem}
+          onClose={handleCloseHud}
+          onCreate={() => setIsLogModalOpen(true)}
+        />
+      )}
 
       <SettingsDrawer
         open={drawerOpen}
@@ -1606,6 +1652,8 @@ function NeuralCortex({ onSwitchView }) {
         onDelete={onDelete}
         onSetUIPref={onSetUIPref}
         currentUIPref={uiPref}
+        perfMode={perfMode}
+        onSetPerfMode={setPerfMode}
       />
       <LogEntryModal
         isOpen={isLogModalOpen}
@@ -1616,7 +1664,13 @@ function NeuralCortex({ onSwitchView }) {
 
       <Canvas
         dpr={[1, 2]}
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        gl={{
+          antialias: true,
+          powerPreference: 'high-performance',
+          outputColorSpace: THREE.SRGBColorSpace,
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1
+        }}
         camera={{ position: [0, 2, 22], fov: 50 }}
       >
         <color attach="background" args={['#0a0a1a']} />
@@ -1695,10 +1749,14 @@ function NeuralCortex({ onSwitchView }) {
           dampingFactor={0.05}
         />
 
-        <EffectComposer multisampling={0}>
+        <EffectComposer multisampling={0} disableNormalPass>
           <FXAA />
-          <Bloom intensity={1.35} luminanceThreshold={0.42} luminanceSmoothing={0.85} />
-          <DepthOfField focusDistance={0.015} focalLength={0.022} bokehScale={2.4} />
+          {!perfMode && (
+            <>
+              <Bloom intensity={1.35} luminanceThreshold={0.42} luminanceSmoothing={0.85} />
+              <DepthOfField focusDistance={0.015} focalLength={0.022} bokehScale={2.4} />
+            </>
+          )}
         </EffectComposer>
       </Canvas>
     </div>
