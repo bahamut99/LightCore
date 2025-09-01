@@ -879,7 +879,7 @@ function SynapticLinkTraveler({ start, mid, end, color, offset = 0, duration = 3
     () => new THREE.QuadraticBezierCurve3(
       new THREE.Vector3(...start),
       new THREE.Vector3(...mid),
-      new THREE.Vector3(...end]
+      new THREE.Vector3(...end)
     ),
     [start, mid, end]
   );
