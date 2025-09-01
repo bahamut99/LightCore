@@ -1,11 +1,11 @@
 // src/components/NeuralCortex.jsx
-// LightCore — Neural-Cortex view
+// LightCore — Neural-Cortex view (single file)
 // Center animation focus: water/ripples/beams hug the plane and always render behind UI.
 // Functions and app chrome unchanged.
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Text, Float, QuadraticBezierLine } from '@react-three/drei';
+import { OrbitControls, Text, QuadraticBezierLine } from '@react-three/drei';
 import { EffectComposer, Bloom, FXAA, DepthOfField } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { supabase } from '../supabaseClient';
@@ -672,7 +672,26 @@ const waterFragment = `
   }
 `;
 
-/* ---------- Water Plane (lowered below nodes) ---------- */
+const rippleVertex = `
+  varying vec2 vUv;
+  void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+`;
+const rippleFragment = `
+  uniform float uTime;
+  uniform vec3  uColor;
+  uniform float uIntensity;
+  varying vec2 vUv;
+  void main() {
+    float d = distance(vUv, vec2(0.5));
+    float rim = smoothstep(0.48, 0.50, d) - smoothstep(0.50, 0.52, d);
+    float waves = pow(max(0.0, 1.0 - d), 2.0) *
+                  (0.35 + 0.65 * (0.5 + 0.5 * sin((1.0 - d) * 22.0 - uTime * 2.0)));
+    float a = (rim + waves) * uIntensity;
+    gl_FragColor = vec4(uColor, a);
+  }
+`;
+
+/* ---------- Water Plane (lowered just below nodes) ---------- */
 
 function WaterPlane({ yPosition }) {
   const ref = useRef();
@@ -703,26 +722,7 @@ function WaterPlane({ yPosition }) {
   );
 }
 
-/* ----- Ripple shader for core + nodes (depthTest on) ----- */
-
-const rippleVertex = `
-  varying vec2 vUv;
-  void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
-`;
-const rippleFragment = `
-  uniform float uTime;
-  uniform vec3  uColor;
-  uniform float uIntensity;
-  varying vec2 vUv;
-  void main() {
-    float d = distance(vUv, vec2(0.5));
-    float rim = smoothstep(0.48, 0.50, d) - smoothstep(0.50, 0.52, d);
-    float waves = pow(max(0.0, 1.0 - d), 2.0) *
-                  (0.35 + 0.65 * (0.5 + 0.5 * sin((1.0 - d) * 22.0 - uTime * 2.0)));
-    float a = (rim + waves) * uIntensity;
-    gl_FragColor = vec4(uColor, a);
-  }
-`;
+/* ----- Ripple shader for core + nodes ----- */
 
 function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', intensity = 0.9 }) {
   const mat = useRef();
@@ -955,24 +955,20 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
         <meshBasicMaterial depthWrite colorWrite={false} />
       </mesh>
 
-      {/* Shell */}
+      {/* Shell: self-lit so it never goes black */}
       <mesh renderOrder={1}>
         <sphereGeometry args={[0.7, 48, 48]} />
-        <meshStandardMaterial
+        <meshBasicMaterial
           color={node.color}
-          metalness={0.2}
-          roughness={0.35}
-          emissive={node.color}
-          emissiveIntensity={node.avg != null ? 0.25 + node.avg / 40 : 0.18}
           transparent
-          opacity={0.9}
+          opacity={0.95}
           depthWrite={false}
           depthTest
           toneMapped={false}
         />
       </mesh>
 
-      {/* Inner dots (score-driven) */}
+      {/* Inner dots (score-driven emissive) */}
       <mesh position={[-0.1, 0.06, 0.08]}>
         <sphereGeometry args={[0.08, 16, 16]} />
         <meshStandardMaterial color={DOT_COLORS.clarity} emissive={DOT_COLORS.clarity} emissiveIntensity={brightness('clarity')} metalness={0.4} roughness={0.3} toneMapped={false}/>
@@ -1047,10 +1043,10 @@ function WeekRing({
   selected,
   onDragStateChange,
   onPositionsChange,
-  ringY = -3.0,
+  ringY = -4.5,
   ringRadius = 7.8,
   coreRadius = 3.4,
-  waterY = -3.35,
+  waterY = -4.52,
 }) {
   const SLOTS = 7;
 
@@ -1443,9 +1439,9 @@ function NeuralCortex({ onSwitchView }) {
     return () => clearTimeout(timer);
   }, []);
 
-  // Composition: keep canvas at base z-layer; overlays have zIndex > 10
-  const ringYPosition = -3.0;          // nodes
-  const waterY = -3.35;                // water/ripples lower than nodes to avoid z issues
+  // ---- SINGLE SOURCE OF TRUTH FOR HEIGHTS ----
+  const ringYPosition = -4.5;                  // nodes + core baseline (matches original brief)
+  const waterY = ringYPosition - 0.02;         // water slightly below nodes (prevents z-fighting)
   const coreRadius = 3.4;
 
   return (
@@ -1486,9 +1482,10 @@ function NeuralCortex({ onSwitchView }) {
         <pointLight position={[10, 5, 5]} intensity={lightIntensities.immune} color="#A0E7FF" />
         <pointLight position={[0, -10, 5]} intensity={lightIntensities.physical} color="#64FFD8" />
 
-        <LightCore radius={coreRadius} color="#7CEBFF" rim="#CFF8FF" energy={lightIntensities.energy} y={waterY} />
+        {/* Core sits ON the ring plane */}
+        <LightCore radius={coreRadius} color="#7CEBFF" rim="#CFF8FF" energy={lightIntensities.energy} y={ringYPosition} />
 
-        {/* Water + core ripple (both live on lowered plane) */}
+        {/* Water + core ripple (both live relative to the lowered plane) */}
         <WaterPlane yPosition={waterY} />
         <RippleRing position={[0, waterY + 0.001, 0]} size={coreRadius * 2.1} color="#6FEFFF" intensity={1.0} />
 
