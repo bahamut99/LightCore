@@ -1,10 +1,7 @@
 // src/components/NeuralCortex.jsx
 // LightCore — Neural-Cortex view
-// - Water/ripples lowered below nodes to avoid slicing
-// - Depth occluders for core + day nodes remain
-// - Softer day-node material (no “evil” pulse), inner dots still reflect scores
-// - 360° horizontal orbit; scene raised slightly
-// - Top-center neon +LOG floater (non-rotating)
+// Center animation focus: water/ripples/beams hug the plane and always render behind UI.
+// Functions and app chrome unchanged.
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -1139,7 +1136,7 @@ function WeekRing({
           <DayNode
             node={n}
             position={n.position}
-            onSelect={() => onSelect(n)}
+            onSelect={onSelect}
             isSelected={selected?.dayKey === n.key}
             isHovered={hovered?.dayKey === n.key}
             setHovered={setHovered}
@@ -1446,13 +1443,13 @@ function NeuralCortex({ onSwitchView }) {
     return () => clearTimeout(timer);
   }, []);
 
-  // Lift the whole composition a little
+  // Composition: keep canvas at base z-layer; overlays have zIndex > 10
   const ringYPosition = -3.0;          // nodes
-  const waterY = -3.35;                // water/ripples slightly lower (fixes slicing)
+  const waterY = -3.35;                // water/ripples lower than nodes to avoid z issues
   const coreRadius = 3.4;
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
+    <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a', position: 'relative', zIndex: 0 }}>
       <TopLogFloater onClick={() => setIsLogModalOpen(true)} />
       {isPoweredUp && (<LeftStack onSwitchView={onSwitchView} onOpenSettings={() => setDrawerOpen(true)} />)}
       {isPoweredUp && <GuidePanel guide={guideData} />}
