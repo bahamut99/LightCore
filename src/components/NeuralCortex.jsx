@@ -1,11 +1,9 @@
 // src/components/NeuralCortex.jsx
 // LightCore — Neural-Cortex view (enhanced center globe + 7-day ring)
-// - Center globe sits in the water plane, slightly smaller
-// - Exactly 7 day-nodes around the core (last 7 calendar days)
-// - Each day has its own neon shell color + three inner dots (clarity/immune/physical brightness)
-// - Animated beams from the LightCore to each day-node (level with the water)
-// - Ripples under the core and each node
-// - Non-breaking overlays (buttons, drawers, guide, HUD, nudges)
+// - Depth pre-pass occluders for core & nodes (fix water/ripple slicing artifacts)
+// - Water/ripples drawn after occluders + slight Y offset to avoid z-fighting
+// - 360° horizontal rotation
+// - Brighter day-node palette + emissive not tone-mapped
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -29,7 +27,6 @@ const hideScrollbarCSS = `
   *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
 `;
 
-// Steps polling every 120s
 const STEPS_POLL_MS = 120000;
 
 /* ------------------------- Utils ------------------------- */
@@ -56,9 +53,7 @@ function useHoverCursor(isHovered) {
   useEffect(() => {
     const prev = document.body.style.cursor;
     document.body.style.cursor = isHovered ? 'pointer' : 'auto';
-    return () => {
-      document.body.style.cursor = prev;
-    };
+    return () => { document.body.style.cursor = prev; };
   }, [isHovered]);
 }
 
@@ -77,7 +72,6 @@ async function fetchWithTimeout(promise, ms) {
 const fmtDate = (d) =>
   new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
-// Last N calendar days (today included), newest last
 function lastNDays(n) {
   const out = [];
   const today = new Date();
@@ -89,7 +83,6 @@ function lastNDays(n) {
   return out;
 }
 
-// Local YYYY-MM-DD (avoid TZ surprises)
 function localKey(date) {
   const d = new Date(date);
   const y = d.getFullYear();
@@ -98,7 +91,6 @@ function localKey(date) {
   return `${y}-${m}-${da}`;
 }
 
-// Map 0..10 → brightness [0.2 .. 2.0]
 function scoreToIntensity(s) {
   if (typeof s !== 'number') return 0.2;
   const clamped = Math.max(0, Math.min(10, s));
@@ -137,26 +129,15 @@ function NeoButton({ as = 'button', href, children, onClick, title, style = {} }
   };
   if (as === 'a') {
     return (
-      <a
-        href={href}
-        title={title}
-        style={s}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-      >
+      <a href={href} title={title} style={s}
+         onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
         {children}
       </a>
     );
   }
   return (
-    <button
-      type="button"
-      title={title}
-      style={s}
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-    >
+    <button type="button" title={title} style={s} onClick={onClick}
+            onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       {children}
     </button>
   );
@@ -166,17 +147,10 @@ function NeoButton({ as = 'button', href, children, onClick, title, style = {} }
 
 function LeftStack({ onSwitchView, onOpenSettings }) {
   return (
-    <div
-      style={{
-        position: 'absolute',
-        top: '2rem',
-        left: '2rem',
-        zIndex: 12,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.75rem',
-      }}
-    >
+    <div style={{
+      position: 'absolute', top: '2rem', left: '2rem', zIndex: 12,
+      display: 'flex', flexDirection: 'column', gap: '0.75rem',
+    }}>
       <NeoButton onClick={onSwitchView} title="Switch to Classic Dashboard">
         CLASSIC VIEW
       </NeoButton>
@@ -193,106 +167,46 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
   if (!open) return null;
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 20, pointerEvents: 'none' }}>
-      <div
-        onClick={onClose}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'rgba(0,0,0,0.35)',
-          backdropFilter: 'blur(2px)',
-          pointerEvents: 'auto',
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '420px',
-          height: '100vh',
-          background: 'rgba(10, 25, 47, 0.92)',
-          borderRight: '1px solid rgba(0,240,255,0.25)',
-          boxShadow: '0 0 24px rgba(0,240,255,0.15)',
-          backdropFilter: 'blur(10px)',
-          padding: '1rem 1rem 1.5rem',
-          pointerEvents: 'auto',
-          overflowY: 'auto',
-        }}
-      >
+      <div onClick={onClose} style={{
+        position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)',
+        backdropFilter: 'blur(2px)', pointerEvents: 'auto',
+      }} />
+      <div style={{
+        position: 'absolute', top: 0, left: 0, width: '420px', height: '100vh',
+        background: 'rgba(10, 25, 47, 0.92)',
+        borderRight: '1px solid rgba(0,240,255,0.25)',
+        boxShadow: '0 0 24px rgba(0,240,255,0.15)',
+        backdropFilter: 'blur(10px)',
+        padding: '1rem 1rem 1.5rem', pointerEvents: 'auto', overflowY: 'auto',
+      }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '0.75rem' }}>
-          <h2
-            style={{
-              fontFamily: "'Orbitron', sans-serif",
-              color: '#cfefff',
-              fontSize: '1.1rem',
-              letterSpacing: '0.04em',
-              margin: 0,
-            }}
-          >
-            SETTINGS
-          </h2>
+          <h2 style={{
+            fontFamily: "'Orbitron', sans-serif", color: '#cfefff',
+            fontSize: '1.1rem', letterSpacing: '0.04em', margin: 0,
+          }}>SETTINGS</h2>
           <div style={{ flex: 1 }} />
-          <button
-            onClick={onClose}
-            title="Close"
-            aria-label="Close settings"
-            style={{
-              width: 32,
-              height: 32,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#00f0ff',
-              background: 'transparent',
-              border: '1px solid rgba(0,240,255,0.35)',
-              borderRadius: 8,
-              cursor: 'pointer',
-              lineHeight: 1,
-              fontSize: 18,
-            }}
-          >
-            ×
-          </button>
+          <button onClick={onClose} title="Close" aria-label="Close settings" style={{
+            width: 32, height: 32, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            color: '#00f0ff', background: 'transparent', border: '1px solid rgba(0,240,255,0.35)',
+            borderRadius: 8, cursor: 'pointer', lineHeight: 1, fontSize: 18,
+          }}>×</button>
         </div>
 
         <section style={{ marginBottom: '1rem' }}>
-          <h3
-            style={{
-              fontFamily: "'Orbitron', sans-serif",
-              fontSize: '0.9rem',
-              color: '#9bd9ff',
-              margin: '0 0 0.5rem',
-            }}
-          >
+          <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '0.9rem', color: '#9bd9ff', margin: '0 0 0.5rem' }}>
             UI PREFERENCE
           </h3>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <NeoButton
-              onClick={() => onSetUIPref('neural')}
-              style={{
-                flex: 1,
-                borderColor: currentUIPref === 'neural' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
-                boxShadow:
-                  currentUIPref === 'neural'
-                    ? '0 0 12px rgba(0,240,255,0.35)'
-                    : '0 0 6px rgba(0,240,255,0.15)',
-              }}
-            >
-              NEURAL-CORTEX
-            </NeoButton>
-            <NeoButton
-              onClick={() => onSetUIPref('classic')}
-              style={{
-                flex: 1,
-                borderColor: currentUIPref === 'classic' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
-                boxShadow:
-                  currentUIPref === 'classic'
-                    ? '0 0 12px rgba(0,240,255,0.35)'
-                    : '0 0 6px rgba(0,240,255,0.15)',
-              }}
-            >
-              CLASSIC
-            </NeoButton>
+            <NeoButton onClick={() => onSetUIPref('neural')} style={{
+              flex: 1,
+              borderColor: currentUIPref === 'neural' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
+              boxShadow: currentUIPref === 'neural' ? '0 0 12px rgba(0,240,255,0.35)' : '0 0 6px rgba(0,240,255,0.15)',
+            }}>NEURAL-CORTEX</NeoButton>
+            <NeoButton onClick={() => onSetUIPref('classic')} style={{
+              flex: 1,
+              borderColor: currentUIPref === 'classic' ? '#38e8ff' : 'rgba(0,240,255,0.35)',
+              boxShadow: currentUIPref === 'classic' ? '0 0 12px rgba(0,240,255,0.35)' : '0 0 6px rgba(0,240,255,0.15)',
+            }}>CLASSIC</NeoButton>
           </div>
           <p style={{ color: '#98a9c1', fontSize: 12, marginTop: 8 }}>
             Your choice loads automatically on next sign-in.
@@ -300,51 +214,28 @@ function SettingsDrawer({ open, onClose, onExport, onDelete, onSetUIPref, curren
         </section>
 
         <section style={{ marginBottom: '1rem' }}>
-          <h3
-            style={{
-              fontFamily: "'Orbitron', sans-serif",
-              fontSize: '0.9rem',
-              color: '#9bd9ff',
-              margin: '0 0 0.5rem',
-            }}
-          >
+          <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '0.9rem', color: '#9bd9ff', margin: '0 0 0.5rem' }}>
             PERFORMANCE
           </h3>
-           <div style={{ display: 'flex', gap: '0.5rem' }}>
-             <NeoButton
-              onClick={() => onSetPerfMode(!perfMode)}
-              style={{ flex: 1 }}
-            >
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <NeoButton onClick={() => onSetPerfMode(!perfMode)} style={{ flex: 1 }}>
               {perfMode ? 'ENABLE' : 'DISABLE'} VISUAL EFFECTS
             </NeoButton>
-           </div>
+          </div>
           <p style={{ color: '#98a9c1', fontSize: 12, marginTop: 8 }}>
             Disable Bloom and Depth of Field to improve framerate on lower-end devices.
           </p>
         </section>
 
         <section style={{ marginBottom: '1rem' }}>
-          <h3
-            style={{
-              fontFamily: "'Orbitron', sans-serif",
-              fontSize: '0.9rem',
-              color: '#9bd9ff',
-              margin: '0 0 0.5rem',
-            }}
-          >
+          <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '0.9rem', color: '#9bd9ff', margin: '0 0 0.5rem' }}>
             PRIVACY
           </h3>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <NeoButton onClick={onExport} style={{ flex: 1 }}>
-              EXPORT MY DATA
-            </NeoButton>
-            <NeoButton onClick={onDelete} style={{ flex: 1 }}>
-              DELETE ACCOUNT
-            </NeoButton>
+            <NeoButton onClick={onExport} style={{ flex: 1 }}>EXPORT MY DATA</NeoButton>
+            <NeoButton onClick={onDelete} style={{ flex: 1 }}>DELETE ACCOUNT</NeoButton>
           </div>
-          <p style={{ color: '#98a9c1', fontSize: 12, marginTop: 8 }}>
-            Stored with RLS. No selling of data.
-          </p>
+          <p style={{ color: '#98a9c1', fontSize: 12, marginTop: 8 }}>Stored with RLS. No selling of data.</p>
         </section>
       </div>
     </div>
@@ -361,109 +252,41 @@ function GuidePanel({ guide }) {
       concerns: [],
       suggestions: ['Keep logging — your personalized guide is being prepared.'],
     };
-
   return (
-    <div
-      aria-label="LightCore Guide"
-      style={{
-        position: 'absolute',
-        top: '2rem',
-        right: '2rem',
-        width: '440px',
-        color: '#00f0ff',
-        background: 'rgba(10, 25, 47, 0.72)',
-        border: '1px solid rgba(0, 240, 255, 0.25)',
-        boxShadow: '0 0 24px rgba(0,240,255,0.15)',
-        backdropFilter: 'blur(10px)',
-        borderRadius: '12px',
-        padding: '1.25rem 1.25rem 1rem',
-        fontFamily: "'Roboto Mono', monospace",
-        fontSize: '14px',
-        zIndex: 11,
-      }}
-    >
-      <h2
-        style={{
-          fontFamily: "'Orbitron', sans-serif",
-          fontSize: '1.1rem',
-          textShadow: '0 0 5px #00f0ff',
-          margin: 0,
-          marginBottom: '0.75rem',
-          letterSpacing: '0.04em',
-        }}
-      >
-        LIGHTCØRE GUIDE
-      </h2>
-
-      <p
-        style={{
-          color: 'white',
-          whiteSpace: 'pre-wrap',
-          lineHeight: 1.6,
-          fontStyle: 'italic',
-          marginTop: 0,
-          marginBottom: '0.75rem',
-        }}
-      >
+    <div aria-label="LightCore Guide" style={{
+      position: 'absolute', top: '2rem', right: '2rem', width: '440px', color: '#00f0ff',
+      background: 'rgba(10, 25, 47, 0.72)',
+      border: '1px solid rgba(0, 240, 255, 0.25)',
+      boxShadow: '0 0 24px rgba(0,240,255,0.15)', backdropFilter: 'blur(10px)',
+      borderRadius: '12px', padding: '1.25rem 1.25rem 1rem',
+      fontFamily: "'Roboto Mono', monospace", fontSize: '14px', zIndex: 11,
+    }}>
+      <h2 style={{
+        fontFamily: "'Orbitron', sans-serif", fontSize: '1.1rem',
+        textShadow: '0 0 5px #00f0ff', margin: 0, marginBottom: '0.75rem', letterSpacing: '0.04em',
+      }}>LIGHTCØRE GUIDE</h2>
+      <p style={{ color: 'white', whiteSpace: 'pre-wrap', lineHeight: 1.6, fontStyle: 'italic', marginTop: 0, marginBottom: '0.75rem' }}>
         {g.current_state}
       </p>
-
       {(g.positives?.length || g.concerns?.length) > 0 && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr',
-            gap: '0.25rem',
-            marginBottom: '0.75rem',
-          }}
-        >
-          {(g.positives || []).map((p) => (
-            <p key={`p-${p}`} style={{ color: '#00ff88', margin: 0 }}>
-              + {p}
-            </p>
-          ))}
-          {(g.concerns || []).map((c) => (
-            <p key={`c-${c}`} style={{ color: '#ffd700', margin: 0 }}>
-              - {c}
-            </p>
-          ))}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.25rem', marginBottom: '0.75rem' }}>
+          {(g.positives || []).map((p) => (<p key={`p-${p}`} style={{ color: '#00ff88', margin: 0 }}>+ {p}</p>))}
+          {(g.concerns || []).map((c) => (<p key={`c-${c}`} style={{ color: '#ffd700', margin: 0 }}>- {c}</p>))}
         </div>
       )}
-
       {g.suggestions?.length > 0 && (
         <>
-          <div
-            style={{
-              borderTop: '1px solid rgba(0,240,255,0.18)',
-              margin: '0.5rem 0 0.75rem',
-            }}
-          />
-          <h3
-            style={{
-              fontFamily: "'Orbitron', sans-serif",
-              fontSize: '0.9rem',
-              margin: 0,
-              marginBottom: '0.5rem',
-              letterSpacing: '0.04em',
-            }}
-          >
+          <div style={{ borderTop: '1px solid rgba(0,240,255,0.18)', margin: '0.5rem 0 0.75rem' }} />
+          <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '0.9rem', margin: 0, marginBottom: '0.5rem', letterSpacing: '0.04em' }}>
             SUGGESTIONS
           </h3>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
             {g.suggestions.map((s) => (
-              <span
-                key={`s-${s}`}
-                style={{
-                  background: 'rgba(0,240,255,0.12)',
-                  padding: '0.3rem 0.75rem',
-                  borderRadius: '999px',
-                  fontSize: '12px',
-                  color: '#cfefff',
-                  border: '1px solid rgba(0,240,255,0.25)',
-                }}
-              >
-                {s}
-              </span>
+              <span key={`s-${s}`} style={{
+                background: 'rgba(0,240,255,0.12)', padding: '0.3rem 0.75rem',
+                borderRadius: '999px', fontSize: '12px', color: '#cfefff',
+                border: '1px solid rgba(0,240,255,0.25)',
+              }}>{s}</span>
             ))}
           </div>
         </>
@@ -472,73 +295,41 @@ function GuidePanel({ guide }) {
   );
 }
 
-/* ---------------------- HUD (selected day / nudge) ---------------------- */
+/* ---------------------- HUD ---------------------- */
 
 function Hud({ item, onClose, onCreate }) {
   if (!item) return null;
-
-  // Accept either a daily log object or a nudge object
   const isNudge = item && (item.headline || item.body_text);
   const log =
     !isNudge && (item.created_at || item.clarity_score || item.ai_notes) ? item : null;
-
   const title = isNudge ? (item.headline || 'Notice') : 'Daily Log';
   const subtitle = isNudge
     ? (item.category || 'Nudge')
     : (log?.created_at ? fmtDate(log.created_at) : (item.date ? fmtDate(item.date) : (item.dayKey || '')));
-
   const notes = isNudge ? item.body_text : (log?.ai_notes || '');
-
-  const scores = isNudge
-    ? null
-    : {
-        clarity: log?.clarity_score ?? log?.scores?.clarity ?? null,
-        immune: log?.immune_score ?? log?.scores?.immune ?? null,
-        physical: log?.physical_readiness_score ?? log?.scores?.physical ?? null,
-      };
+  const scores = isNudge ? null : {
+    clarity: log?.clarity_score ?? log?.scores?.clarity ?? null,
+    immune: log?.immune_score ?? log?.scores?.immune ?? null,
+    physical: log?.physical_readiness_score ?? log?.scores?.physical ?? null,
+  };
 
   return (
-    <div
-      style={{
-        position: 'absolute',
-        left: '2rem',
-        bottom: '2rem',
-        width: 420,
-        zIndex: 13,
-        background: 'rgba(10, 25, 47, 0.78)',
-        border: '1px solid rgba(0,240,255,0.25)',
-        boxShadow: '0 0 24px rgba(0,240,255,0.18)',
-        borderRadius: 12,
-        backdropFilter: 'blur(10px)',
-        color: '#cfefff',
-        padding: '1rem 1rem 0.75rem',
-        fontFamily: "'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-      }}
-    >
+    <div style={{
+      position: 'absolute', left: '2rem', bottom: '2rem', width: 420, zIndex: 13,
+      background: 'rgba(10, 25, 47, 0.78)', border: '1px solid rgba(0,240,255,0.25)',
+      boxShadow: '0 0 24px rgba(0,240,255,0.18)', borderRadius: 12, backdropFilter: 'blur(10px)',
+      color: '#cfefff', padding: '1rem 1rem 0.75rem',
+      fontFamily: "'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+    }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <h3 style={{ margin: 0, fontFamily: "'Orbitron', sans-serif", letterSpacing: '.04em' }}>
-          {title}
-        </h3>
+        <h3 style={{ margin: 0, fontFamily: "'Orbitron', sans-serif", letterSpacing: '.04em' }}>{title}</h3>
         <span style={{ opacity: 0.8, fontSize: 12 }}>{subtitle}</span>
         <div style={{ flex: 1 }} />
-        <button
-          onClick={onClose}
-          title="Close"
-          style={{
-            background: 'transparent',
-            color: '#00f0ff',
-            border: '1px solid rgba(0,240,255,0.35)',
-            borderRadius: 8,
-            width: 28,
-            height: 28,
-            cursor: 'pointer',
-            lineHeight: 1,
-          }}
-        >
-          ×
-        </button>
+        <button onClick={onClose} title="Close" style={{
+          background: 'transparent', color: '#00f0ff',
+          border: '1px solid rgba(0,240,255,0.35)', borderRadius: 8, width: 28, height: 28, cursor: 'pointer', lineHeight: 1,
+        }}>×</button>
       </div>
-
       {scores && (
         <div style={{ display: 'flex', gap: 10, marginTop: 8, marginBottom: 6 }}>
           <Badge label="Clarity" value={scores.clarity} hue="#00f0ff" />
@@ -546,7 +337,6 @@ function Hud({ item, onClose, onCreate }) {
           <Badge label="Physical" value={scores.physical} hue="#00ff88" />
         </div>
       )}
-
       {notes ? (
         <p style={{ margin: '6px 0 10px', whiteSpace: 'pre-wrap', color: 'white' }}>{notes}</p>
       ) : !isNudge && (
@@ -565,34 +355,20 @@ function Hud({ item, onClose, onCreate }) {
 
 function Badge({ label, value, hue }) {
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: '4px 10px',
-        borderRadius: 999,
-        border: `1px solid ${hue}55`,
-        background: `${hue}22`,
-        color: '#eaffff',
-        fontSize: 12,
-      }}
-    >
-      <span
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: 999,
-          background: hue,
-          boxShadow: `0 0 10px ${hue}`,
-        }}
-      />
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      padding: '4px 10px', borderRadius: 999, border: `1px solid ${hue}55`,
+      background: `${hue}22`, color: '#eaffff', fontSize: 12,
+    }}>
+      <span style={{
+        width: 8, height: 8, borderRadius: 999, background: hue, boxShadow: `0 0 10px ${hue}`,
+      }}/>
       {label}: {value ?? '—'}
     </span>
   );
 }
 
-/* ---------------------- LightCore Shaders ---------------------- */
+/* ---------------------- Shaders ---------------------- */
 
 const coreVertex = `
   uniform float uTime;
@@ -600,7 +376,6 @@ const coreVertex = `
   uniform float uDisplace;
   varying vec3 vNormal;
   varying vec3 vWorldPosition;
-
   void main() {
     vNormal = normalize(normalMatrix * normal);
     float w = sin(uTime * 1.5 + position.y * 2.0) * 0.5 + 0.5;
@@ -617,7 +392,6 @@ const coreFragment = `
   uniform float uPulse;
   varying vec3 vNormal;
   varying vec3 vWorldPosition;
-
   void main() {
     vec3 N = normalize(vNormal);
     vec3 V = normalize(cameraPosition - vWorldPosition);
@@ -652,11 +426,10 @@ const atmoFragment = `
   }
 `;
 
-/* ----- High-Quality Water Surface Shader ----- */
+/* Water surface */
 const waterVertex = `
   uniform float uTime;
   varying vec2 vUv;
-
   vec3 permute(vec3 x){ return mod(((x*34.0)+1.0)*x,289.0); }
   float snoise(vec2 v){
     const vec4 C=vec4(0.211324865405187,0.366025403784439,-0.577350269189626,0.024390243902439);
@@ -678,7 +451,6 @@ const waterVertex = `
     g.yz=a0.yz*x12.xz+h.yz*x12.yw;
     return 130.0*dot(m,g);
   }
-
   void main(){
     vUv=uv;
     vec3 pos=position;
@@ -686,13 +458,11 @@ const waterVertex = `
     gl_Position=projectionMatrix*modelViewMatrix*vec4(pos,1.0);
   }
 `;
-
 const waterFragment = `
   uniform float uTime;
   uniform vec3 uColor;
   uniform float uDepthFade;
   varying vec2 vUv;
-
   void main(){
     float dist=distance(vUv,vec2(0.5));
     float strength=smoothstep(0.6,0.1,dist);
@@ -704,26 +474,16 @@ const waterFragment = `
 
 function WaterPlane({ yPosition }) {
   const ref = useRef();
-  const uniforms = useMemo(
-    () => ({
-      uTime: { value: 0 },
-      uColor: { value: new THREE.Color('#00e7ff') },
-      uDepthFade: { value: 1.5 },
-    }),
-    []
-  );
-
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uColor: { value: new THREE.Color('#00e7ff') },
+    uDepthFade: { value: 1.5 },
+  }), []);
   useFrame(({ clock }) => {
     if (ref.current) ref.current.uniforms.uTime.value = clock.getElapsedTime();
   });
-
   return (
-    <mesh
-      position={[0, yPosition, 0]}
-      rotation={[-Math.PI / 2, 0, 0]}
-      frustumCulled={false}
-      renderOrder={-3}
-    >
+    <mesh position={[0, yPosition, 0]} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false} renderOrder={-3}>
       <planeGeometry args={[30, 30, 64, 64]} />
       <shaderMaterial
         ref={ref}
@@ -731,21 +491,17 @@ function WaterPlane({ yPosition }) {
         fragmentShader={waterFragment}
         uniforms={uniforms}
         transparent
+        depthTest
         depthWrite={false}
-        // Mask out anything where spheres (core + nodes) have stamped the stencil buffer
-        stencilWrite
-        stencilRef={1}
-        stencilFunc={THREE.NotEqualStencilFunc}
-        stencilZPass={THREE.KeepStencilOp}
       />
     </mesh>
   );
 }
 
-/* ----- Ripple shader for core + nodes ----- */
+/* Ripple ring */
 const rippleVertex = `
   varying vec2 vUv;
-  void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+  void main() { vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }
 `;
 const rippleFragment = `
   uniform float uTime;
@@ -767,22 +523,14 @@ function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', inten
   useFrame(({ clock }) => {
     if (mat.current) mat.current.uniforms.uTime.value = clock.getElapsedTime();
   });
-  const uniforms = useMemo(
-    () => ({
-      uTime: { value: 0 },
-      uColor: { value: new THREE.Color(color) },
-      uIntensity: { value: intensity },
-    }),
-    [color, intensity]
-  );
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uColor: { value: new THREE.Color(color) },
+    uIntensity: { value: intensity },
+  }), [color, intensity]);
 
   return (
-    <mesh
-      position={position}
-      rotation={[-Math.PI / 2, 0, 0]}
-      renderOrder={-2}
-      frustumCulled={false}
-    >
+    <mesh position={position} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-2} frustumCulled={false}>
       <planeGeometry args={[size, size, 1, 1]} />
       <shaderMaterial
         ref={mat}
@@ -791,12 +539,8 @@ function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', inten
         uniforms={uniforms}
         blending={THREE.AdditiveBlending}
         transparent
+        depthTest
         depthWrite={false}
-        // Mask ripples under any stamped silhouettes
-        stencilWrite
-        stencilRef={1}
-        stencilFunc={THREE.NotEqualStencilFunc}
-        stencilZPass={THREE.KeepStencilOp}
         polygonOffset
         polygonOffsetFactor={-2}
       />
@@ -810,21 +554,16 @@ function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, en
   const group = useRef();
   const atmoRef = useRef();
 
-  const uniforms = useMemo(
-    () => ({
-      uTime: { value: 0 },
-      uPulse: { value: 0 },
-      uDisplace: { value: 0.28 },
-      uCoreColor: { value: new THREE.Color(color) },
-      uRimColor: { value: new THREE.Color(rim) },
-    }),
-    [color, rim]
-  );
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uPulse: { value: 0 },
+    uDisplace: { value: 0.28 },
+    uCoreColor: { value: new THREE.Color(color) },
+    uRimColor: { value: new THREE.Color(rim) },
+  }), [color, rim]);
   const atmoUniforms = useMemo(() => ({ uColor: { value: new THREE.Color(rim) } }), [rim]);
 
-  useEffect(() => {
-    uniforms.uPulse.value = 0;
-  }, [uniforms.uPulse]);
+  useEffect(() => { uniforms.uPulse.value = 0; }, [uniforms.uPulse]);
 
   useFrame((state, delta) => {
     if (!group.current) return;
@@ -840,30 +579,18 @@ function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, en
     group.current.scale.setScalar(base);
   });
 
-  // Depth/stencil occluder so transparent core still masks ripples/water beneath
+  // Depth prepass occluder (invisible, writes depth so water/ripples don't show through)
   const Occluder = () => (
-    <mesh renderOrder={0}>
+    <mesh renderOrder={-10}>
       <sphereGeometry args={[radius * 0.995, 48, 48]} />
-      <meshBasicMaterial
-        colorWrite={false}
-        depthWrite
-        // write 1 into the stencil buffer wherever the core projects
-        stencilWrite
-        stencilRef={1}
-        stencilFunc={THREE.AlwaysStencilFunc}
-        stencilZPass={THREE.ReplaceStencilOp}
-      />
+      <meshBasicMaterial colorWrite={false} depthWrite depthTest />
     </mesh>
   );
 
   const ring = useMemo(() => {
     const g = new THREE.TorusGeometry(radius * 1.05, 0.06, 12, 120);
     const m = new THREE.MeshBasicMaterial({
-      color: rim,
-      transparent: true,
-      opacity: 0.7,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
+      color: rim, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false,
     });
     const mesh = new THREE.Mesh(g, m);
     mesh.rotation.x = Math.PI / 2;
@@ -873,17 +600,18 @@ function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, en
   return (
     <group ref={group} onClick={onClick} position={[0, y, 0]}>
       <Occluder />
-      <mesh renderOrder={1}>
+      <mesh renderOrder={-5}>
         <sphereGeometry args={[radius, 96, 96]} />
         <shaderMaterial
           vertexShader={coreVertex}
           fragmentShader={coreFragment}
           uniforms={uniforms}
           transparent
-          depthWrite={false}
+          depthWrite={true}   // let core actually occlude
+          toneMapped={false}
         />
       </mesh>
-      <mesh ref={atmoRef} scale={1.055} renderOrder={2}>
+      <mesh ref={atmoRef} scale={1.055} renderOrder={-4}>
         <sphereGeometry args={[radius * 1.02, 64, 64]} />
         <shaderMaterial
           vertexShader={atmoVertex}
@@ -892,6 +620,7 @@ function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, en
           blending={THREE.AdditiveBlending}
           transparent
           depthWrite={false}
+          toneMapped={false}
         />
       </mesh>
       <primitive object={ring} />
@@ -910,41 +639,29 @@ function AnomalyGlyph({ nudge, position, onGlyphClick }) {
     }
   });
   return (
-    <group
-      ref={ref}
-      position={position}
-      onClick={() => onGlyphClick(nudge)}
-      onPointerOver={() => setHovered(true)}
-      onPointerOut={() => setHovered(false)}
-    >
+    <group ref={ref} position={position}
+           onClick={() => onGlyphClick(nudge)}
+           onPointerOver={() => setHovered(true)}
+           onPointerOut={() => setHovered(false)}>
       <mesh>
         <octahedronGeometry args={[0.5]} />
-        <meshStandardMaterial
-          color="#ff4d4d"
-          emissive="#ff4d4d"
-          emissiveIntensity={hovered ? 2 : 1}
-          roughness={0.2}
-          metalness={0.8}
-        />
+        <meshStandardMaterial color="#ff4d4d" emissive="#ff4d4d"
+                              emissiveIntensity={hovered ? 2 : 1}
+                              roughness={0.3} metalness={0.3} toneMapped={false}/>
       </mesh>
-      <Text color="white" fontSize={0.8} position={[0, 0, 0.6]}>
-        !
-      </Text>
+      <Text color="white" fontSize={0.8} position={[0, 0, 0.6]}>!</Text>
     </group>
   );
 }
 
 function SynapticLinkTraveler({ start, mid, end, color, offset = 0, duration = 3 }) {
   const dot = useRef();
-  const curve = useMemo(
-    () =>
-      new THREE.QuadraticBezierCurve3(
-        new THREE.Vector3(...start),
-        new THREE.Vector3(...mid),
-        new THREE.Vector3(...end)
-      ),
-    [start, mid, end]
-  );
+  const curve = useMemo(() =>
+    new THREE.QuadraticBezierCurve3(
+      new THREE.Vector3(...start),
+      new THREE.Vector3(...mid),
+      new THREE.Vector3(...end)
+    ), [start, mid, end]);
 
   useFrame(({ clock }) => {
     if (!dot.current) return;
@@ -955,12 +672,7 @@ function SynapticLinkTraveler({ start, mid, end, color, offset = 0, duration = 3
   return (
     <mesh ref={dot}>
       <sphereGeometry args={[0.05, 12, 12]} />
-      <meshStandardMaterial
-        color={color}
-        emissive={color}
-        emissiveIntensity={3}
-        toneMapped={false}
-      />
+      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={3} toneMapped={false}/>
     </mesh>
   );
 }
@@ -994,29 +706,10 @@ function SynapticLinks({ selectedNode, events }) {
           <group key={key}>
             <mesh position={end}>
               <sphereGeometry args={[0.15, 16, 16]} />
-              <meshStandardMaterial
-                color={color}
-                emissive={color}
-                emissiveIntensity={1.5}
-              />
+              <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} toneMapped={false}/>
             </mesh>
-            <QuadraticBezierLine
-              start={start}
-              end={end}
-              mid={mid}
-              color="#00f0ff"
-              lineWidth={1}
-              transparent
-              opacity={0.55}
-              depthTest
-            />
-            <SynapticLinkTraveler
-                start={start.toArray()}
-                mid={mid.toArray()}
-                end={end.toArray()}
-                color={color}
-                offset={i * 0.4}
-              />
+            <QuadraticBezierLine start={start} end={end} mid={mid} color="#00f0ff" lineWidth={1} transparent opacity={0.55} depthTest />
+            <SynapticLinkTraveler start={start.toArray()} mid={mid.toArray()} end={end.toArray()} color={color} offset={i * 0.4}/>
           </group>
         );
       })}
@@ -1024,14 +717,15 @@ function SynapticLinks({ selectedNode, events }) {
   );
 }
 
+/* Brighter palette */
 const DAY_SHELL_COLORS = [
-  '#B29CFF', // Lilac
-  '#FFD700', // Gold
-  '#4D7DFF', // Electric Blue
-  '#FF6B6B', // Red-Orange
-  '#40C057', // Green
-  '#64C7FF', // Cyan
-  '#E040FB', // Magenta
+  '#8EE7FF', // aqua
+  '#7CA8FF', // indigo-blue
+  '#9B7CFF', // violet
+  '#6FFFD9', // mint
+  '#64C7FF', // cyan-blue
+  '#A7F3FF', // ice
+  '#B29CFF', // lilac
 ];
 
 const DOT_COLORS = { clarity: '#00f0ff', immune: '#ffd700', physical: '#00ff88' };
@@ -1042,8 +736,7 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
 
   useFrame((state) => {
     if (!ref.current) return;
-    const pulse =
-      1 + Math.sin(state.clock.elapsedTime * 2.0) * 0.035 * (node.avg ? node.avg / 10 : 0.3);
+    const pulse = 1 + Math.sin(state.clock.elapsedTime * 2.0) * 0.035 * (node.avg ? node.avg / 10 : 0.3);
     const target = (isSelected ? 1.5 : isHovered ? 1.2 : 1.0) * pulse;
     const s = THREE.MathUtils.lerp(ref.current.scale.x, target, 0.15);
     ref.current.scale.setScalar(s);
@@ -1051,80 +744,51 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
 
   const brightness = (name) => scoreToIntensity(node.scores?.[name]);
 
-  // Invisible depth+stencil occluder matching the node shell
+  // Depth prepass occluder (matches shell)
   const Occluder = () => (
-    <mesh>
+    <mesh renderOrder={-10}>
       <sphereGeometry args={[0.705, 32, 32]} />
-      <meshBasicMaterial
-        colorWrite={false}
-        depthWrite
-        stencilWrite
-        stencilRef={1}
-        stencilFunc={THREE.AlwaysStencilFunc}
-        stencilZPass={THREE.ReplaceStencilOp}
-      />
+      <meshBasicMaterial colorWrite={false} depthWrite depthTest />
     </mesh>
   );
 
   return (
-    <group
-      position={position}
-      ref={ref}
-      onClick={(e) => {
-        e.stopPropagation();
-        onSelect(node);
-      }}
-      onPointerOver={(e) => {
-        e.stopPropagation();
-        setHovered(node);
-      }}
-      onPointerOut={() => setHovered(null)}
-    >
+    <group position={position} ref={ref}
+           onClick={(e) => { e.stopPropagation(); onSelect(node); }}
+           onPointerOver={(e) => { e.stopPropagation(); setHovered(node); }}
+           onPointerOut={() => setHovered(null)}>
       <Occluder />
       <mesh>
         <sphereGeometry args={[0.7, 32, 32]} />
         <meshStandardMaterial
           color={node.color}
-          metalness={0.9}
-          roughness={0.25}
+          metalness={0.2}
+          roughness={0.35}
           emissive={node.color}
-          emissiveIntensity={node.avg != null ? 0.5 + node.avg / 20 : 0.15}
+          emissiveIntensity={node.avg != null ? 0.6 + node.avg / 18 : 0.35}
           transparent
-          opacity={0.95}
+          opacity={0.98}
+          depthWrite={true}
+          toneMapped={false}
         />
       </mesh>
       <mesh position={[-0.1, 0.06, 0.08]}>
         <sphereGeometry args={[0.08, 16, 16]} />
-        <meshStandardMaterial
-          color={DOT_COLORS.clarity}
-          emissive={DOT_COLORS.clarity}
-          emissiveIntensity={brightness('clarity')}
-          metalness={0.6}
-          roughness={0.25}
-          toneMapped={false}
-        />
+        <meshStandardMaterial color={DOT_COLORS.clarity} emissive={DOT_COLORS.clarity}
+                              emissiveIntensity={brightness('clarity')}
+                              metalness={0.2} roughness={0.3} toneMapped={false}/>
       </mesh>
       <mesh position={[0.1, 0.06, 0.08]}>
         <sphereGeometry args={[0.08, 16, 16]} />
-        <meshStandardMaterial
-          color={DOT_COLORS.immune}
-          emissive={DOT_COLORS.immune}
-          emissiveIntensity={brightness('immune')}
-          metalness={0.6}
-          roughness={0.25}
-          toneMapped={false}
-        />
+        <meshStandardMaterial color={DOT_COLORS.immune} emissive={DOT_COLORS.immune}
+                              emissiveIntensity={brightness('immune')}
+                              metalness={0.2} roughness={0.3} toneMapped={false}/>
       </mesh>
       <mesh position={[0, -0.09, 0.08]}>
         <sphereGeometry args={[0.08, 16, 16]} />
-        <meshStandardMaterial
-          color={DOT_COLORS.physical}
-          emissive={DOT_COLORS.physical}
-          emissiveIntensity={brightness('physical')}
-          metalness={0.6}
-          roughness={0.25}
-          toneMapped={false}
-        />
+        <meshStandardMaterial color={DOT_COLORS.physical} emissive={DOT_COLORS.physical}
+                              emissiveIntensity={brightness('physical')}
+                              metalness={0.2} roughness={0.3} toneMapped={false}/>
       </mesh>
     </group>
   );
@@ -1132,15 +796,12 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
 
 function BeamTraveler({ start, mid, end, color, offset = 0 }) {
   const dot = useRef();
-  const curve = useMemo(
-    () =>
-      new THREE.QuadraticBezierCurve3(
-        new THREE.Vector3(...start),
-        new THREE.Vector3(...mid),
-        new THREE.Vector3(...end)
-      ),
-    [start, mid, end]
-  );
+  const curve = useMemo(() =>
+    new THREE.QuadraticBezierCurve3(
+      new THREE.Vector3(...start),
+      new THREE.Vector3(...mid),
+      new THREE.Vector3(...end)
+    ), [start, mid, end]);
 
   useFrame(({ clock }) => {
     if (!dot.current) return;
@@ -1151,56 +812,27 @@ function BeamTraveler({ start, mid, end, color, offset = 0 }) {
   return (
     <mesh ref={dot}>
       <sphereGeometry args={[0.09, 16, 16]} />
-      <meshStandardMaterial
-        color={color}
-        emissive={color}
-        emissiveIntensity={1.8}
-        metalness={0.6}
-        roughness={0.2}
-        toneMapped={false}
-      />
+      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.8} metalness={0.2} roughness={0.2} toneMapped={false}/>
     </mesh>
   );
 }
 
 function LightBeams({ nodes, energy = 1, coreRadius = 1, ringY = 0 }) {
-  const beams = useMemo(() => {
-    return nodes.map((n) => {
-      const end = new THREE.Vector3(...n.position);
-      const dirXZ = new THREE.Vector2(end.x, end.z).normalize();
-      const start = new THREE.Vector3(dirXZ.x * (coreRadius * 0.985), ringY, dirXZ.y * (coreRadius * 0.985));
-
-      const mid = new THREE.Vector3((start.x + end.x) * 0.5, ringY + 0.6, (start.z + end.z) * 0.5);
-
-      const r = Math.hypot(mid.x, mid.z) || 1;
-      const push = 1.2;
-      mid.x *= 1 + push / r;
-      mid.z *= 1 + push / r;
-
-      return {
-        start: start.toArray(),
-        mid: mid.toArray(),
-        end: end.toArray(),
-        key: n.key,
-        color: n.color,
-      };
-    });
-  }, [nodes, coreRadius, ringY]);
+  const beams = useMemo(() => nodes.map((n) => {
+    const end = new THREE.Vector3(...n.position);
+    const dirXZ = new THREE.Vector2(end.x, end.z).normalize();
+    const start = new THREE.Vector3(dirXZ.x * (coreRadius * 0.985), ringY, dirXZ.y * (coreRadius * 0.985));
+    const mid = new THREE.Vector3((start.x + end.x) * 0.5, ringY + 0.6, (start.z + end.z) * 0.5);
+    const r = Math.hypot(mid.x, mid.z) || 1; const push = 1.2; mid.x *= 1 + push / r; mid.z *= 1 + push / r;
+    return { start: start.toArray(), mid: mid.toArray(), end: end.toArray(), key: n.key, color: n.color };
+  }), [nodes, coreRadius, ringY]);
 
   return (
     <group>
       {beams.map((b, i) => (
         <group key={b.key}>
-          <QuadraticBezierLine
-            start={b.start}
-            end={b.end}
-            mid={b.mid}
-            color={b.color}
-            lineWidth={1}
-            transparent
-            opacity={0.3 + 0.2 * energy}
-            depthTest
-          />
+          <QuadraticBezierLine start={b.start} end={b.end} mid={b.mid}
+                               color={b.color} lineWidth={1} transparent opacity={0.3 + 0.2 * energy} depthTest />
           <BeamTraveler start={b.start} mid={b.mid} end={b.end} color={b.color} offset={i * 0.7} />
         </group>
       ))}
@@ -1239,11 +871,8 @@ function WeekRing({
     const current = offset;
     const target = targetOffset.current;
     const lerped = THREE.MathUtils.lerp(current, target, 0.12);
-    if (Math.abs(target - lerped) > 1e-3) {
-      setOffset(lerped);
-    } else if (current !== target) {
-      setOffset(target);
-    }
+    if (Math.abs(target - lerped) > 1e-3) setOffset(lerped);
+    else if (current !== target) setOffset(target);
   });
 
   const items = useMemo(() => {
@@ -1251,13 +880,11 @@ function WeekRing({
     return weekNodes.map((day, i) => {
       const getCircular = (val) => (val % SLOTS + SLOTS) % SLOTS;
       const dataIndex = getCircular(i - Math.round(offset));
-
       const x = getCircular(i - offset);
       const iA = Math.floor(x);
       const t = x - iA;
       const A = slots[iA];
       const B = slots[(iA + 1) % SLOTS];
-
       return { ...weekNodes[dataIndex], position: lerpPos(A, B, t) };
     });
   }, [weekNodes, offset, slots, ringY]);
@@ -1283,7 +910,6 @@ function WeekRing({
       document.body.style.userSelect = '';
       document.body.style.cursor = 'auto';
     };
-
     window.addEventListener('pointermove', move, { passive: false });
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
@@ -1314,12 +940,8 @@ function WeekRing({
             isHovered={hovered?.dayKey === n.key}
             setHovered={setHovered}
           />
-          <RippleRing
-            position={[n.position[0], ringY, n.position[2]]}
-            size={2.2}
-            color="#78E7FF"
-            intensity={0.8}
-          />
+          {/* place ripples slightly below water plane to prevent z-fighting */}
+          <RippleRing position={[n.position[0], ringY - 0.01, n.position[2]]} size={2.2} color="#78E7FF" intensity={0.8} />
         </group>
       ))}
       <LightBeams nodes={items} energy={1} coreRadius={coreRadius} ringY={ringY} />
@@ -1336,25 +958,14 @@ function LogEntryButton({ onClick }) {
   useHoverCursor(hovered);
   return (
     <Float speed={4} floatIntensity={1.5}>
-      <group
-        position={[0, -7.5, 0]}
-        onClick={onClick}
-        onPointerOver={() => setHovered(true)}
-        onPointerOut={() => setHovered(false)}
-      >
+      <group position={[0, -7.5, 0]} onClick={onClick}
+             onPointerOver={() => setHovered(true)} onPointerOut={() => setHovered(false)}>
         <mesh>
           <torusGeometry args={[0.8, 0.15, 16, 100]} />
-          <meshStandardMaterial
-            color="#00f0ff"
-            emissive="#00f0ff"
-            emissiveIntensity={hovered ? 2 : 1}
-            roughness={0.2}
-            metalness={0.8}
-          />
+          <meshStandardMaterial color="#00f0ff" emissive="#00f0ff" emissiveIntensity={hovered ? 2 : 1}
+                                roughness={0.2} metalness={0.2} toneMapped={false}/>
         </mesh>
-        <Text color="white" fontSize={0.3} position={[0, 0, 0]}>
-          + LOG
-        </Text>
+        <Text color="white" fontSize={0.3} position={[0, 0, 0]}>+ LOG</Text>
       </group>
     </Float>
   );
@@ -1380,18 +991,11 @@ function NeuralCortex({ onSwitchView }) {
   const [perfMode, setPerfMode] = useState(false);
 
   const lastGuideRequestRef = useRef(0);
+  const [isPoweredUp, setIsPoweredUp] = useState(false);
 
-  // Intro ease-in for ring/overlays
-  const [intro, setIntro] = useState(0);
   useEffect(() => {
-    let t = 0, raf;
-    const tick = () => {
-      t = Math.min(1, t + 0.025);
-      setIntro(t);
-      if (t < 1) raf = requestAnimationFrame(tick);
-    };
-    tick();
-    return () => cancelAnimationFrame(raf);
+    const timer = setTimeout(() => setIsPoweredUp(true), 800);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -1413,9 +1017,7 @@ function NeuralCortex({ onSwitchView }) {
   }, []);
 
   const getAuthHeader = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
     return session ? { Authorization: `Bearer ${session.access_token}` } : {};
   };
 
@@ -1424,7 +1026,6 @@ function NeuralCortex({ onSwitchView }) {
       const now = Date.now();
       if (now - lastGuideRequestRef.current < 15000) return null;
       lastGuideRequestRef.current = now;
-
       const headers = await getAuthHeader();
       const json = await fetchWithTimeout(
         fetch('/.netlify/functions/generate-guidance', {
@@ -1445,22 +1046,15 @@ function NeuralCortex({ onSwitchView }) {
   const fetchAllData = async () => {
     setIsLoading(true);
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) {
-        setIsLoading(false);
-        return;
-      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setIsLoading(false); return; }
 
       if (!guideData) requestGuidance().catch(() => {});
 
       const [logRes, nudgeRes] = await Promise.all([
         supabase
           .from('daily_logs')
-          .select(
-            'id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes'
-          )
+          .select('id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes')
           .order('created_at', { ascending: false })
           .limit(30),
         supabase.from('nudges').select('*').eq('is_acknowledged', false),
@@ -1478,19 +1072,13 @@ function NeuralCortex({ onSwitchView }) {
       setActiveNudges(nudges || []);
       setIsLoading(false);
 
-      fetchWithTimeout(
-        (async () => {
-          const headers = await getAuthHeader();
-          const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-          return fetch(`/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`, {
-            headers,
-          }).then((r) => (r.ok ? r.json() : null));
-        })(),
-        6000
-      )
-        .then((stepRes) => {
-          if (typeof stepRes?.steps === 'number') setStepCount(stepRes.steps);
-        })
+      fetchWithTimeout((async () => {
+        const headers = await getAuthHeader();
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        return fetch(`/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`, { headers })
+          .then((r) => (r.ok ? r.json() : null));
+      })(), 6000)
+        .then((stepRes) => { if (typeof stepRes?.steps === 'number') setStepCount(stepRes.steps); })
         .catch(() => {});
     } catch {
       setIsLoading(false);
@@ -1501,15 +1089,11 @@ function NeuralCortex({ onSwitchView }) {
     fetchAllData();
     const channel = supabase
       .channel('realtime:daily_logs')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'daily_logs' },
-        (payload) => {
-          setLogHistory((prev) => [payload.new, ...prev].slice(0, 30));
-          setLatestScores({ ...payload.new });
-          requestGuidance().catch(() => {});
-        }
-      )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'daily_logs' }, (payload) => {
+        setLogHistory((prev) => [payload.new, ...prev].slice(0, 30));
+        setLatestScores({ ...payload.new });
+        requestGuidance().catch(() => {});
+      })
       .subscribe();
     const { data: authListener } = supabase.auth.onAuthStateChange(() => {
       fetchAllData();
@@ -1527,23 +1111,15 @@ function NeuralCortex({ onSwitchView }) {
       try {
         const headers = await getAuthHeader();
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const res = await fetch(
-          `/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`,
-          { headers }
-        );
+        const res = await fetch(`/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`, { headers });
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled && typeof data?.steps === 'number') {
-          setStepCount(data.steps);
-        }
+        if (!cancelled && typeof data?.steps === 'number') setStepCount(data.steps);
       } catch {}
     };
     tick();
     timer = setInterval(tick, STEPS_POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
+    return () => { cancelled = true; clearInterval(timer); };
   }, []);
 
   useEffect(() => {
@@ -1616,20 +1192,14 @@ function NeuralCortex({ onSwitchView }) {
         await supabase.auth.signOut();
         window.location.href = '/';
       } else alert('Delete failed.');
-    } catch {
-      alert('Delete failed.');
-    }
+    } catch { alert('Delete failed.'); }
   };
 
   const onSetUIPref = async (view) => {
     setUiPref(view);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.from('profiles').update({ preferred_view: view }).eq('id', user.id);
-      }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) await supabase.from('profiles').update({ preferred_view: view }).eq('id', user.id);
     } catch {}
   };
 
@@ -1638,9 +1208,7 @@ function NeuralCortex({ onSwitchView }) {
     for (const log of logHistory) {
       const k = localKey(log.created_at);
       const existing = byDay.get(k);
-      if (!existing || new Date(log.created_at) > new Date(existing.created_at)) {
-        byDay.set(k, log);
-      }
+      if (!existing || new Date(log.created_at) > new Date(existing.created_at)) byDay.set(k, log);
     }
     const days = lastNDays(7);
     return days.map((d, idx) => {
@@ -1649,17 +1217,11 @@ function NeuralCortex({ onSwitchView }) {
       const clarity = log?.clarity_score ?? null;
       const immune = log?.immune_score ?? null;
       const physical = log?.physical_readiness_score ?? null;
-      const avg =
-        log != null
-          ? (Number(clarity || 0) + Number(immune || 0) + Number(physical || 0)) / 3
-          : null;
+      const avg = log != null ? (Number(clarity || 0) + Number(immune || 0) + Number(physical || 0)) / 3 : null;
       return {
-        key,
-        date: d,
+        key, date: d,
         color: DAY_SHELL_COLORS[idx % DAY_SHELL_COLORS.length],
-        scores: { clarity, immune, physical },
-        avg,
-        log,
+        scores: { clarity, immune, physical }, avg, log,
       };
     });
   }, [logHistory]);
@@ -1667,32 +1229,17 @@ function NeuralCortex({ onSwitchView }) {
   const selectDay = (node) => {
     setSelectedItem({ dayKey: node.key, date: node.date, log: node.log || null, position: node.position });
   };
-
-  const setHoveredDay = (nodeOrNull) => {
-    setHoveredLog(nodeOrNull ? { dayKey: nodeOrNull.key } : null);
-  };
-
-  const [isPoweredUp, setIsPoweredUp] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setIsPoweredUp(true), 2500);
-    return () => clearTimeout(timer);
-  }, []);
+  const setHoveredDay = (nodeOrNull) => setHoveredLog(nodeOrNull ? { dayKey: nodeOrNull.key } : null);
 
   const ringYPosition = -4.5;
   const coreRadius = 3.4;
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
-      {isPoweredUp && (
-        <LeftStack onSwitchView={onSwitchView} onOpenSettings={() => setDrawerOpen(true)} />
-      )}
+      {isPoweredUp && (<LeftStack onSwitchView={onSwitchView} onOpenSettings={() => setDrawerOpen(true)} />)}
       {isPoweredUp && <GuidePanel guide={guideData} />}
       {isPoweredUp && (
-        <Hud
-          item={selectedItem?.log || selectedItem}
-          onClose={handleCloseHud}
-          onCreate={() => setIsLogModalOpen(true)}
-        />
+        <Hud item={selectedItem?.log || selectedItem} onClose={handleCloseHud} onCreate={() => setIsLogModalOpen(true)} />
       )}
 
       <SettingsDrawer
@@ -1705,12 +1252,7 @@ function NeuralCortex({ onSwitchView }) {
         perfMode={perfMode}
         onSetPerfMode={setPerfMode}
       />
-      <LogEntryModal
-        isOpen={isLogModalOpen}
-        onClose={() => setIsLogModalOpen(false)}
-        onLogSubmitted={fetchAllData}
-        stepCount={stepCount}
-      />
+      <LogEntryModal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} onLogSubmitted={fetchAllData} stepCount={stepCount} />
 
       <Canvas
         dpr={[1, 2]}
@@ -1719,8 +1261,8 @@ function NeuralCortex({ onSwitchView }) {
           powerPreference: 'high-performance',
           outputColorSpace: THREE.SRGBColorSpace,
           toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1,
-          stencil: true, // <<< enable stencil buffer
+          toneMappingExposure: 1.0,
+          // no stencil needed now
         }}
         camera={{ position: [0, 2, 22], fov: 50 }}
       >
@@ -1730,25 +1272,11 @@ function NeuralCortex({ onSwitchView }) {
         <pointLight position={[10, 5, 5]} intensity={lightIntensities.immune} color="#A0E7FF" />
         <pointLight position={[0, -10, 5]} intensity={lightIntensities.physical} color="#64FFD8" />
 
-        <LightCore
-          radius={coreRadius}
-          color="#7CEBFF"
-          rim="#CFF8FF"
-          energy={lightIntensities.energy}
-          y={ringYPosition}
-        />
+        {/* DRAW SPHERES (with occluders) FIRST */}
+        <LightCore radius={coreRadius} color="#7CEBFF" rim="#CFF8FF" energy={lightIntensities.energy} y={ringYPosition} />
 
-        {/* Water + core ripple (now masked by stencil, so no more "equator slicing") */}
-        <WaterPlane yPosition={ringYPosition} />
-        <RippleRing
-          position={[0, ringYPosition + 0.001, 0]}
-          size={coreRadius * 2.1}
-          color="#6FEFFF"
-          intensity={1.0}
-        />
-
-        {isPoweredUp && (
-          <group scale={0.9 + 0.1 * intro}>
+        {isPoweredUp && !isLoading && (
+          <>
             <WeekRing
               weekNodes={weekNodes}
               onSelect={selectDay}
@@ -1764,26 +1292,21 @@ function NeuralCortex({ onSwitchView }) {
             <SynapticLinks
               selectedNode={
                 selectedItem
-                  ? {
-                      ...selectedItem,
-                      position:
-                        nodePositions.get(selectedItem.dayKey) || selectedItem.position,
-                    }
+                  ? { ...selectedItem, position: nodePositions.get(selectedItem.dayKey) || selectedItem.position }
                   : null
               }
               events={dayEvents}
             />
             {activeNudges.map((nudge, idx) => (
-              <AnomalyGlyph
-                key={nudge.id}
-                nudge={nudge}
-                position={[-12, 4 - idx * 2.5, -6]}
-                onGlyphClick={(n) => setSelectedItem(n)}
-              />
+              <AnomalyGlyph key={nudge.id} nudge={nudge} position={[-12, 4 - idx * 2.5, -6]} onGlyphClick={(n) => setSelectedItem(n)} />
             ))}
             <LogEntryButton onClick={() => setIsLogModalOpen(true)} />
-          </group>
+          </>
         )}
+
+        {/* THEN DRAW WATER & RIPPLE PLANES (slightly below to avoid z-fighting) */}
+        <WaterPlane yPosition={ringYPosition - 0.02} />
+        <RippleRing position={[0, ringYPosition - 0.01, 0]} size={coreRadius * 2.1} color="#6FEFFF" intensity={1.0} />
 
         <OrbitControls
           enablePan={false}
@@ -1794,7 +1317,8 @@ function NeuralCortex({ onSwitchView }) {
           maxDistance={35}
           minPolarAngle={Math.PI / 2.8}
           maxPolarAngle={Math.PI / 2.1}
-          // full 360° horizontal rotation
+          minAzimuthAngle={-Infinity}
+          maxAzimuthAngle={Infinity}
           enableDamping
           dampingFactor={0.05}
         />
