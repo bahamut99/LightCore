@@ -802,7 +802,6 @@ function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', inten
         blending={THREE.AdditiveBlending}
         transparent
         depthWrite={false}
-        // IMPORTANT: keep depthTest TRUE so ripples do NOT draw across spheres
         depthTest
         polygonOffset
         polygonOffsetFactor={-2}
@@ -1297,7 +1296,7 @@ function WeekRing({
             setHovered={setHovered}
           />
           <RippleRing
-            position={[n.position[0], ringY, n.position[2]]}
+            position={[n.position[0], ringY - 0.01, n.position[2]]}
             size={2.2}
             color="#78E7FF"
             intensity={0.8}
@@ -1702,7 +1701,7 @@ function NeuralCortex({ onSwitchView }) {
         {/* Water + core ripple (depth-tested) */}
         <WaterPlane yPosition={ringYPosition} />
         <RippleRing
-          position={[0, ringYPosition + 0.001, 0]}
+          position={[0, ringYPosition - 0.01, 0]}
           size={coreRadius * 2.1}
           color="#6FEFFF"
           intensity={1.0}
@@ -1750,12 +1749,11 @@ function NeuralCortex({ onSwitchView }) {
           enableZoom
           enabled={!isDragging}
           autoRotate={false}
-          // Full 360° azimuth again:
           minAzimuthAngle={-Infinity}
           maxAzimuthAngle={Infinity}
           minPolarAngle={Math.PI / 2.8}
           maxPolarAngle={Math.PI / 2.1}
-          target={[0, ringYPosition + 0.6, 0]}   // nudged up so scene sits higher
+          target={[0, ringYPosition + 0.6, 0]}
           enableDamping
           dampingFactor={0.05}
         />
@@ -1765,7 +1763,7 @@ function NeuralCortex({ onSwitchView }) {
           {!perfMode && (
             <>
               <Bloom intensity={1.35} luminanceThreshold={0.42} luminanceSmoothing={0.85} />
-              <DepthOfField focusDistance={0.015} focalLength={0.022} bokehScale={2.4} />
+              <DepthOfField focusDistance={0} focalLength={0.2} bokehScale={1.5} />
             </>
           )}
         </EffectComposer>
