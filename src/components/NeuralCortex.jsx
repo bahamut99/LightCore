@@ -1,5 +1,12 @@
 // src/components/NeuralCortex.jsx
 // LightCore — Neural-Cortex view (enhanced center globe + 7-day ring)
+// - Center globe sits in the water plane
+// - Exactly 7 day-nodes around the core (last 7 calendar days)
+// - Each day has its own neon shell color + three inner dots (clarity/immune/physical brightness)
+// - Animated beams from the LightCore to each day-node (level with the water)
+// - Ripples under the core and each node (now properly depth-tested)
+// - Non-breaking overlays (buttons, drawers, guide, HUD, nudges)
+// - Top-center +LOG UI floater (CSS bob; no rotation; no depth issues)
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -23,6 +30,24 @@ const hideScrollbarCSS = `
   *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
 `;
 
+// +LOG UI floater CSS
+const floaterCSS = `
+  @keyframes lc-float {
+    0%   { transform: translate(-50%, 0px) }
+    50%  { transform: translate(-50%, -6px) }
+    100% { transform: translate(-50%, 0px) }
+  }
+  .lc-log-floater {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 25;
+    animation: lc-float 3.5s ease-in-out infinite;
+  }
+`;
+
+// Steps polling every 120s
 const STEPS_POLL_MS = 120000;
 
 /* ------------------------- Utils ------------------------- */
@@ -49,7 +74,9 @@ function useHoverCursor(isHovered) {
   useEffect(() => {
     const prev = document.body.style.cursor;
     document.body.style.cursor = isHovered ? 'pointer' : 'auto';
-    return () => void (document.body.style.cursor = prev);
+    return () => {
+      document.body.style.cursor = prev;
+    };
   }, [isHovered]);
 }
 
@@ -68,6 +95,7 @@ async function fetchWithTimeout(promise, ms) {
 const fmtDate = (d) =>
   new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
+// Last N calendar days (today included), newest last
 function lastNDays(n) {
   const out = [];
   const today = new Date();
@@ -79,6 +107,7 @@ function lastNDays(n) {
   return out;
 }
 
+// Local YYYY-MM-DD (avoid TZ surprises)
 function localKey(date) {
   const d = new Date(date);
   const y = d.getFullYear();
@@ -87,7 +116,7 @@ function localKey(date) {
   return `${y}-${m}-${da}`;
 }
 
-// 0..10 → [0.2 .. 2.0]
+// Map 0..10 → brightness [0.2 .. 2.0]
 function scoreToIntensity(s) {
   if (typeof s !== 'number') return 0.2;
   const clamped = Math.max(0, Math.min(10, s));
@@ -462,8 +491,11 @@ function GuidePanel({ guide }) {
 
 function Hud({ item, onClose, onCreate }) {
   if (!item) return null;
+
+  // Accept either a daily log object or a nudge object
   const isNudge = item && (item.headline || item.body_text);
-  const log = !isNudge && (item.created_at || item.clarity_score || item.ai_notes) ? item : null;
+  const log =
+    !isNudge && (item.created_at || item.clarity_score || item.ai_notes) ? item : null;
 
   const title = isNudge ? (item.headline || 'Notice') : 'Daily Log';
   const subtitle = isNudge
@@ -608,7 +640,7 @@ const coreFragment = `
     float fres = pow(1.0 - ndotv, 3.0);
     vec3 base = uCoreColor * (0.6 + 0.5 * uPulse);
     vec3 color = base + uRimColor * fres * (1.0 + 1.2 * uPulse);
-    gl_FragColor = vec4(color, 1.0); // opaque, writes depth
+    gl_FragColor = vec4(color, 0.98);
   }
 `;
 
@@ -635,7 +667,7 @@ const atmoFragment = `
   }
 `;
 
-/* ----- Water Surface Shader (halo) ----- */
+/* ----- High-Quality Water Surface Shader ----- */
 const waterVertex = `
   uniform float uTime;
   varying vec2 vUv;
@@ -715,13 +747,12 @@ function WaterPlane({ yPosition }) {
         uniforms={uniforms}
         transparent
         depthWrite={false}
-        depthTest
       />
     </mesh>
   );
 }
 
-/* ----- Ripple shader (core + nodes) ----- */
+/* ----- Ripple shader for core + nodes (depth-tested) ----- */
 const rippleVertex = `
   varying vec2 vUv;
   void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
@@ -771,10 +802,10 @@ function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', inten
         blending={THREE.AdditiveBlending}
         transparent
         depthWrite={false}
+        // IMPORTANT: keep depthTest TRUE so ripples do NOT draw across spheres
         depthTest
         polygonOffset
         polygonOffsetFactor={-2}
-        toneMapped={false}
       />
     </mesh>
   );
@@ -782,7 +813,7 @@ function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', inten
 
 /* -------------------- 3D Elements -------------------- */
 
-function LightCore({ radius = 3.4, color = '#7CEBFF', rim = '#CFF8FF', energy = 1, y = 0 }) {
+function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, energy = 1, y = 0 }) {
   const group = useRef();
   const atmoRef = useRef();
 
@@ -798,7 +829,9 @@ function LightCore({ radius = 3.4, color = '#7CEBFF', rim = '#CFF8FF', energy = 
   );
   const atmoUniforms = useMemo(() => ({ uColor: { value: new THREE.Color(rim) } }), [rim]);
 
-  useEffect(() => { uniforms.uPulse.value = 0; }, [uniforms.uPulse]);
+  useEffect(() => {
+    uniforms.uPulse.value = 0;
+  }, [uniforms.uPulse]);
 
   useFrame((state, delta) => {
     if (!group.current) return;
@@ -822,7 +855,6 @@ function LightCore({ radius = 3.4, color = '#7CEBFF', rim = '#CFF8FF', energy = 
       opacity: 0.7,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      toneMapped: false,
     });
     const mesh = new THREE.Mesh(g, m);
     mesh.rotation.x = Math.PI / 2;
@@ -830,28 +862,22 @@ function LightCore({ radius = 3.4, color = '#7CEBFF', rim = '#CFF8FF', energy = 
   }, [radius, rim]);
 
   return (
-    <group ref={group} position={[0, y, 0]}>
-      {/* Depth-only prepass */}
+    <group ref={group} onClick={onClick} position={[0, y, 0]}>
+      {/* Invisible occluder to hide lines behind the core */}
       <mesh renderOrder={0}>
         <sphereGeometry args={[radius * 0.99, 32, 32]} />
-        <meshBasicMaterial colorWrite={false} />
+        <meshBasicMaterial depthWrite colorWrite={false} />
       </mesh>
-
-      {/* Opaque core (writes depth) */}
       <mesh renderOrder={1}>
         <sphereGeometry args={[radius, 96, 96]} />
         <shaderMaterial
           vertexShader={coreVertex}
           fragmentShader={coreFragment}
           uniforms={uniforms}
-          transparent={false}
-          depthWrite
-          depthTest
-          toneMapped={false}
+          transparent
+          depthWrite={false}
         />
       </mesh>
-
-      {/* Atmosphere glow */}
       <mesh ref={atmoRef} scale={1.055} renderOrder={2}>
         <sphereGeometry args={[radius * 1.02, 64, 64]} />
         <shaderMaterial
@@ -861,7 +887,6 @@ function LightCore({ radius = 3.4, color = '#7CEBFF', rim = '#CFF8FF', energy = 
           blending={THREE.AdditiveBlending}
           transparent
           depthWrite={false}
-          toneMapped={false}
         />
       </mesh>
       <primitive object={ring} />
@@ -908,11 +933,12 @@ function AnomalyGlyph({ nudge, position, onGlyphClick }) {
 function SynapticLinkTraveler({ start, mid, end, color, offset = 0, duration = 3 }) {
   const dot = useRef();
   const curve = useMemo(
-    () => new THREE.QuadraticBezierCurve3(
-      new THREE.Vector3(...start),
-      new THREE.Vector3(...mid),
-      new THREE.Vector3(...end)
-    ),
+    () =>
+      new THREE.QuadraticBezierCurve3(
+        new THREE.Vector3(...start),
+        new THREE.Vector3(...mid),
+        new THREE.Vector3(...end)
+      ),
     [start, mid, end]
   );
 
@@ -923,14 +949,13 @@ function SynapticLinkTraveler({ start, mid, end, color, offset = 0, duration = 3
   });
 
   return (
-    <mesh ref={dot} renderOrder={3}>
-      <sphereGeometry args={[0.06, 16, 16]} />
+    <mesh ref={dot}>
+      <sphereGeometry args={[0.05, 12, 12]} />
       <meshStandardMaterial
         color={color}
         emissive={color}
         emissiveIntensity={3}
         toneMapped={false}
-        depthWrite={false}
       />
     </mesh>
   );
@@ -965,7 +990,12 @@ function SynapticLinks({ selectedNode, events }) {
           <group key={key}>
             <mesh position={end}>
               <sphereGeometry args={[0.15, 16, 16]} />
-              <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} toneMapped={false} />
+              <meshStandardMaterial
+                color={color}
+                emissive={color}
+                emissiveIntensity={1.5}
+                toneMapped={false}
+              />
             </mesh>
             <QuadraticBezierLine
               start={start}
@@ -991,7 +1021,7 @@ function SynapticLinks({ selectedNode, events }) {
   );
 }
 
-/* --- Palette --- */
+// Restored icy palette
 const DAY_SHELL_COLORS = [
   '#8EE7FF', // aqua
   '#7CA8FF', // indigo-blue
@@ -1001,7 +1031,6 @@ const DAY_SHELL_COLORS = [
   '#A7F3FF', // ice
   '#B29CFF', // lilac
 ];
-
 const DOT_COLORS = { clarity: '#00f0ff', immune: '#ffd700', physical: '#00ff88' };
 
 function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }) {
@@ -1010,7 +1039,8 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
 
   useFrame((state) => {
     if (!ref.current) return;
-    const pulse = 1 + Math.sin(state.clock.elapsedTime * 2.0) * 0.035 * (node.avg ? node.avg / 10 : 0.3);
+    const pulse =
+      1 + Math.sin(state.clock.elapsedTime * 2.0) * 0.035 * (node.avg ? node.avg / 10 : 0.3);
     const target = (isSelected ? 1.5 : isHovered ? 1.2 : 1.0) * pulse;
     const s = THREE.MathUtils.lerp(ref.current.scale.x, target, 0.15);
     ref.current.scale.setScalar(s);
@@ -1022,63 +1052,59 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
     <group
       position={position}
       ref={ref}
-      onClick={(e) => { e.stopPropagation(); onSelect(node); }}
-      onPointerOver={(e) => { e.stopPropagation(); setHovered(node); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect(node);
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(node);
+      }}
       onPointerOut={() => setHovered(null)}
     >
-      {/* Inner dots */}
+      <mesh>
+        <sphereGeometry args={[0.7, 32, 32]} />
+        <meshStandardMaterial
+          color={node.color}
+          metalness={0.9}
+          roughness={0.25}
+          emissive={node.color}
+          emissiveIntensity={node.avg != null ? 0.5 + node.avg / 20 : 0.15}
+          transparent
+          opacity={0.95}
+          toneMapped={false}
+        />
+      </mesh>
       <mesh position={[-0.1, 0.06, 0.08]}>
-        <sphereGeometry args={[0.09, 16, 16]} />
+        <sphereGeometry args={[0.08, 16, 16]} />
         <meshStandardMaterial
           color={DOT_COLORS.clarity}
           emissive={DOT_COLORS.clarity}
           emissiveIntensity={brightness('clarity')}
-          metalness={0.4}
-          roughness={0.2}
+          metalness={0.6}
+          roughness={0.25}
           toneMapped={false}
-          depthWrite
         />
       </mesh>
       <mesh position={[0.1, 0.06, 0.08]}>
-        <sphereGeometry args={[0.09, 16, 16]} />
+        <sphereGeometry args={[0.08, 16, 16]} />
         <meshStandardMaterial
           color={DOT_COLORS.immune}
           emissive={DOT_COLORS.immune}
           emissiveIntensity={brightness('immune')}
-          metalness={0.4}
-          roughness={0.2}
+          metalness={0.6}
+          roughness={0.25}
           toneMapped={false}
-          depthWrite
         />
       </mesh>
       <mesh position={[0, -0.09, 0.08]}>
-        <sphereGeometry args={[0.09, 16, 16]} />
+        <sphereGeometry args={[0.08, 16, 16]} />
         <meshStandardMaterial
           color={DOT_COLORS.physical}
           emissive={DOT_COLORS.physical}
           emissiveIntensity={brightness('physical')}
-          metalness={0.4}
-          roughness={0.2}
-          toneMapped={false}
-          depthWrite
-        />
-      </mesh>
-
-      {/* Translucent shell */}
-      <mesh renderOrder={2}>
-        <sphereGeometry args={[0.7, 32, 32]} />
-        <meshPhysicalMaterial
-          color={node.color}
-          transparent
-          opacity={0.6}
-          roughness={0.15}
-          metalness={0.0}
-          transmission={0.7}
-          thickness={0.5}
-          envMapIntensity={0.8}
-          emissive={node.color}
-          emissiveIntensity={node.avg != null ? 0.35 + node.avg / 25 : 0.2}
-          depthWrite={false}
+          metalness={0.6}
+          roughness={0.25}
           toneMapped={false}
         />
       </mesh>
@@ -1089,11 +1115,12 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
 function BeamTraveler({ start, mid, end, color, offset = 0 }) {
   const dot = useRef();
   const curve = useMemo(
-    () => new THREE.QuadraticBezierCurve3(
-      new THREE.Vector3(...start),
-      new THREE.Vector3(...mid),
-      new THREE.Vector3(...end)
-    ),
+    () =>
+      new THREE.QuadraticBezierCurve3(
+        new THREE.Vector3(...start),
+        new THREE.Vector3(...mid),
+        new THREE.Vector3(...end)
+      ),
     [start, mid, end]
   );
 
@@ -1104,7 +1131,7 @@ function BeamTraveler({ start, mid, end, color, offset = 0 }) {
   });
 
   return (
-    <mesh ref={dot} renderOrder={3}>
+    <mesh ref={dot}>
       <sphereGeometry args={[0.09, 16, 16]} />
       <meshStandardMaterial
         color={color}
@@ -1113,7 +1140,6 @@ function BeamTraveler({ start, mid, end, color, offset = 0 }) {
         metalness={0.6}
         roughness={0.2}
         toneMapped={false}
-        depthWrite={false}
       />
     </mesh>
   );
@@ -1125,12 +1151,21 @@ function LightBeams({ nodes, energy = 1, coreRadius = 1, ringY = 0 }) {
       const end = new THREE.Vector3(...n.position);
       const dirXZ = new THREE.Vector2(end.x, end.z).normalize();
       const start = new THREE.Vector3(dirXZ.x * (coreRadius * 0.985), ringY, dirXZ.y * (coreRadius * 0.985));
+
       const mid = new THREE.Vector3((start.x + end.x) * 0.5, ringY + 0.6, (start.z + end.z) * 0.5);
+
       const r = Math.hypot(mid.x, mid.z) || 1;
       const push = 1.2;
       mid.x *= 1 + push / r;
       mid.z *= 1 + push / r;
-      return { start: start.toArray(), mid: mid.toArray(), end: end.toArray(), key: n.key, color: n.color };
+
+      return {
+        start: start.toArray(),
+        mid: mid.toArray(),
+        end: end.toArray(),
+        key: n.key,
+        color: n.color,
+      };
     });
   }, [nodes, coreRadius, ringY]);
 
@@ -1164,7 +1199,7 @@ function WeekRing({
   onDragStateChange,
   onPositionsChange,
   ringY = -3.2,
-  ringRadius = 8.0,
+  ringRadius = 7.5,
   coreRadius = 3.4,
 }) {
   const SLOTS = 7;
@@ -1186,8 +1221,11 @@ function WeekRing({
     const current = offset;
     const target = targetOffset.current;
     const lerped = THREE.MathUtils.lerp(current, target, 0.12);
-    if (Math.abs(target - lerped) > 1e-3) setOffset(lerped);
-    else if (current !== target) setOffset(target);
+    if (Math.abs(target - lerped) > 1e-3) {
+      setOffset(lerped);
+    } else if (current !== target) {
+      setOffset(target);
+    }
   });
 
   const items = useMemo(() => {
@@ -1195,11 +1233,13 @@ function WeekRing({
     return weekNodes.map((day, i) => {
       const getCircular = (val) => (val % SLOTS + SLOTS) % SLOTS;
       const dataIndex = getCircular(i - Math.round(offset));
+
       const x = getCircular(i - offset);
       const iA = Math.floor(x);
       const t = x - iA;
       const A = slots[iA];
       const B = slots[(iA + 1) % SLOTS];
+
       return { ...weekNodes[dataIndex], position: lerpPos(A, B, t) };
     });
   }, [weekNodes, offset, slots, ringY]);
@@ -1256,7 +1296,12 @@ function WeekRing({
             isHovered={hovered?.dayKey === n.key}
             setHovered={setHovered}
           />
-          <RippleRing position={[n.position[0], ringY, n.position[2]]} size={2.2} color="#78E7FF" intensity={0.8} />
+          <RippleRing
+            position={[n.position[0], ringY, n.position[2]]}
+            size={2.2}
+            color="#78E7FF"
+            intensity={0.8}
+          />
         </group>
       ))}
       <LightBeams nodes={items} energy={1} coreRadius={coreRadius} ringY={ringY} />
@@ -1268,33 +1313,25 @@ function WeekRing({
   );
 }
 
-function LogEntryButton({ onClick }) {
-  const [hovered, setHovered] = useState(false);
-  useHoverCursor(hovered);
+/* ------------------------ UI +LOG floater (top center) ------------------------ */
+
+function UILogFloater({ onClick }) {
   return (
-    <Float speed={4} floatIntensity={1.5}>
-      <group
-        position={[0, -7.5, 0]}
+    <div className="lc-log-floater">
+      <button
         onClick={onClick}
-        onPointerOver={() => setHovered(true)}
-        onPointerOut={() => setHovered(false)}
+        title="Add a log"
+        style={{
+          ...neoBtnStyle,
+          height: 40,
+          padding: '0 1.1rem',
+          borderRadius: 999,
+          fontWeight: 700,
+        }}
       >
-        <mesh>
-          <torusGeometry args={[0.8, 0.15, 16, 100]} />
-          <meshStandardMaterial
-            color="#00f0ff"
-            emissive="#00f0ff"
-            emissiveIntensity={hovered ? 2 : 1}
-            roughness={0.2}
-            metalness={0.8}
-            toneMapped={false}
-          />
-        </mesh>
-        <Text color="white" fontSize={0.3} position={[0, 0, 0]}>
-          + LOG
-        </Text>
-      </group>
-    </Float>
+        + LOG
+      </button>
+    </div>
   );
 }
 
@@ -1323,22 +1360,21 @@ function NeuralCortex({ onSwitchView }) {
     document.body.style.margin = '0';
     document.body.style.padding = '0';
     document.body.style.overflow = 'hidden';
+    const style = document.createElement('style');
+    style.innerHTML = hideScrollbarCSS + floaterCSS;
+    document.head.appendChild(style);
     return () => {
       document.body.style.margin = '';
       document.body.style.padding = '';
       document.body.style.overflow = '';
+      document.head.removeChild(style);
     };
   }, []);
 
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.innerHTML = hideScrollbarCSS;
-    document.head.appendChild(style);
-    return () => document.head.removeChild(style);
-  }, []);
-
   const getAuthHeader = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     return session ? { Authorization: `Bearer ${session.access_token}` } : {};
   };
 
@@ -1368,15 +1404,22 @@ function NeuralCortex({ onSwitchView }) {
   const fetchAllData = async () => {
     setIsLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { setIsLoading(false); return; }
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        setIsLoading(false);
+        return;
+      }
 
       if (!guideData) requestGuidance().catch(() => {});
 
       const [logRes, nudgeRes] = await Promise.all([
         supabase
           .from('daily_logs')
-          .select('id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes')
+          .select(
+            'id, created_at, clarity_score, immune_score, physical_readiness_score, tags, ai_notes'
+          )
           .order('created_at', { ascending: false })
           .limit(30),
         supabase.from('nudges').select('*').eq('is_acknowledged', false),
@@ -1398,13 +1441,16 @@ function NeuralCortex({ onSwitchView }) {
         (async () => {
           const headers = await getAuthHeader();
           const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-          return fetch(`/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`, { headers })
-            .then((r) => (r.ok ? r.json() : null));
+          return fetch(`/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`, {
+            headers,
+          }).then((r) => (r.ok ? r.json() : null));
         })(),
         6000
-      ).then((stepRes) => {
-        if (typeof stepRes?.steps === 'number') setStepCount(stepRes.steps);
-      }).catch(() => {});
+      )
+        .then((stepRes) => {
+          if (typeof stepRes?.steps === 'number') setStepCount(stepRes.steps);
+        })
+        .catch(() => {});
     } catch {
       setIsLoading(false);
     }
@@ -1414,14 +1460,19 @@ function NeuralCortex({ onSwitchView }) {
     fetchAllData();
     const channel = supabase
       .channel('realtime:daily_logs')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'daily_logs' }, (payload) => {
-        setLogHistory((prev) => [payload.new, ...prev].slice(0, 30));
-        setLatestScores({ ...payload.new });
-        requestGuidance().catch(() => {});
-      })
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'daily_logs' },
+        (payload) => {
+          setLogHistory((prev) => [payload.new, ...prev].slice(0, 30));
+          setLatestScores({ ...payload.new });
+          requestGuidance().catch(() => {});
+        }
+      )
       .subscribe();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(() => { fetchAllData(); });
+    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
+      fetchAllData();
+    });
     return () => {
       supabase.removeChannel(channel);
       authListener?.subscription?.unsubscribe?.();
@@ -1429,20 +1480,29 @@ function NeuralCortex({ onSwitchView }) {
   }, []);
 
   useEffect(() => {
-    let timer; let cancelled = false;
+    let timer;
+    let cancelled = false;
     const tick = async () => {
       try {
         const headers = await getAuthHeader();
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const res = await fetch(`/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`, { headers });
+        const res = await fetch(
+          `/.netlify/functions/fetch-health-data?tz=${encodeURIComponent(tz)}`,
+          { headers }
+        );
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled && typeof data?.steps === 'number') setStepCount(data.steps);
+        if (!cancelled && typeof data?.steps === 'number') {
+          setStepCount(data.steps);
+        }
       } catch {}
     };
     tick();
     timer = setInterval(tick, STEPS_POLL_MS);
-    return () => { cancelled = true; clearInterval(timer); };
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -1496,9 +1556,13 @@ function NeuralCortex({ onSwitchView }) {
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = 'lightcore-export.json'; a.click();
+      a.href = url;
+      a.download = 'lightcore-export.json';
+      a.click();
       window.URL.revokeObjectURL(url);
-    } catch { alert('Export failed.'); }
+    } catch {
+      alert('Export failed.');
+    }
   };
 
   const onDelete = async () => {
@@ -1511,14 +1575,20 @@ function NeuralCortex({ onSwitchView }) {
         await supabase.auth.signOut();
         window.location.href = '/';
       } else alert('Delete failed.');
-    } catch { alert('Delete failed.'); }
+    } catch {
+      alert('Delete failed.');
+    }
   };
 
   const onSetUIPref = async (view) => {
     setUiPref(view);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) await supabase.from('profiles').update({ preferred_view: view }).eq('id', user.id);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('profiles').update({ preferred_view: view }).eq('id', user.id);
+      }
     } catch {}
   };
 
@@ -1527,7 +1597,9 @@ function NeuralCortex({ onSwitchView }) {
     for (const log of logHistory) {
       const k = localKey(log.created_at);
       const existing = byDay.get(k);
-      if (!existing || new Date(log.created_at) > new Date(existing.created_at)) byDay.set(k, log);
+      if (!existing || new Date(log.created_at) > new Date(existing.created_at)) {
+        byDay.set(k, log);
+      }
     }
     const days = lastNDays(7);
     return days.map((d, idx) => {
@@ -1536,7 +1608,10 @@ function NeuralCortex({ onSwitchView }) {
       const clarity = log?.clarity_score ?? null;
       const immune = log?.immune_score ?? null;
       const physical = log?.physical_readiness_score ?? null;
-      const avg = log != null ? (Number(clarity || 0) + Number(immune || 0) + Number(physical || 0)) / 3 : null;
+      const avg =
+        log != null
+          ? (Number(clarity || 0) + Number(immune || 0) + Number(physical || 0)) / 3
+          : null;
       return {
         key,
         date: d,
@@ -1551,16 +1626,36 @@ function NeuralCortex({ onSwitchView }) {
   const selectDay = (node) => {
     setSelectedItem({ dayKey: node.key, date: node.date, log: node.log || null, position: node.position });
   };
-  const setHoveredDay = (nodeOrNull) => setHoveredLog(nodeOrNull ? { dayKey: nodeOrNull.key } : null);
 
-  const ringYPosition = -3.2;       // raised closer to center
+  const setHoveredDay = (nodeOrNull) => {
+    setHoveredLog(nodeOrNull ? { dayKey: nodeOrNull.key } : null);
+  };
+
+  const [isPoweredUp, setIsPoweredUp] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setIsPoweredUp(true), 1200); // quicker power-up
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Raise the whole scene slightly (was -4.5 → -3.8)
+  const ringYPosition = -3.8;
   const coreRadius = 3.4;
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
-      <LeftStack onSwitchView={onSwitchView} onOpenSettings={() => setDrawerOpen(true)} />
-      <GuidePanel guide={guideData} />
-      <Hud item={selectedItem?.log || selectedItem} onClose={handleCloseHud} onCreate={() => setIsLogModalOpen(true)} />
+      {/* UI overlays */}
+      {isPoweredUp && (
+        <>
+          <LeftStack onSwitchView={onSwitchView} onOpenSettings={() => setDrawerOpen(true)} />
+          <UILogFloater onClick={() => setIsLogModalOpen(true)} />
+          <GuidePanel guide={guideData} />
+          <Hud
+            item={selectedItem?.log || selectedItem}
+            onClose={handleCloseHud}
+            onCreate={() => setIsLogModalOpen(true)}
+          />
+        </>
+      )}
 
       <SettingsDrawer
         open={drawerOpen}
@@ -1586,9 +1681,9 @@ function NeuralCortex({ onSwitchView }) {
           powerPreference: 'high-performance',
           outputColorSpace: THREE.SRGBColorSpace,
           toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.1,
+          toneMappingExposure: 1
         }}
-        camera={{ position: [0, 3.2, 22], fov: 50 }}
+        camera={{ position: [0, 3.5, 22], fov: 50 }}
       >
         <color attach="background" args={['#0a0a1a']} />
         <ambientLight intensity={0.18} />
@@ -1596,13 +1691,24 @@ function NeuralCortex({ onSwitchView }) {
         <pointLight position={[10, 5, 5]} intensity={lightIntensities.immune} color="#A0E7FF" />
         <pointLight position={[0, -10, 5]} intensity={lightIntensities.physical} color="#64FFD8" />
 
-        <LightCore radius={coreRadius} color="#7CEBFF" rim="#CFF8FF" energy={lightIntensities.energy} y={ringYPosition} />
+        <LightCore
+          radius={coreRadius}
+          color="#7CEBFF"
+          rim="#CFF8FF"
+          energy={lightIntensities.energy}
+          y={ringYPosition}
+        />
 
-        {/* Water + core ripple */}
+        {/* Water + core ripple (depth-tested) */}
         <WaterPlane yPosition={ringYPosition} />
-        <RippleRing position={[0, ringYPosition + 0.001, 0]} size={coreRadius * 2.1} color="#6FEFFF" intensity={1.0} />
+        <RippleRing
+          position={[0, ringYPosition + 0.001, 0]}
+          size={coreRadius * 2.1}
+          color="#6FEFFF"
+          intensity={1.0}
+        />
 
-        {!isLoading && (
+        {isPoweredUp && !isLoading && (
           <>
             <WeekRing
               weekNodes={weekNodes}
@@ -1619,7 +1725,11 @@ function NeuralCortex({ onSwitchView }) {
             <SynapticLinks
               selectedNode={
                 selectedItem
-                  ? { ...selectedItem, position: nodePositions.get(selectedItem.dayKey) || selectedItem.position }
+                  ? {
+                      ...selectedItem,
+                      position:
+                        nodePositions.get(selectedItem.dayKey) || selectedItem.position,
+                    }
                   : null
               }
               events={dayEvents}
@@ -1632,7 +1742,6 @@ function NeuralCortex({ onSwitchView }) {
                 onGlyphClick={(n) => setSelectedItem(n)}
               />
             ))}
-            <LogEntryButton onClick={() => setIsLogModalOpen(true)} />
           </>
         )}
 
@@ -1641,14 +1750,12 @@ function NeuralCortex({ onSwitchView }) {
           enableZoom
           enabled={!isDragging}
           autoRotate={false}
-          minDistance={18}
-          maxDistance={35}
-          minPolarAngle={Math.PI / 2.8}
-          maxPolarAngle={Math.PI / 2.1}
-          // 360° horizontal rotation
+          // Full 360° azimuth again:
           minAzimuthAngle={-Infinity}
           maxAzimuthAngle={Infinity}
-          target={[0, ringYPosition, 0]}
+          minPolarAngle={Math.PI / 2.8}
+          maxPolarAngle={Math.PI / 2.1}
+          target={[0, ringYPosition + 0.6, 0]}   // nudged up so scene sits higher
           enableDamping
           dampingFactor={0.05}
         />
