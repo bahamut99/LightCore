@@ -460,7 +460,7 @@ function Hud({ item, onClose }) {
   const title = isNudge ? (item.headline || 'Notice') : 'Daily Log';
   const subtitle = isNudge
     ? (item.category || 'Nudge')
-    : (log?.created_at ? fmtDate(log.created_at) : (item.dayKey || ''));
+    : (log?.created_at ? fmtDate(log.created_at) : (item.date ? fmtDate(item.date) : (item.dayKey || '')));
 
   const notes = isNudge ? item.body_text : (log?.ai_notes || '');
 
@@ -878,6 +878,37 @@ function AnomalyGlyph({ nudge, position, onGlyphClick }) {
   );
 }
 
+function SynapticLinkTraveler({ start, mid, end, color, offset = 0, duration = 3 }) {
+  const dot = useRef();
+  const curve = useMemo(
+    () =>
+      new THREE.QuadraticBezierCurve3(
+        new THREE.Vector3(...start),
+        new THREE.Vector3(...mid),
+        new THREE.Vector3(...end)
+      ),
+    [start, mid, end]
+  );
+
+  useFrame(({ clock }) => {
+    if (!dot.current) return;
+    const t = ((clock.getElapsedTime() * 0.5) + offset) % duration / duration;
+    curve.getPoint(t, dot.current.position);
+  });
+
+  return (
+    <mesh ref={dot}>
+      <sphereGeometry args={[0.05, 12, 12]} />
+      <meshStandardMaterial
+        color={color}
+        emissive={color}
+        emissiveIntensity={3}
+        toneMapped={false}
+      />
+    </mesh>
+  );
+}
+
 function SynapticLinks({ selectedNode, events }) {
   if (!selectedNode || !selectedNode.position || !selectedNode.log || events.length === 0) return null;
 
@@ -901,28 +932,38 @@ function SynapticLinks({ selectedNode, events }) {
 
   return (
     <group>
-      {links.map(({ event, start, mid, end, key }) => (
-        <group key={key}>
-          <mesh position={end}>
-            <sphereGeometry args={[0.15, 16, 16]} />
-            <meshStandardMaterial
-              color={EVENT_CONFIG[event.event_type]?.color || EVENT_CONFIG.Default.color}
-              emissive={EVENT_CONFIG[event.event_type]?.color || EVENT_CONFIG.Default.color}
-              emissiveIntensity={1.5}
+      {links.map(({ event, start, mid, end, key }, i) => {
+        const color = EVENT_CONFIG[event.event_type]?.color || EVENT_CONFIG.Default.color;
+        return (
+          <group key={key}>
+            <mesh position={end}>
+              <sphereGeometry args={[0.15, 16, 16]} />
+              <meshStandardMaterial
+                color={color}
+                emissive={color}
+                emissiveIntensity={1.5}
+              />
+            </mesh>
+            <QuadraticBezierLine
+              start={start}
+              end={end}
+              mid={mid}
+              color="#00f0ff"
+              lineWidth={1}
+              transparent
+              opacity={0.55}
+              depthTest
             />
-          </mesh>
-          <QuadraticBezierLine
-            start={start}
-            end={end}
-            mid={mid}
-            color="#00f0ff"
-            lineWidth={1}
-            transparent
-            opacity={0.55}
-            depthTest
-          />
-        </group>
-      ))}
+            <SynapticLinkTraveler
+                start={start.toArray()}
+                mid={mid.toArray()}
+                end={end.toArray()}
+                color={color}
+                offset={i * 0.4}
+              />
+          </group>
+        );
+      })}
     </group>
   );
 }
@@ -1040,6 +1081,7 @@ function BeamTraveler({ start, mid, end, color, offset = 0 }) {
         emissiveIntensity={1.8}
         metalness={0.6}
         roughness={0.2}
+        toneMapped={false}
       />
     </mesh>
   );
@@ -1495,7 +1537,7 @@ function NeuralCortex({ onSwitchView }) {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-    if (user) {
+      if (user) {
         await supabase.from('profiles').update({ preferred_view: view }).eq('id', user.id);
       }
     } catch {}
@@ -1533,7 +1575,7 @@ function NeuralCortex({ onSwitchView }) {
   }, [logHistory]);
 
   const selectDay = (node) => {
-    setSelectedItem({ dayKey: node.key, log: node.log || null, position: node.position });
+    setSelectedItem({ dayKey: node.key, date: node.date, log: node.log || null, position: node.position });
   };
 
   const setHoveredDay = (nodeOrNull) => {
