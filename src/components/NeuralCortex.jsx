@@ -732,6 +732,11 @@ function WaterPlane({ yPosition }) {
         uniforms={uniforms}
         transparent
         depthWrite={false}
+        // Mask out anything where spheres (core + nodes) have stamped the stencil buffer
+        stencilWrite
+        stencilRef={1}
+        stencilFunc={THREE.NotEqualStencilFunc}
+        stencilZPass={THREE.KeepStencilOp}
       />
     </mesh>
   );
@@ -787,7 +792,11 @@ function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', inten
         blending={THREE.AdditiveBlending}
         transparent
         depthWrite={false}
-        /* depthTest defaults to true; do not disable it to avoid the "flat plane through spheres" artifact */
+        // Mask ripples under any stamped silhouettes
+        stencilWrite
+        stencilRef={1}
+        stencilFunc={THREE.NotEqualStencilFunc}
+        stencilZPass={THREE.KeepStencilOp}
         polygonOffset
         polygonOffsetFactor={-2}
       />
@@ -831,6 +840,22 @@ function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, en
     group.current.scale.setScalar(base);
   });
 
+  // Depth/stencil occluder so transparent core still masks ripples/water beneath
+  const Occluder = () => (
+    <mesh renderOrder={0}>
+      <sphereGeometry args={[radius * 0.995, 48, 48]} />
+      <meshBasicMaterial
+        colorWrite={false}
+        depthWrite
+        // write 1 into the stencil buffer wherever the core projects
+        stencilWrite
+        stencilRef={1}
+        stencilFunc={THREE.AlwaysStencilFunc}
+        stencilZPass={THREE.ReplaceStencilOp}
+      />
+    </mesh>
+  );
+
   const ring = useMemo(() => {
     const g = new THREE.TorusGeometry(radius * 1.05, 0.06, 12, 120);
     const m = new THREE.MeshBasicMaterial({
@@ -847,11 +872,7 @@ function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, en
 
   return (
     <group ref={group} onClick={onClick} position={[0, y, 0]}>
-      {/* Invisible occluder to hide lines behind the core */}
-      <mesh renderOrder={0}>
-        <sphereGeometry args={[radius * 0.99, 32, 32]} />
-        <meshBasicMaterial depthWrite colorWrite={false} />
-      </mesh>
+      <Occluder />
       <mesh renderOrder={1}>
         <sphereGeometry args={[radius, 96, 96]} />
         <shaderMaterial
@@ -1030,6 +1051,21 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
 
   const brightness = (name) => scoreToIntensity(node.scores?.[name]);
 
+  // Invisible depth+stencil occluder matching the node shell
+  const Occluder = () => (
+    <mesh>
+      <sphereGeometry args={[0.705, 32, 32]} />
+      <meshBasicMaterial
+        colorWrite={false}
+        depthWrite
+        stencilWrite
+        stencilRef={1}
+        stencilFunc={THREE.AlwaysStencilFunc}
+        stencilZPass={THREE.ReplaceStencilOp}
+      />
+    </mesh>
+  );
+
   return (
     <group
       position={position}
@@ -1044,6 +1080,7 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
       }}
       onPointerOut={() => setHovered(null)}
     >
+      <Occluder />
       <mesh>
         <sphereGeometry args={[0.7, 32, 32]} />
         <meshStandardMaterial
@@ -1682,7 +1719,8 @@ function NeuralCortex({ onSwitchView }) {
           powerPreference: 'high-performance',
           outputColorSpace: THREE.SRGBColorSpace,
           toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1
+          toneMappingExposure: 1,
+          stencil: true, // <<< enable stencil buffer
         }}
         camera={{ position: [0, 2, 22], fov: 50 }}
       >
@@ -1700,7 +1738,7 @@ function NeuralCortex({ onSwitchView }) {
           y={ringYPosition}
         />
 
-        {/* Water + core ripple */}
+        {/* Water + core ripple (now masked by stencil, so no more "equator slicing") */}
         <WaterPlane yPosition={ringYPosition} />
         <RippleRing
           position={[0, ringYPosition + 0.001, 0]}
@@ -1756,7 +1794,7 @@ function NeuralCortex({ onSwitchView }) {
           maxDistance={35}
           minPolarAngle={Math.PI / 2.8}
           maxPolarAngle={Math.PI / 2.1}
-          /* Removed azimuth clamps to allow full 360° horizontal rotation */
+          // full 360° horizontal rotation
           enableDamping
           dampingFactor={0.05}
         />
