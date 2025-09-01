@@ -5,7 +5,7 @@
 // - Each day has its own neon shell color + three inner dots (clarity/immune/physical brightness)
 // - Animated beams from the LightCore to each day-node (level with the water)
 // - Ripples under the core and each node
-// - All other UI (buttons, drawers, guide, HUD, nudges) unchanged
+// - Non-breaking overlays (buttons, drawers, guide, HUD, nudges)
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -444,6 +444,117 @@ function GuidePanel({ guide }) {
         </>
       )}
     </div>
+  );
+}
+
+/* ---------------------- HUD (selected day / nudge) ---------------------- */
+
+function Hud({ item, onClose }) {
+  if (!item) return null;
+
+  // Accept either a daily log object or a nudge object
+  const isNudge = item && (item.headline || item.body_text);
+  const log =
+    !isNudge && (item.created_at || item.clarity_score || item.ai_notes) ? item : null;
+
+  const title = isNudge ? (item.headline || 'Notice') : 'Daily Log';
+  const subtitle = isNudge
+    ? (item.category || 'Nudge')
+    : (log?.created_at ? fmtDate(log.created_at) : (item.dayKey || ''));
+
+  const notes = isNudge ? item.body_text : (log?.ai_notes || '');
+
+  const scores = isNudge
+    ? null
+    : {
+        clarity: log?.clarity_score ?? log?.scores?.clarity ?? null,
+        immune: log?.immune_score ?? log?.scores?.immune ?? null,
+        physical: log?.physical_readiness_score ?? log?.scores?.physical ?? null,
+      };
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: '2rem',
+        bottom: '2rem',
+        width: 420,
+        zIndex: 13,
+        background: 'rgba(10, 25, 47, 0.78)',
+        border: '1px solid rgba(0,240,255,0.25)',
+        boxShadow: '0 0 24px rgba(0,240,255,0.18)',
+        borderRadius: 12,
+        backdropFilter: 'blur(10px)',
+        color: '#cfefff',
+        padding: '1rem 1rem 0.75rem',
+        fontFamily: "'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h3 style={{ margin: 0, fontFamily: "'Orbitron', sans-serif", letterSpacing: '.04em' }}>
+          {title}
+        </h3>
+        <span style={{ opacity: 0.8, fontSize: 12 }}>{subtitle}</span>
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={onClose}
+          title="Close"
+          style={{
+            background: 'transparent',
+            color: '#00f0ff',
+            border: '1px solid rgba(0,240,255,0.35)',
+            borderRadius: 8,
+            width: 28,
+            height: 28,
+            cursor: 'pointer',
+            lineHeight: 1,
+          }}
+        >
+          ×
+        </button>
+      </div>
+
+      {scores && (
+        <div style={{ display: 'flex', gap: 10, marginTop: 8, marginBottom: 6 }}>
+          <Badge label="Clarity" value={scores.clarity} hue="#00f0ff" />
+          <Badge label="Immune" value={scores.immune} hue="#ffd700" />
+          <Badge label="Physical" value={scores.physical} hue="#00ff88" />
+        </div>
+      )}
+
+      {notes && (
+        <p style={{ margin: '6px 0 10px', whiteSpace: 'pre-wrap', color: 'white' }}>{notes}</p>
+      )}
+    </div>
+  );
+}
+
+function Badge({ label, value, hue }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '4px 10px',
+        borderRadius: 999,
+        border: `1px solid ${hue}55`,
+        background: `${hue}22`,
+        color: '#eaffff',
+        fontSize: 12,
+      }}
+    >
+      <span
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 999,
+          background: hue,
+          boxShadow: `0 0 10px ${hue}`,
+        }}
+      />
+      {label}: {value ?? '—'}
+    </span>
   );
 }
 
@@ -1384,7 +1495,7 @@ function NeuralCortex({ onSwitchView }) {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (user) {
+    if (user) {
         await supabase.from('profiles').update({ preferred_view: view }).eq('id', user.id);
       }
     } catch {}
