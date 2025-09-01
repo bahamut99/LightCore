@@ -370,7 +370,7 @@ function GuidePanel({ guide }) {
     >
       <h2
         style={{
-          fontFamily: "'Orbitron', sans-serif',
+          fontFamily: "'Orbitron', sans-serif",
           fontSize: '1.1rem',
           textShadow: '0 0 5px #00f0ff',
           margin: 0,
@@ -771,7 +771,7 @@ function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', inten
         blending={THREE.AdditiveBlending}
         transparent
         depthWrite={false}
-        depthTest // IMPORTANT: true again; prevents the “plane through sphere”
+        depthTest
         polygonOffset
         polygonOffsetFactor={-2}
         toneMapped={false}
@@ -831,7 +831,7 @@ function LightCore({ radius = 3.4, color = '#7CEBFF', rim = '#CFF8FF', energy = 
 
   return (
     <group ref={group} position={[0, y, 0]}>
-      {/* Depth-only prepass (belt & suspenders) */}
+      {/* Depth-only prepass */}
       <mesh renderOrder={0}>
         <sphereGeometry args={[radius * 0.99, 32, 32]} />
         <meshBasicMaterial colorWrite={false} />
@@ -991,7 +991,7 @@ function SynapticLinks({ selectedNode, events }) {
   );
 }
 
-/* --- Palette back to icy neon --- */
+/* --- Palette --- */
 const DAY_SHELL_COLORS = [
   '#8EE7FF', // aqua
   '#7CA8FF', // indigo-blue
@@ -1026,7 +1026,7 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
       onPointerOver={(e) => { e.stopPropagation(); setHovered(node); }}
       onPointerOut={() => setHovered(null)}
     >
-      {/* Inner dots (glow by scores) */}
+      {/* Inner dots */}
       <mesh position={[-0.1, 0.06, 0.08]}>
         <sphereGeometry args={[0.09, 16, 16]} />
         <meshStandardMaterial
@@ -1064,7 +1064,7 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
         />
       </mesh>
 
-      {/* Translucent shell (let us see inside) */}
+      {/* Translucent shell */}
       <mesh renderOrder={2}>
         <sphereGeometry args={[0.7, 32, 32]} />
         <meshPhysicalMaterial
