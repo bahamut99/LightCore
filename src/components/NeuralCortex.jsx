@@ -1,7 +1,10 @@
 // src/components/NeuralCortex.jsx
-// LightCore — Neural-Cortex view (single file)
-// Center animation focus: water/ripples/beams hug the plane and always render behind UI.
-// Functions and app chrome unchanged.
+// Neural-Cortex view (single file, axis/alignment fix):
+// - Water plane at planeY
+// - Core center at planeY + coreRadius
+// - Day node centers at planeY + nodeRadius
+// - Ripples drawn on plane (planeY + 0.001) to avoid z-fighting
+// - Beams hug the plane
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -676,6 +679,7 @@ const rippleVertex = `
   varying vec2 vUv;
   void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
 `;
+
 const rippleFragment = `
   uniform float uTime;
   uniform vec3  uColor;
@@ -691,7 +695,7 @@ const rippleFragment = `
   }
 `;
 
-/* ---------- Water Plane (lowered just below nodes) ---------- */
+/* ---------- Water Plane ---------- */
 
 function WaterPlane({ yPosition }) {
   const ref = useRef();
@@ -707,7 +711,7 @@ function WaterPlane({ yPosition }) {
     if (ref.current) ref.current.uniforms.uTime.value = clock.getElapsedTime();
   });
   return (
-    <mesh position={[0, yPosition, 0]} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false} renderOrder={-3}>
+    <mesh position={[0, yPosition, 0]} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false} renderOrder={-10}>
       <planeGeometry args={[30, 30, 64, 64]} />
       <shaderMaterial
         ref={ref}
@@ -722,7 +726,7 @@ function WaterPlane({ yPosition }) {
   );
 }
 
-/* ----- Ripple shader for core + nodes ----- */
+/* ----- Ripple shader for core + nodes (on plane) ----- */
 
 function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', intensity = 0.9 }) {
   const mat = useRef();
@@ -739,7 +743,7 @@ function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', inten
   );
 
   return (
-    <mesh position={position} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-2} frustumCulled={false}>
+    <mesh position={position} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-9} frustumCulled={false}>
       <planeGeometry args={[size, size, 1, 1]} />
       <shaderMaterial
         ref={mat}
@@ -1013,6 +1017,7 @@ function LightBeams({ nodes, energy = 1, coreRadius = 1, planeY = 0 }) {
     return nodes.map((n) => {
       const end = new THREE.Vector3(...n.position);
       const dirXZ = new THREE.Vector2(end.x, end.z).normalize();
+      // Start point lies on the core's rim where it meets the plane
       const start = new THREE.Vector3(dirXZ.x * (coreRadius * 0.985), planeY + 0.02, dirXZ.y * (coreRadius * 0.985));
       const mid = new THREE.Vector3((start.x + end.x) * 0.5, planeY + 0.6, (start.z + end.z) * 0.5);
       const r = Math.hypot(mid.x, mid.z) || 1;
@@ -1043,10 +1048,10 @@ function WeekRing({
   selected,
   onDragStateChange,
   onPositionsChange,
-  ringY = -4.5,
+  ringY,       // node center height
   ringRadius = 7.8,
   coreRadius = 3.4,
-  waterY = -4.52,
+  planeY,      // water plane height
 }) {
   const SLOTS = 7;
 
@@ -1137,10 +1142,11 @@ function WeekRing({
             isHovered={hovered?.dayKey === n.key}
             setHovered={setHovered}
           />
-          <RippleRing position={[n.position[0], waterY + 0.001, n.position[2]]} size={2.2} color="#78E7FF" intensity={0.75}/>
+          {/* Ripple is drawn ON the plane (just above it) */}
+          <RippleRing position={[n.position[0], planeY + 0.001, n.position[2]]} size={2.2} color="#78E7FF" intensity={0.75}/>
         </group>
       ))}
-      <LightBeams nodes={items} energy={1} coreRadius={coreRadius} planeY={waterY} />
+      <LightBeams nodes={items} energy={1} coreRadius={coreRadius} planeY={planeY} />
       <mesh position={[0, ringY, 0]} rotation={[-Math.PI / 2, 0, 0]} onPointerDown={startDrag}>
         <torusGeometry args={[ringRadius, 0.8, 8, 96]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
@@ -1180,7 +1186,6 @@ function TopLogFloater({ onClick }) {
           letterSpacing: '0.05em',
           fontSize: 12,
           textShadow: '0 0 6px rgba(0,240,255,.8)',
-          animation: 'lcFloat 3s ease-in-out infinite, lcGlow 2.6s ease-in-out infinite',
           boxShadow: '0 0 16px rgba(0,240,255,.35), inset 0 0 16px rgba(0,240,255,.35)',
           backdropFilter: 'blur(6px)',
           position: 'relative',
@@ -1439,10 +1444,13 @@ function NeuralCortex({ onSwitchView }) {
     return () => clearTimeout(timer);
   }, []);
 
-  // ---- SINGLE SOURCE OF TRUTH FOR HEIGHTS ----
-  const ringYPosition = -4.5;                  // nodes + core baseline (matches original brief)
-  const waterY = ringYPosition - 0.02;         // water slightly below nodes (prevents z-fighting)
+  /* -------------------- ABSOLUTE HEIGHTS -------------------- */
+  const planeY = -4.5;            // Water plane height
   const coreRadius = 3.4;
+  const nodeRadius = 0.7;
+
+  const coreCenterY = planeY + coreRadius;
+  const nodeCenterY = planeY + nodeRadius;
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a', position: 'relative', zIndex: 0 }}>
@@ -1482,12 +1490,12 @@ function NeuralCortex({ onSwitchView }) {
         <pointLight position={[10, 5, 5]} intensity={lightIntensities.immune} color="#A0E7FF" />
         <pointLight position={[0, -10, 5]} intensity={lightIntensities.physical} color="#64FFD8" />
 
-        {/* Core sits ON the ring plane */}
-        <LightCore radius={coreRadius} color="#7CEBFF" rim="#CFF8FF" energy={lightIntensities.energy} y={ringYPosition} />
+        {/* Core center sits above plane by its radius */}
+        <LightCore radius={coreRadius} color="#7CEBFF" rim="#CFF8FF" energy={lightIntensities.energy} y={coreCenterY} />
 
-        {/* Water + core ripple (both live relative to the lowered plane) */}
-        <WaterPlane yPosition={waterY} />
-        <RippleRing position={[0, waterY + 0.001, 0]} size={coreRadius * 2.1} color="#6FEFFF" intensity={1.0} />
+        {/* Water plane and core ripple (on the plane) */}
+        <WaterPlane yPosition={planeY} />
+        <RippleRing position={[0, planeY + 0.001, 0]} size={coreRadius * 2.1} color="#6FEFFF" intensity={1.0} />
 
         {isPoweredUp && !isLoading && (
           <>
@@ -1499,10 +1507,10 @@ function NeuralCortex({ onSwitchView }) {
               selected={selectedItem}
               onDragStateChange={setIsDragging}
               onPositionsChange={setNodePositions}
-              ringY={ringYPosition}
+              ringY={nodeCenterY}
               ringRadius={8.0}
               coreRadius={coreRadius}
-              waterY={waterY}
+              planeY={planeY}
             />
             <SynapticLinks
               selectedNode={
@@ -1527,7 +1535,7 @@ function NeuralCortex({ onSwitchView }) {
           maxDistance={35}
           minPolarAngle={Math.PI / 2.8}
           maxPolarAngle={Math.PI / 2.1}
-          minAzimuthAngle={-Math.PI}  // full 360°
+          minAzimuthAngle={-Math.PI}
           maxAzimuthAngle={Math.PI}
           enableDamping
           dampingFactor={0.05}
