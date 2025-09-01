@@ -1,10 +1,5 @@
 // src/components/NeuralCortex.jsx
-// Neural-Cortex view (single file, axis/alignment fix):
-// - Water plane at planeY
-// - Core center at planeY + coreRadius
-// - Day node centers at planeY + nodeRadius
-// - Ripples drawn on plane (planeY + 0.001) to avoid z-fighting
-// - Beams hug the plane
+// Neural-Cortex view (axis fixed + ripple/beam/rim + occasional bobbing)
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -675,11 +670,11 @@ const waterFragment = `
   }
 `;
 
+/* Ripple shader: same vertex, fragment discards low alpha so corners never glow */
 const rippleVertex = `
   varying vec2 vUv;
   void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
 `;
-
 const rippleFragment = `
   uniform float uTime;
   uniform vec3  uColor;
@@ -691,6 +686,7 @@ const rippleFragment = `
     float waves = pow(max(0.0, 1.0 - d), 2.0) *
                   (0.35 + 0.65 * (0.5 + 0.5 * sin((1.0 - d) * 22.0 - uTime * 2.0)));
     float a = (rim + waves) * uIntensity;
+    if (a < 0.02) discard;
     gl_FragColor = vec4(uColor, a);
   }
 `;
@@ -726,7 +722,7 @@ function WaterPlane({ yPosition }) {
   );
 }
 
-/* ----- Ripple shader for core + nodes (on plane) ----- */
+/* ----- Circular ripple (no quads) ----- */
 
 function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', intensity = 0.9 }) {
   const mat = useRef();
@@ -744,7 +740,7 @@ function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', inten
 
   return (
     <mesh position={position} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-9} frustumCulled={false}>
-      <planeGeometry args={[size, size, 1, 1]} />
+      <circleGeometry args={[size * 0.5, 64]} />
       <shaderMaterial
         ref={mat}
         vertexShader={rippleVertex}
@@ -756,6 +752,7 @@ function RippleRing({ position = [0, 0, 0], size = 3.2, color = '#6FEFFF', inten
         depthTest
         polygonOffset
         polygonOffsetFactor={-2}
+        toneMapped={false}
       />
     </mesh>
   );
@@ -931,16 +928,36 @@ function SynapticLinks({ selectedNode, events }) {
 const DAY_SHELL_COLORS = ['#8EE7FF', '#7CA8FF', '#9B7CFF', '#6FFFD9', '#64C7FF', '#A7F3FF', '#B29CFF'];
 const DOT_COLORS = { clarity: '#00f0ff', immune: '#ffd700', physical: '#00ff88' };
 
-function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }) {
+function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered, bobActive, bobStartSec }) {
   const ref = useRef();
+  const basePos = useRef(new THREE.Vector3(...position));
+  useEffect(() => { basePos.current.set(...position); }, [position[0], position[1], position[2]]);
   useHoverCursor(isHovered);
+
+  const rimUniforms = useMemo(() => ({ uColor: { value: new THREE.Color(node.color) } }), [node.color]);
 
   useFrame((state) => {
     if (!ref.current) return;
+
+    // scale hover/selection
     const subtle = 1 + Math.sin(state.clock.elapsedTime * 1.6) * 0.01;
     const target = (isSelected ? 1.15 : isHovered ? 1.07 : 1.0) * subtle;
     const s = THREE.MathUtils.lerp(ref.current.scale.x, target, 0.12);
     ref.current.scale.setScalar(s);
+
+    // occasional bobbing: one node at a time
+    let yOffset = 0;
+    if (bobActive && typeof bobStartSec === 'number') {
+      const t = state.clock.elapsedTime - bobStartSec;
+      const dur = 1.8; // seconds for a single bob cycle
+      if (t >= 0 && t <= dur) {
+        // smooth rise/fall; stays above plane (no negative)
+        const phase = Math.sin((t / dur) * Math.PI); // 0..1..0
+        yOffset = 0.12 * phase;
+      }
+    }
+
+    ref.current.position.set(basePos.current.x, basePos.current.y + yOffset, basePos.current.z);
   });
 
   const brightness = (name) => scoreToIntensity(node.scores?.[name]);
@@ -959,7 +976,7 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
         <meshBasicMaterial depthWrite colorWrite={false} />
       </mesh>
 
-      {/* Shell: self-lit so it never goes black */}
+      {/* Shell: self-lit */}
       <mesh renderOrder={1}>
         <sphereGeometry args={[0.7, 48, 48]} />
         <meshBasicMaterial
@@ -968,6 +985,20 @@ function DayNode({ node, position, onSelect, isSelected, isHovered, setHovered }
           opacity={0.95}
           depthWrite={false}
           depthTest
+          toneMapped={false}
+        />
+      </mesh>
+
+      {/* Fresnel rim glow */}
+      <mesh renderOrder={2}>
+        <sphereGeometry args={[0.72, 48, 48]} />
+        <shaderMaterial
+          vertexShader={atmoVertex}
+          fragmentShader={atmoFragment}
+          uniforms={rimUniforms}
+          blending={THREE.AdditiveBlending}
+          transparent
+          depthWrite={false}
           toneMapped={false}
         />
       </mesh>
@@ -1014,17 +1045,26 @@ function BeamTraveler({ start, mid, end, color, offset = 0 }) {
 
 function LightBeams({ nodes, energy = 1, coreRadius = 1, planeY = 0 }) {
   const beams = useMemo(() => {
+    const center = new THREE.Vector3(0, planeY + coreRadius, 0);
     return nodes.map((n) => {
       const end = new THREE.Vector3(...n.position);
+
+      // Direction toward node in XZ, tilt downward to lower hemisphere
       const dirXZ = new THREE.Vector2(end.x, end.z).normalize();
-      // Start point lies on the core's rim where it meets the plane
-      const start = new THREE.Vector3(dirXZ.x * (coreRadius * 0.985), planeY + 0.02, dirXZ.y * (coreRadius * 0.985));
-      const mid = new THREE.Vector3((start.x + end.x) * 0.5, planeY + 0.6, (start.z + end.z) * 0.5);
-      const r = Math.hypot(mid.x, mid.z) || 1;
-      const push = 1.2;
-      mid.x *= 1 + push / r;
-      mid.z *= 1 + push / r;
-      return { start: start.toArray(), mid: mid.toArray(), end: end.toArray(), key: n.key, color: n.color };
+      const startDir = new THREE.Vector3(dirXZ.x, -0.35, dirXZ.y).normalize();
+
+      // Point ON sphere surface
+      const start3 = startDir.clone().multiplyScalar(coreRadius * 1.01).add(center);
+      start3.y = Math.max(start3.y, planeY + 0.06);
+
+      // Arc that skims the plane
+      const mid = new THREE.Vector3(
+        (start3.x + end.x) * 0.5,
+        planeY + 0.35,
+        (start3.z + end.z) * 0.5
+      );
+
+      return { start: start3.toArray(), mid: mid.toArray(), end: end.toArray(), key: n.key, color: n.color };
     });
   }, [nodes, coreRadius, planeY]);
 
@@ -1052,6 +1092,8 @@ function WeekRing({
   ringRadius = 7.8,
   coreRadius = 3.4,
   planeY,      // water plane height
+  bobbingKey,  // which dayKey is currently bobbing
+  bobStartSec, // when that bob started (seconds)
 }) {
   const SLOTS = 7;
 
@@ -1141,8 +1183,10 @@ function WeekRing({
             isSelected={selected?.dayKey === n.key}
             isHovered={hovered?.dayKey === n.key}
             setHovered={setHovered}
+            bobActive={n.key === bobbingKey}
+            bobStartSec={bobStartSec}
           />
-          {/* Ripple is drawn ON the plane (just above it) */}
+          {/* Ripple on plane */}
           <RippleRing position={[n.position[0], planeY + 0.001, n.position[2]]} size={2.2} color="#78E7FF" intensity={0.75}/>
         </group>
       ))}
@@ -1186,6 +1230,7 @@ function TopLogFloater({ onClick }) {
           letterSpacing: '0.05em',
           fontSize: 12,
           textShadow: '0 0 6px rgba(0,240,255,.8)',
+          animation: 'lcFloat 3s ease-in-out infinite, lcGlow 2.6s ease-in-out infinite',
           boxShadow: '0 0 16px rgba(0,240,255,.35), inset 0 0 16px rgba(0,240,255,.35)',
           backdropFilter: 'blur(6px)',
           position: 'relative',
@@ -1216,6 +1261,10 @@ function NeuralCortex({ onSwitchView }) {
   const [isDragging, setIsDragging] = useState(false);
   const [nodePositions, setNodePositions] = useState(new Map());
   const [perfMode, setPerfMode] = useState(false);
+
+  // Bobbing control: one node every ~8s
+  const [bobbingKey, setBobbingKey] = useState(null);
+  const [bobStartSec, setBobStartSec] = useState(0);
 
   const lastGuideRequestRef = useRef(0);
 
@@ -1347,6 +1396,41 @@ function NeuralCortex({ onSwitchView }) {
     return () => { cancelled = true; clearInterval(timer); };
   }, []);
 
+  const [isPoweredUp, setIsPoweredUp] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setIsPoweredUp(true), 1200);
+    return () => clearTimeout(timer);
+  }, []);
+
+  /* -------------------- ABSOLUTE HEIGHTS -------------------- */
+  const planeY = -4.5;            // Water plane height
+  const coreRadius = 3.4;
+  const nodeRadius = 0.7;
+
+  const coreCenterY = planeY + coreRadius;
+  const nodeCenterY = planeY + nodeRadius;
+
+  /* -------- Events & nodes -------- */
+
+  const weekNodes = useMemo(() => {
+    const byDay = new Map();
+    for (const log of logHistory) {
+      const k = localKey(log.created_at);
+      const existing = byDay.get(k);
+      if (!existing || new Date(log.created_at) > new Date(existing.created_at)) byDay.set(k, log);
+    }
+    const days = lastNDays(7);
+    return days.map((d, idx) => {
+      const key = localKey(d);
+      const log = byDay.get(key) || null;
+      const clarity = log?.clarity_score ?? null;
+      const immune = log?.immune_score ?? null;
+      const physical = log?.physical_readiness_score ?? null;
+      const avg = log != null ? (Number(clarity || 0) + Number(immune || 0) + Number(physical || 0)) / 3 : null;
+      return { key, date: d, color: DAY_SHELL_COLORS[idx % DAY_SHELL_COLORS.length], scores: { clarity, immune, physical }, avg, log };
+    });
+  }, [logHistory]);
+
   useEffect(() => {
     if (selectedItem && selectedItem.log) {
       (async () => {
@@ -1365,6 +1449,11 @@ function NeuralCortex({ onSwitchView }) {
     const energy = (c + i + p) / 30;
     return { clarity: c * 18, immune: i * 18, physical: p * 18, energy: 0.75 + energy * 0.5 };
   }, [latestScores]);
+
+  const selectDay = (node) => {
+    setSelectedItem({ dayKey: node.key, date: node.date, log: node.log || null, position: node.position });
+  };
+  const setHoveredDay = (nodeOrNull) => setHoveredLog(nodeOrNull ? { dayKey: nodeOrNull.key } : null);
 
   const handleCloseHud = async () => {
     const item = selectedItem;
@@ -1414,52 +1503,32 @@ function NeuralCortex({ onSwitchView }) {
     } catch {}
   };
 
-  const weekNodes = useMemo(() => {
-    const byDay = new Map();
-    for (const log of logHistory) {
-      const k = localKey(log.created_at);
-      const existing = byDay.get(k);
-      if (!existing || new Date(log.created_at) > new Date(existing.created_at)) byDay.set(k, log);
-    }
-    const days = lastNDays(7);
-    return days.map((d, idx) => {
-      const key = localKey(d);
-      const log = byDay.get(key) || null;
-      const clarity = log?.clarity_score ?? null;
-      const immune = log?.immune_score ?? null;
-      const physical = log?.physical_readiness_score ?? null;
-      const avg = log != null ? (Number(clarity || 0) + Number(immune || 0) + Number(physical || 0)) / 3 : null;
-      return { key, date: d, color: DAY_SHELL_COLORS[idx % DAY_SHELL_COLORS.length], scores: { clarity, immune, physical }, avg, log };
-    });
-  }, [logHistory]);
-
-  const selectDay = (node) => {
-    setSelectedItem({ dayKey: node.key, date: node.date, log: node.log || null, position: node.position });
-  };
-  const setHoveredDay = (nodeOrNull) => setHoveredLog(nodeOrNull ? { dayKey: nodeOrNull.key } : null);
-
-  const [isPoweredUp, setIsPoweredUp] = useState(false);
+  // Pick 1 random node to bob every ~8s (avoid repeats)
   useEffect(() => {
-    const timer = setTimeout(() => setIsPoweredUp(true), 1200);
-    return () => clearTimeout(timer);
-  }, []);
-
-  /* -------------------- ABSOLUTE HEIGHTS -------------------- */
-  const planeY = -4.5;            // Water plane height
-  const coreRadius = 3.4;
-  const nodeRadius = 0.7;
-
-  const coreCenterY = planeY + coreRadius;
-  const nodeCenterY = planeY + nodeRadius;
+    if (!weekNodes.length) return;
+    let lastKey = null;
+    const pick = () => {
+      const keys = weekNodes.map((n) => n.key);
+      let chosen = keys[Math.floor(Math.random() * keys.length)];
+      if (chosen === lastKey && keys.length > 1) {
+        const others = keys.filter((k) => k !== lastKey);
+        chosen = others[Math.floor(Math.random() * others.length)];
+      }
+      lastKey = chosen;
+      setBobbingKey(chosen);
+      setBobStartSec(performance.now() / 1000);
+    };
+    pick(); // start one immediately after load
+    const id = setInterval(pick, 8000);
+    return () => clearInterval(id);
+  }, [weekNodes]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a', position: 'relative', zIndex: 0 }}>
       <TopLogFloater onClick={() => setIsLogModalOpen(true)} />
-      {isPoweredUp && (<LeftStack onSwitchView={onSwitchView} onOpenSettings={() => setDrawerOpen(true)} />)}
-      {isPoweredUp && <GuidePanel guide={guideData} />}
-      {isPoweredUp && (
-        <Hud item={selectedItem?.log || selectedItem} onClose={handleCloseHud} onCreate={() => setIsLogModalOpen(true)} />
-      )}
+      <LeftStack onSwitchView={onSwitchView} onOpenSettings={() => setDrawerOpen(true)} />
+      <GuidePanel guide={guideData} />
+      <Hud item={selectedItem?.log || selectedItem} onClose={handleCloseHud} onCreate={() => setIsLogModalOpen(true)} />
 
       <SettingsDrawer
         open={drawerOpen}
@@ -1493,11 +1562,11 @@ function NeuralCortex({ onSwitchView }) {
         {/* Core center sits above plane by its radius */}
         <LightCore radius={coreRadius} color="#7CEBFF" rim="#CFF8FF" energy={lightIntensities.energy} y={coreCenterY} />
 
-        {/* Water plane and core ripple (on the plane) */}
+        {/* Water plane and core ripple */}
         <WaterPlane yPosition={planeY} />
         <RippleRing position={[0, planeY + 0.001, 0]} size={coreRadius * 2.1} color="#6FEFFF" intensity={1.0} />
 
-        {isPoweredUp && !isLoading && (
+        {!isLoading && (
           <>
             <WeekRing
               weekNodes={weekNodes}
@@ -1511,6 +1580,8 @@ function NeuralCortex({ onSwitchView }) {
               ringRadius={8.0}
               coreRadius={coreRadius}
               planeY={planeY}
+              bobbingKey={bobbingKey}
+              bobStartSec={bobStartSec}
             />
             <SynapticLinks
               selectedNode={
@@ -1521,7 +1592,12 @@ function NeuralCortex({ onSwitchView }) {
               events={dayEvents}
             />
             {activeNudges.map((nudge, idx) => (
-              <AnomalyGlyph key={nudge.id} nudge={nudge} position={[-12, 4 - idx * 2.5, -6]} onGlyphClick={(n) => setSelectedItem(n)} />
+              <AnomalyGlyph
+  key={nudge.id}
+  nudge={nudge}
+  position={[-12, 4 - idx * 2.5, -6]}
+  onGlyphClick={(n) => setSelectedItem(n)}
+/>
             ))}
           </>
         )}
