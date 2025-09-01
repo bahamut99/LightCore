@@ -9,7 +9,7 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, Float, QuadraticBezierLine } from '@react-three/drei';
-import { EffectComposer, Bloom, FXAA } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, FXAA, DepthOfField } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { supabase } from '../supabaseClient';
 import LogEntryModal from './LogEntryModal.jsx';
@@ -647,7 +647,7 @@ const waterFragment = `
 `;
 
 
-function WaterPlane() {
+function WaterPlane({ yPosition }) {
   const ref = useRef();
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
@@ -662,8 +662,8 @@ function WaterPlane() {
   });
 
   return (
-    <mesh position={[0, -6, 0]} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false}>
-      <planeGeometry args={[25, 25, 64, 64]} />
+    <mesh position={[0, yPosition, 0]} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false} renderOrder={-1}>
+      <planeGeometry args={[30, 30, 64, 64]} />
       <shaderMaterial
         ref={ref}
         vertexShader={waterVertex}
@@ -729,7 +729,11 @@ function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, en
 
   return (
     <group ref={group} onClick={onClick}>
-      <mesh>
+      <mesh renderOrder={0}>
+        <sphereGeometry args={[radius * 0.99, 32, 32]} />
+        <meshBasicMaterial depthWrite colorWrite={false} />
+      </mesh>
+      <mesh renderOrder={1}>
         <sphereGeometry args={[radius, 96, 96]} />
         <shaderMaterial
           vertexShader={coreVertex}
@@ -739,7 +743,7 @@ function LightCore({ radius = 3, color = '#00e7ff', rim = '#96f7ff', onClick, en
           depthWrite={false}
         />
       </mesh>
-      <mesh ref={atmoRef} scale={1.055}>
+      <mesh ref={atmoRef} scale={1.055} renderOrder={2}>
         <sphereGeometry args={[radius * 1.02, 64, 64]} />
         <shaderMaterial
           vertexShader={atmoVertex}
@@ -797,8 +801,8 @@ function SynapticLinks({ selectedNode, events }) {
     const start = new THREE.Vector3(...selectedNode.position);
     return events.map((event, i) => {
       const angle = Math.PI / 2 + (i - (events.length - 1) / 2) * 0.5;
-      const end = new THREE.Vector3(start.x + Math.cos(angle) * 3, start.y + Math.sin(angle) * 3, start.z);
-      const mid = new THREE.Vector3((start.x + end.x) / 2, (start.y + end.y) / 2 + 0.8, start.z);
+      const end = new THREE.Vector3(start.x + Math.cos(angle) * 3, start.y + 0.15, start.z + Math.sin(angle) * 3);
+      const mid = new THREE.Vector3((start.x + end.x) / 2, (start.y + end.y) / 2 + 0.8, (start.z + end.z) / 2);
       return { event, start, mid, end, key: `${event.event_time}-${i}` };
     });
   }, [selectedNode, events]);
@@ -815,7 +819,7 @@ function SynapticLinks({ selectedNode, events }) {
               emissiveIntensity={1.5}
             />
           </mesh>
-          <QuadraticBezierLine start={start} end={end} mid={mid} color="#00f0ff" lineWidth={1} transparent opacity={0.55} />
+          <QuadraticBezierLine start={start} end={end} mid={mid} color="#00f0ff" lineWidth={1} transparent opacity={0.55} depthTest />
         </group>
       ))}
     </group>
@@ -899,21 +903,33 @@ function BeamTraveler({ start, mid, end, color, offset = 0 }) {
   );
 }
 
-function LightBeams({ nodes, energy = 1 }) {
+function LightBeams({ nodes, energy = 1, coreRadius = 1 }) {
   const beams = useMemo(() => {
     return nodes.map((n) => {
-      const start = [0, 0, 0];
-      const end = n.position;
-      const mid = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2 + 1.2, (start[2] + end[2]) / 2];
-      return { start, mid, end, key: n.key, color: n.color };
+      const endVec = new THREE.Vector3(...n.position);
+      const startVec = endVec.clone().normalize().multiplyScalar(coreRadius);
+      const midVec = startVec.clone().lerp(endVec, 0.5);
+      // nudge outward in XZ so arcs skirt the core but keep the water Y flat
+      const push = 1.2;
+      const r = Math.hypot(midVec.x, midVec.z) || 1;
+      midVec.x *= (1 + push / r);
+      midVec.z *= (1 + push / r);
+
+      return {
+        start: startVec.toArray(),
+        mid: midVec.toArray(),
+        end: endVec.toArray(),
+        key: n.key,
+        color: n.color
+      };
     });
-  }, [nodes]);
+  }, [nodes, coreRadius]);
 
   return (
     <group>
       {beams.map((b, i) => (
         <group key={b.key}>
-          <QuadraticBezierLine start={b.start} end={b.end} mid={b.mid} color={b.color} lineWidth={1} transparent opacity={0.35 + 0.25 * energy} />
+          <QuadraticBezierLine start={b.start} end={b.end} mid={b.mid} color={b.color} lineWidth={1} transparent opacity={0.3 + 0.2 * energy} depthTest />
           <BeamTraveler start={b.start} mid={b.mid} end={b.end} color={b.color} offset={i * 0.7} />
         </group>
       ))}
@@ -921,21 +937,17 @@ function LightBeams({ nodes, energy = 1 }) {
   );
 }
 
-function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragStateChange, onPositionsChange }) {
+function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragStateChange, onPositionsChange, ringY = -3.2, ringRadius = 7.5 }) {
   const SLOTS = 7;
-  const radius = 6.5;
-
+  
   const slots = useMemo(() => {
     const arr = [];
     for (let i = 0; i < SLOTS; i++) {
-      const a = (i / SLOTS) * Math.PI * 2 - Math.PI / 2;
-      arr.push([radius * Math.cos(a), radius * Math.sin(a) * 0.9, 0]);
+      const a = (i / SLOTS) * Math.PI * 2;
+      arr.push([ringRadius * Math.cos(a), ringY, ringRadius * Math.sin(a)]);
     }
-    arr[0] = [arr[0][0], arr[0][1] + 0.5, 0];
-    arr[3] = [arr[3][0], arr[3][1] - 0.5, 0];
-    arr[4] = [arr[4][0], arr[4][1] - 0.5, 0];
     return arr;
-  }, []);
+  }, [ringRadius, ringY]);
 
   const [offset, setOffset] = useState(0);
   const targetOffset = useRef(0);
@@ -953,7 +965,7 @@ function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragSt
   });
   
   const items = useMemo(() => {
-    const lerpPos = (a, b, t) => [a[0] * (1 - t) + b[0] * t, a[1] * (1 - t) + b[1] * t, 0];
+    const lerpPos = (a, b, t) => [a[0]*(1-t)+b[0]*t, ringY, a[2]*(1-t)+b[2]*t];
     return weekNodes.map((day, i) => {
       const getCircular = (val) => (val % SLOTS + SLOTS) % SLOTS;
       const dataIndex = getCircular(i - Math.round(offset));
@@ -964,9 +976,9 @@ function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragSt
       const A = slots[iA];
       const B = slots[(iA + 1) % SLOTS];
       
-      return { ...weekNodes[dataIndex], position: lerpPos(A, B, t), originalIndex: i };
+      return { ...weekNodes[dataIndex], position: lerpPos(A, B, t) };
     });
-  }, [weekNodes, offset, slots]);
+  }, [weekNodes, offset, slots, ringY]);
   
   useEffect(() => {
     const map = new Map(items.map(n => [n.key, n.position]));
@@ -978,8 +990,8 @@ function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragSt
     const move = (e) => {
       if (!drag.current.active) return;
       e.preventDefault();
-      const dx = e.clientX - drag.current.startX;
-      const PIXELS_PER_SLOT = 150;
+      const dx = (e.clientX ?? 0) - drag.current.startX;
+      const PIXELS_PER_SLOT = 180;
       targetOffset.current = drag.current.startOffset - dx / PIXELS_PER_SLOT;
     };
     const up = () => {
@@ -1003,14 +1015,14 @@ function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragSt
 
   const startDrag = (e) => {
     e.stopPropagation();
-    drag.current = { active: true, startX: e.clientX, startOffset: targetOffset.current };
+    drag.current = { active: true, startX: e.clientX ?? 0, startOffset: targetOffset.current };
     onDragStateChange?.(true);
     document.body.style.userSelect = 'none';
     document.body.style.cursor = 'grabbing';
   };
 
   return (
-    <group onPointerDown={startDrag}>
+    <group>
       {items.map((n) => (
         <DayNode
           key={n.key}
@@ -1022,9 +1034,14 @@ function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected, onDragSt
           setHovered={setHovered}
         />
       ))}
-      <LightBeams nodes={items} energy={1} />
-      <mesh position={[0, 0, -0.01]} visible={false}>
-        <torusGeometry args={[radius, 0.5, 8, 64]} />
+      <LightBeams nodes={items} energy={1} coreRadius={4.0} />
+      <mesh
+        position={[0, ringY, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        onPointerDown={startDrag}
+      >
+        <torusGeometry args={[ringRadius, 0.8, 8, 96]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
     </group>
   );
@@ -1036,7 +1053,7 @@ function LogEntryButton({ onClick }) {
   return (
     <Float speed={4} floatIntensity={1.5}>
       <group
-        position={[0, -6.5, 0]}
+        position={[0, -7.5, 0]}
         onClick={onClick}
         onPointerOver={() => setHovered(true)}
         onPointerOut={() => setHovered(false)}
@@ -1328,6 +1345,9 @@ function NeuralCortex({ onSwitchView }) {
     const timer = setTimeout(() => setIsPoweredUp(true), 2500);
     return () => clearTimeout(timer);
   }, []);
+  
+  const ringYPosition = -4.5;
+  const coreRadius = 4.0;
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
@@ -1341,7 +1361,7 @@ function NeuralCortex({ onSwitchView }) {
       <Canvas
         dpr={[1, 2]}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
-        camera={{ position: [0, 0, 18], fov: 50 }}
+        camera={{ position: [0, 2, 22], fov: 50 }}
       >
         <color attach="background" args={['#0a0a1a']} />
         <ambientLight intensity={0.2} />
@@ -1350,13 +1370,13 @@ function NeuralCortex({ onSwitchView }) {
         <pointLight position={[0, -10, 5]} intensity={lightIntensities.physical} color="#00ff88" />
 
         <LightCore
-          radius={2.8}
+          radius={coreRadius}
           color="#00e7ff"
           rim="#9cf3ff"
           energy={lightIntensities.energy}
         />
         
-        <WaterPlane />
+        <WaterPlane yPosition={ringYPosition} />
 
         {isPoweredUp && !isLoading && (
           <>
@@ -1368,6 +1388,8 @@ function NeuralCortex({ onSwitchView }) {
               selected={selectedItem}
               onDragStateChange={setIsDragging}
               onPositionsChange={setNodePositions}
+              ringY={ringYPosition}
+              ringRadius={8.0}
             />
             <SynapticLinks
               selectedNode={
@@ -1378,7 +1400,7 @@ function NeuralCortex({ onSwitchView }) {
               events={dayEvents}
             />
             {activeNudges.map((nudge, idx) => (
-              <AnomalyGlyph key={nudge.id} nudge={nudge} position={[-10, 4 - idx * 2.5, -5]} onGlyphClick={(n) => setSelectedItem(n)} />
+              <AnomalyGlyph key={nudge.id} nudge={nudge} position={[-12, 4 - idx * 2.5, -6]} onGlyphClick={(n) => setSelectedItem(n)} />
             ))}
             <LogEntryButton onClick={() => setIsLogModalOpen(true)} />
           </>
@@ -1389,15 +1411,24 @@ function NeuralCortex({ onSwitchView }) {
           enableZoom={true}
           enabled={!isDragging}
           autoRotate={false}
-          minDistance={15}
-          maxDistance={30}
-          minPolarAngle={Math.PI / 3}
-          maxPolarAngle={Math.PI / 2}
+          minDistance={18}
+          maxDistance={35}
+          minPolarAngle={Math.PI / 2.8}
+          maxPolarAngle={Math.PI / 2.1}
+          minAzimuthAngle={-Math.PI / 6}
+          maxAzimuthAngle={Math.PI / 6}
+          enableDamping
+          dampingFactor={0.05}
         />
 
         <EffectComposer multisampling={0}>
           <FXAA />
           <Bloom intensity={1.2} luminanceThreshold={0.45} luminanceSmoothing={0.8} />
+          <DepthOfField
+            focusDistance={0.015}
+            focalLength={0.025}
+            bokehScale={2.2}
+          />
         </EffectComposer>
       </Canvas>
     </div>
