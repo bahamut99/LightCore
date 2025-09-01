@@ -735,12 +735,10 @@ function EventNode({ event, position }) {
   );
 }
 
-function SynapticLinks({ selectedNode, events }) {
-  if (!selectedNode || !selectedNode.position || !selectedNode.log || events.length === 0)
-    return null;
-
+function SynapticLinks({ selectedLog, events }) {
+  if (!selectedLog || !selectedLog.position || !selectedLog.log || events.length === 0) return null;
   const links = useMemo(() => {
-    const start = new THREE.Vector3(...selectedNode.position);
+    const start = new THREE.Vector3(...selectedLog.position);
     return events.map((event, i) => {
       const angle = Math.PI / 2 + (i - (events.length - 1) / 2) * 0.5;
       const end = new THREE.Vector3(
@@ -751,8 +749,7 @@ function SynapticLinks({ selectedNode, events }) {
       const mid = new THREE.Vector3((start.x + end.x) / 2, (start.y + end.y) / 2 + 0.8, start.z);
       return { event, start, mid, end, key: `${event.event_time}-${i}` };
     });
-  }, [selectedNode, events]);
-
+  }, [selectedLog, events]);
   return (
     <group>
       {links.map(({ event, start, mid, end, key }) => (
@@ -801,6 +798,12 @@ function DayNode({
 }) {
   const ref = useRef();
   useHoverCursor(isHovered);
+
+  const baseEmissive = useMemo(() => {
+    const c = new THREE.Color(node.color);
+    const base = node.avg != null ? (node.avg / 10) * 0.8 + 0.2 : 0.15;
+    return c.multiplyScalar(1);
+  }, [node]);
 
   // gentle pulse and hover/selected scale
   useFrame((state) => {
@@ -913,6 +916,7 @@ function BeamTraveler({ start, mid, end, offset = 0 }) {
 
 // Beams from the core to each node
 function LightBeams({ nodes, energy = 1 }) {
+  // nodes: [{position:[x,y,z]}]
   const beams = useMemo(() => {
     return nodes.map((n, i) => {
       const start = [0, 0, 0];
@@ -946,82 +950,86 @@ function LightBeams({ nodes, energy = 1 }) {
   );
 }
 
-/* New: Interactive WeekRing to handle rotation and snapping */
-function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected }) {
-  const ringRef = useRef();
-  const [rotationOffset, setRotationOffset] = useState(0); // in radians
+// Keep original Constellation (unused now) in case you want to swap back quickly.
+function LogNode({ log, position, setSelectedItem, isSelected, setHoveredLog, isHovered }) {
+  const ref = useRef();
+  useHoverCursor(isHovered);
+  const dynamic = useMemo(() => {
+    const avg =
+      ((log.clarity_score || 0) +
+        (log.immune_score || 0) +
+        (log.physical_readiness_score || 0)) /
+      30;
+    return new THREE.Color().lerpColors(new THREE.Color(0xff4d4d), new THREE.Color(0x00f0ff), avg);
+  }, [log]);
+  useFrame(() => {
+    if (!ref.current) return;
+    const target = isSelected ? 1.8 : isHovered ? 1.3 : 1;
+    const s = THREE.MathUtils.lerp(ref.current.scale.x, target, 0.1);
+    ref.current.scale.setScalar(s);
+  });
+  return (
+    <mesh
+      ref={ref}
+      position={position}
+      onClick={(e) => {
+        e.stopPropagation();
+        setSelectedItem({ log, position });
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHoveredLog(log);
+      }}
+      onPointerOut={() => setHoveredLog(null)}
+    >
+      <sphereGeometry args={[0.2, 32, 32]} />
+      <meshStandardMaterial
+        color={dynamic}
+        metalness={0.95}
+        roughness={0.1}
+        emissive={dynamic}
+        emissiveIntensity={isSelected || isHovered ? 0.5 : 0}
+      />
+    </mesh>
+  );
+}
 
-  // Define 7 fixed positions for the nodes to snap to
-  const snapPositions = useMemo(() => {
-    const positions = [];
-    const radius = 6.5; // Increased radius to match visual scale
-    for (let i = 0; i < 7; i++) {
-      const angle = (i / 7) * Math.PI * 2;
-      // Tilt the ring slightly for a better perspective
-      positions.push(
-        new THREE.Vector3(
-          radius * Math.cos(angle),
-          radius * Math.sin(angle) * 0.7, // Y is squashed a bit
-          radius * Math.sin(angle) * -0.3 // Slight Z depth
-        )
+function Constellation({ logs, setSelectedItem, selectedItem, setHoveredLog, hoveredLog }) {
+  return useMemo(() => {
+    const radius = 6;
+    return logs.map((log, i) => {
+      const angle = (i / logs.length) * Math.PI * 2;
+      const pos = [radius * Math.cos(angle), radius * Math.sin(angle), 0];
+      return (
+        <LogNode
+          key={log.id || log.created_at || i}
+          log={log}
+          position={pos}
+          setSelectedItem={setSelectedItem}
+          isSelected={selectedItem?.log?.created_at === log.created_at}
+          setHoveredLog={setHoveredLog}
+          isHovered={hoveredLog?.created_at === log.created_at}
+        />
       );
-    }
-    return positions;
-  }, []);
+    });
+  }, [logs, setSelectedItem, selectedItem, setHoveredLog, hoveredLog]);
+}
+
+/* New: WeekRing renders exactly 7 DayNode items */
+function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected }) {
+  const radius = 6;
+  const total = weekNodes.length;
 
   const items = useMemo(() => {
-    // Map each day to a snap position based on the current rotation
-    return weekNodes.map((node, i) => {
-      const snapIndex = (i + Math.round(rotationOffset / (Math.PI * 2 / 7))) % 7;
-      return { ...node, position: snapPositions[snapIndex] };
+    return weekNodes.map((n, i) => {
+      const angle = ((i / total) * Math.PI * 2) - Math.PI / 2; // start at top
+      const pos = [radius * Math.cos(angle), radius * Math.sin(angle), 0];
+      return { ...n, position: pos };
     });
-  }, [weekNodes, rotationOffset, snapPositions]);
-
-  useFrame(() => {
-    if (ringRef.current) {
-      // Smoothly animate the ring to the target rotation (snapped)
-      const targetRotation = Math.round(rotationOffset / (Math.PI * 2 / 7)) * (Math.PI * 2 / 7);
-      ringRef.current.rotation.y = THREE.MathUtils.lerp(
-        ringRef.current.rotation.y,
-        targetRotation,
-        0.1
-      );
-    }
-  });
-
-  // This is a simple drag handler. A more robust solution might use Pointer Events.
-  useEffect(() => {
-    const handleMouseMove = (e) => {
-      // A simple drag logic: change rotation based on horizontal mouse movement
-      setRotationOffset((prev) => prev - e.movementX * 0.01);
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-    
-    const handleMouseDown = () => {
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
-    };
-
-    const canvas = document.querySelector('canvas');
-    if (canvas) {
-        canvas.addEventListener('mousedown', handleMouseDown);
-    }
-
-    return () => {
-      if (canvas) {
-        canvas.removeEventListener('mousedown', handleMouseDown);
-      }
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, []);
+  }, [weekNodes, total]);
 
   return (
-    <group ref={ringRef} rotation={[0.2, 0, 0]}>
+    <group>
       {items.map((n) => (
         <DayNode
           key={n.key}
@@ -1033,6 +1041,7 @@ function WeekRing({ weekNodes, onSelect, hovered, setHovered, selected }) {
           setHovered={setHovered}
         />
       ))}
+      {/* Light beams from core to each node */}
       <LightBeams nodes={items} energy={1} />
     </group>
   );
@@ -1044,7 +1053,7 @@ function LogEntryButton({ onClick }) {
   return (
     <Float speed={4} floatIntensity={1.5}>
       <group
-        position={[0, -4.5, 0]} // Raised slightly to avoid overlap
+        position={[0, -5, 0]}
         onClick={onClick}
         onPointerOver={() => setHovered(true)}
         onPointerOut={() => setHovered(false)}
@@ -1257,7 +1266,6 @@ function NeuralCortex({ onSwitchView }) {
 
   // Load day events when a log is selected
   useEffect(() => {
-    // Note: This logic might need updating if you want events for non-log days
     if (selectedItem && selectedItem.log) {
       (async () => {
         const { data, error } = await supabase
@@ -1392,7 +1400,7 @@ function NeuralCortex({ onSwitchView }) {
     setSelectedItem({
       dayKey: node.key,
       log: node.log || null,
-      position: node.position, // Important: position comes from the rendered node
+      position: node.position || [0, 0, 0], // gets filled by WeekRing when rendered
     });
   };
 
@@ -1405,8 +1413,7 @@ function NeuralCortex({ onSwitchView }) {
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a1a' }}>
       <LeftStack onSwitchView={onSwitchView} onOpenSettings={handleOpenSettings} />
       <GuidePanel guide={guideData} />
-      {/* Updated HUD to show selected day's log if available */}
-      <Hud item={selectedItem?.log || selectedItem} onClose={handleCloseHud} />
+      <Hud item={selectedItem} onClose={handleCloseHud} />
 
       <SettingsDrawer
         open={drawerOpen}
@@ -1420,17 +1427,14 @@ function NeuralCortex({ onSwitchView }) {
       <LogEntryModal
         isOpen={isLogModalOpen}
         onClose={() => setIsLogModalOpen(false)}
-        onLogSubmitted={() => {
-          setIsLogModalOpen(false);
-          fetchAllData(); // Refetch data after new log
-        }}
+        onLogSubmitted={() => setIsLogModalOpen(false)}
         stepCount={stepCount}
       />
 
       <Canvas
         dpr={[1, 2]}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
-        camera={{ position: [0, 2, 14], fov: 60 }} // Adjusted camera
+        camera={{ position: [0, 0, 12], fov: 75 }}
       >
         <color attach="background" args={['#0a0a1a']} />
         <ambientLight intensity={0.2} />
@@ -1458,14 +1462,15 @@ function NeuralCortex({ onSwitchView }) {
               selected={selectedItem}
             />
 
-            <SynapticLinks selectedNode={selectedItem} events={dayEvents} />
+            {/* (Old constellation still available but not rendered) */}
+            <SynapticLinks selectedLog={selectedItem} events={dayEvents} />
 
             {activeNudges.map((nudge, idx) => (
               <AnomalyGlyph
                 key={nudge.id}
                 nudge={nudge}
                 position={[-8, 4 - idx * 2, -5]}
-                onGlyphClick={(n) => setSelectedItem(n)}
+                onGlyphClick={setSelectedItem}
               />
             ))}
             <LogEntryButton onClick={() => setIsLogModalOpen(true)} />
@@ -1475,10 +1480,8 @@ function NeuralCortex({ onSwitchView }) {
         <OrbitControls
           enablePan={false}
           enableZoom={true}
-          autoRotate={!selectedItem} // Pause auto-rotate when an item is selected
+          autoRotate={true}
           autoRotateSpeed={0.3}
-          minDistance={8}
-          maxDistance={25}
           onStart={() => {
             clearTimeout(idleRef.current);
           }}
